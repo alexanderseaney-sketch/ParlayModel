@@ -11,10 +11,8 @@ See the Progress Log below for the detailed handoff notes — the short version:
 
 Not done yet:
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see latest log entry
-- [ ] Run a real historical pull at home (see next step in latest log entry)
-- [ ] **Platform confirmed: Underdog Champions.** Figure out what data it actually exposes
-      (player prop pool, projection lines, Champions scoring) — replaces the earlier
-      generic "pick an odds API" task, since Underdog isn't a traditional sportsbook line
+- [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see latest log entry
+- [ ] Run a real historical nflverse pull at home (see earlier log entry)
 - [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
 
 ## Progress Log
@@ -33,6 +31,23 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Built `data/pull_underdog.py`. There's no official Underdog API, but found their
+  internal (unofficial) endpoint — `api.underdogfantasy.com/beta/v5/over_under_lines` —
+  via an open-source reference scraper (github.com/aidanhall21/underdog-fantasy-pickem-scraper),
+  and wrote our own puller against it rather than depending on someone else's script.
+  Response schema: players + appearances + over_under_lines (nested options per stat,
+  over/under choice). Parses into one row per prop option.
+- Blocked: **completely untested** — `api.underdogfantasy.com` isn't reachable from this
+  sandbox (confirmed via curl, `host_not_allowed`), same as espn.com earlier. Also worth
+  being deliberate about: this is unofficial/reverse-engineered access to a real-money
+  platform, which likely isn't covered by their ToS even for read-only data — lower risk
+  than automating bet placement, but not zero. Worth a conscious decision, not a default.
+- Next (home): run `python3 data/pull_underdog.py` and sanity-check the output — real
+  player names, real prop lines, NFL filter working. If the schema has changed since this
+  reference scraper was written, this will likely fail loudly (empty result) rather than
+  silently — check the validation warnings if so.
 
 **2026-08-13 — [work]**
 - Did: Alex confirmed Underdog is available and working from his CA location — platform
@@ -201,6 +216,9 @@ notebooks/      # exploratory analysis
 - **ESPN news** (`data/pull_espn_news.py`) — league-wide + per-team news: injuries, signings,
   trades, suspensions, and general storylines. Untested in this environment (ESPN's domain
   isn't reachable here) — needs a live test run before it's trusted.
+- **Underdog pick'em props** (`data/pull_underdog.py`) — current NFL player prop over/under
+  lines from Underdog's internal (unofficial) API. **Untested here** — see the ToS caveat
+  and testing notes in the script itself and the progress log below before relying on this.
 
 Every pull is validated on the way in — row counts, missing key columns, duplicates, and
 null rates on important fields are checked and reported, so a broken or changed upstream
