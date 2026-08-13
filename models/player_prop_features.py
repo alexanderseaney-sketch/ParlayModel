@@ -93,6 +93,16 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
 
     wr_te = wr_te[wr_te["week"] >= min_week].reset_index(drop=True)
 
+    # Team-level scheme signal: this player's own team's pass rate over expected —
+    # a pass-heavy offense means more targets exist to go around, regardless of the player's own history
+    from scheme_features import build_team_week_scheme
+    pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
+    scheme = build_team_week_scheme(pbp)
+    wr_te = wr_te.merge(
+        scheme[["team", "season", "week", "pass_oe_rolling"]].rename(columns={"team": "recent_team", "pass_oe_rolling": "team_pass_oe_rolling"}),
+        on=["recent_team", "season", "week"], how="left",
+    )
+
     # The backtestable proxy target: did the player beat their own season-to-date average?
     wr_te["proxy_line"] = wr_te["receiving_yards_rolling"]
     wr_te["over_proxy_line"] = (wr_te["receiving_yards"] > wr_te["proxy_line"]).astype(int)
