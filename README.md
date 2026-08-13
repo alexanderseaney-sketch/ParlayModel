@@ -33,6 +33,16 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-13 — [work]**
+- Did: Added a "Pre-approval sanity check" requirement — before showing any bet
+  recommendation, do a live web search on that game's teams/players for anything recent
+  the structured data feeds might have missed. Documented as a workflow rule (not a
+  script) since it relies on live search at recommendation time, not a fixed pull.
+- Blocked: nothing — this is a process rule, applies immediately going forward.
+- Next: keep this in mind once we're building the actual recommendation/approval flow
+  in Phase 4 — make sure the search step is baked into that code's output format, not
+  just a mental note.
+
+**2026-08-13 — [work]**
 - Did: Built `data/pull_espn_news.py` — pulls league-wide + per-team NFL news (injuries,
   signings, trades, drama, anything storyline-relevant) from ESPN's unofficial public API.
   Tags each article with athletes/teams mentioned where ESPN provides that metadata.
@@ -71,7 +81,8 @@ before starting work to see what the other side left you.*
 1. **Data & infra setup** — odds API + nflverse stats pipeline *(current phase)*
 2. **Baseline model + backtesting harness** — power-rating baseline, ROI/CLV scoring
 3. **Model iteration** — logistic regression → gradient-boosted trees on EPA-based features
-4. **Bankroll & risk logic** — staking rules, approval-time bet summary
+4. **Bankroll & risk logic** — staking rules, approval-time bet summary, including a live
+   web-search sanity check (see "Pre-approval sanity check" below)
 5. **Browser automation** — Claude in Chrome drives bet placement, human approves each bet
 6. **Paper trading** — shadow-mode validation before any real money is wagered
 
@@ -102,6 +113,18 @@ notebooks/      # exploratory analysis
 Every pull is validated on the way in — row counts, missing key columns, duplicates, and
 null rates on important fields are checked and reported, so a broken or changed upstream
 source gets caught immediately instead of silently corrupting downstream models.
+
+## Pre-approval sanity check (non-negotiable)
+
+Structured data sources lag — nflverse updates aren't real-time, and even the ESPN news
+feeder can miss something from the last few hours before kickoff. **Before any bet
+recommendation is shown to Alex for approval, do a live web search on that game's teams
+and key players** for anything from the last 24-48 hours the pipeline might have missed:
+last-minute inactives, weather, suspensions, coaching decisions, line movement reasons,
+anything storyline-relevant. This applies whether the model is being tested here, at home,
+or anywhere else — it's a workflow rule, not a script, since it uses live web search
+directly rather than a fixed data pull. Skipping this step means presenting a
+recommendation that could already be stale by the time it's approved.
 
 ## Setup
 
