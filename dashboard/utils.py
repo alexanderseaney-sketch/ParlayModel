@@ -77,7 +77,28 @@ def append_bet(row: dict) -> None:
     df.to_csv(BET_LOG_PATH, index=False)
 
 
-def american_to_prob(odds: float) -> float:
+CURRENT_PREDICTIONS_PATH = os.path.join(ROOT_DIR, "models", "current_player_predictions.csv")
+
+
+def load_current_predictions() -> pd.DataFrame | None:
+    if not os.path.exists(CURRENT_PREDICTIONS_PATH):
+        return None
+    return pd.read_csv(CURRENT_PREDICTIONS_PATH)
+
+
+def normalize_name(name: str) -> str:
+    """Loose name matching between Underdog's player names and nflverse's — strips
+    suffixes/punctuation that commonly differ between sources."""
+    if not isinstance(name, str):
+        return ""
+    n = name.lower().strip()
+    for suffix in [" jr.", " jr", " sr.", " sr", " ii", " iii", " iv"]:
+        if n.endswith(suffix):
+            n = n[: -len(suffix)]
+    return n.replace(".", "").replace("'", "").strip()
+
+
+
     """Converts American odds to implied probability (0-1)."""
     if odds > 0:
         return 100 / (odds + 100)

@@ -12,7 +12,7 @@ import streamlit as st
 from utils import (
     EXPECTED_FILES, PULL_SCRIPTS,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
-    find_column, parlay_combined_multiplier,
+    find_column, parlay_combined_multiplier, load_current_predictions, normalize_name,
 )
 
 st.set_page_config(page_title="ParlayModel Dashboard", layout="wide")
@@ -66,17 +66,46 @@ if PAGE == "Overview":
 elif PAGE == "Parlay Builder":
     st.title("Parlay Builder")
     st.caption(
-        "Add legs, compare Underdog's line against your (or the model's) edge estimate, "
-        "and see the real combined math before anything gets placed."
+        "Add legs, filter by real model confidence, and see combined parlay math "
+        "before anything gets placed."
     )
 
     df = load_csv_if_exists("underdog_props.csv")
+    predictions = load_current_predictions()
+
     if df is None:
         st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls** first.")
         st.stop()
 
+    if predictions is not None:
+        predictions["_match_key"] = predictions["player_display_name"].apply(normalize_name)
+    else:
+        st.info(
+            "No model predictions found yet — run `python3 models/current_predictions.py` "
+            "to generate them (only covers receiving yards, WR/TE, for now). Falling back "
+            "to manual probability entry until then."
+        )
+
     if "slip" not in st.session_state:
-        st.session_state.slip = []  # list of dicts: player, stat, choice, line, my_prob
+        st.session_state.slip = []
+
+    # --- Confidence filter ---
+    st.subheader("Confidence filter")
+    st.caption(
+        "There's nothing wrong with being confident — validated testing showed roughly "
+        "78% accuracy at the 0.4 threshold, pooled across 5 real seasons. Being confident "
+        "here means the model has a real, tested reason, not a guess."
+    )
+    min_confidence = st.slider(
+        "Minimum confidence to show a prop", 0.0, 1.0, 0.4, 0.05,
+        help="0 = show everything (coinflips included). 0.4 historically ~78% accurate. Higher = fewer, stronger picks.",
+    )
+
+    if predictions is not None:
+        qualifying = predictions[predictions["confidence"] >= min_confidence]
+        st.metric("Players clearing this bar right now", f"{len(qualifying)} of {len(predictions)}")
+
+    st.markdown("---")
 
     # --- Add a leg ---
     with st.expander("➕ Add a leg", expanded=len(st.session_state.slip) == 0):
@@ -89,15 +118,34 @@ elif PAGE == "Parlay Builder":
         if not name_col or not stat_col:
             st.error(
                 "Couldn't find the expected player/stat columns in underdog_props.csv. "
-                "The schema may differ from what the puller script assumed — check the "
-                f"actual column names: {list(df.columns)}"
+                f"Actual columns: {list(df.columns)}"
             )
         else:
             search = st.text_input("Search player")
             options_df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)] if search else df.head(50)
 
+            if predictions is not None:
+                options_df = options_df.copy()
+                options_df["_match_key"] = options_df[name_col].apply(normalize_name)
+                options_df = options_df.merge(
+                    predictions[["_match_key", "predicted_prob_over", "confidence"]],
+                    on="_match_key", how="left",
+                )
+                below_bar = options_df["confidence"] < min_confidence
+                if below_bar.any() and not search:
+                    st.caption(f"{below_bar.sum()} props below the confidence bar are hidden. Search or lower the bar to see them.")
+                options_df = options_df[~below_bar | options_df["confidence"].isna() | (search != "")]
+
             for idx, row in options_df.iterrows():
+                model_prob = row.get("predicted_prob_over") if predictions is not None else None
+                has_model = pd.notna(model_prob) if model_prob is not None else False
+
                 label = f"{row[name_col]} — {row.get(stat_col, '?')} {row.get(choice_col, '')} {row.get(line_col, '')}"
+                if has_model:
+                    conf = row["confidence"]
+                    tag = "🟢" if conf >= 0.4 else ("🟡" if conf >= 0.2 else "⚪")
+                    label += f"  {tag} model: {model_prob*100:.0f}% (confidence {conf:.2f})"
+
                 c1, c2 = st.columns([4, 1])
                 c1.write(label)
                 if c2.button("Add", key=f"add_{idx}"):
@@ -107,16 +155,14 @@ elif PAGE == "Parlay Builder":
                         "choice": row.get(choice_col, ""),
                         "line": row.get(line_col),
                         "underdog_multiplier": row.get(mult_col) if mult_col else None,
-                        "my_prob": 0.55,
+                        "my_prob": float(model_prob) if has_model else 0.55,
                     })
                     st.rerun()
 
         if not mult_col:
             st.info(
-                "Note: no obvious odds/payout column found in the pulled data yet — Underdog's "
-                "exact schema won't be known until `pull_underdog.py` has actually run against "
-                "live data. Once it has, re-check this page; the odds comparison below will "
-                "populate automatically if the field is there."
+                "Note: no obvious odds/payout column found in the pulled data yet — "
+                "re-check this once `pull_underdog.py` has run against live data."
             )
 
     st.markdown("---")
@@ -131,7 +177,7 @@ elif PAGE == "Parlay Builder":
             c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
             c1.write(f"**{leg['player']}** — {leg['stat']} {leg['choice']} {leg['line']}")
             leg["my_prob"] = c2.slider(
-                "Your win prob.", 0.0, 1.0, leg["my_prob"], 0.01, key=f"prob_{i}", label_visibility="collapsed",
+                "Win prob.", 0.0, 1.0, leg["my_prob"], 0.01, key=f"prob_{i}", label_visibility="collapsed",
             )
             fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
             ud_mult = leg["underdog_multiplier"]
@@ -146,7 +192,6 @@ elif PAGE == "Parlay Builder":
 
         st.markdown("---")
 
-        # --- Combined slip math ---
         probs = [leg["my_prob"] for leg in st.session_state.slip]
         combined_prob = 1.0
         for p in probs:
@@ -162,20 +207,18 @@ elif PAGE == "Parlay Builder":
 
         if weak_legs:
             st.warning(
-                f"{len(weak_legs)} leg(s) don't show positive edge on their own. Per the project's "
-                "betting strategy notes, parlays should only combine legs that are *already* "
-                "independently +EV — stacking a weak leg for a bigger number is exactly the "
-                "mistake that makes parlays the sportsbook's best product, not yours."
+                f"{len(weak_legs)} leg(s) don't show positive edge on their own. Parlays "
+                "should only combine legs that are already independently +EV."
             )
         else:
-            st.success("Every leg shows positive edge individually, based on your probability estimates.")
+            st.success("Every leg shows positive edge individually, based on the probabilities above.")
 
         stake = st.number_input("Stake ($)", min_value=0.0, value=10.0, step=1.0)
         st.write(f"Potential payout at your fair odds: **${stake * combined_fair_mult:.2f}**")
 
         st.markdown("---")
         st.caption(
-            "Placement isn't automated yet (that's Phase 5 — Claude in Chrome, home only, "
+            "Placement isn't automated yet (Phase 5 — Claude in Chrome, home only, "
             "human-approved each time). For now this gives you a clean slip to place manually."
         )
         if st.button("Clear slip"):

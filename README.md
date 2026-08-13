@@ -100,6 +100,38 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-13 — [work]**
+- Did: Wired the real trained receiving-yards model into the dashboard's Parlay Builder,
+  per Alex's request for a confidence filter. Built `models/current_predictions.py` —
+  computes every active WR/TE's current rolling features from the latest pulled data and
+  scores them with the trained 100-model ensemble, saving real predictions + confidence
+  scores to `models/current_player_predictions.csv` (568 players, 171 currently clear
+  the 0.4 confidence bar). Rebuilt the Parlay Builder page: a confidence slider (default
+  0.4, matching the validated ~78%-accuracy threshold) filters which props are shown,
+  each prop displays the model's real probability and a 🟢/🟡/⚪ confidence tag (matched
+  to Underdog names via `normalize_name()`, handling Jr./Sr./punctuation differences),
+  and adding a leg pre-fills the slip's probability slider with the model's actual
+  number instead of the old hardcoded 0.55 default — still fully editable, since the
+  model informs the decision, it doesn't override it.
+  **Tested end-to-end with Streamlit's AppTest**, not just "should work": confirmed real
+  players (George Kittle, A.J. Brown) matched correctly and showed real confidence
+  scores, confirmed clicking "Add" actually carries the model's real probability into the
+  slip (verified the slider value matches the displayed prediction, not a placeholder),
+  and confirmed raising the confidence slider to 0.95 correctly drops qualifying props
+  from 171 to 0 — the filter isn't cosmetic, it's functionally wired to real numbers.
+- **Important honest caveat**: "current" predictions are based on the latest data
+  actually pulled (end of the 2024 season) — not live August 2026 form, since 2025
+  season data hasn't been pulled yet. This demonstrates the mechanism working correctly;
+  it needs a refresh against real current-season data before the numbers reflect
+  actual upcoming games.
+- Blocked: nothing structurally — only receiving yards (WR/TE) has a real model, so
+  other prop types on the Underdog props list still fall back to manual entry, clearly
+  labeled as such.
+- Next: build rushing/passing/receptions prop models (same pipeline, not yet done) so
+  the confidence filter covers more of what's actually on Underdog's board. Also: once
+  2025/2026 season data exists, re-run `current_predictions.py` to get genuinely live
+  numbers instead of the 2024-season-end snapshot currently in place.
+
+**2026-08-13 — [work]**
 - Did: Alex asked to keep mixing combinations until something crosses 75%. Two things
   tested: (1) added team pass_oe (scheme signal) to the receiving-yards prop model —
   another flat result (66.6% vs. 66.7%, consistent with the pattern from the game-winner
@@ -525,10 +557,15 @@ streamlit run dashboard/app.py
 
 Pages:
 - **Overview** — status of every data file (pulled or not, row count, last updated)
-- **Parlay Builder** — browse Underdog props, add legs to a slip, enter a probability
-  estimate per leg (manual for now — will pull from the model once Phase 2/3 exist),
-  see combined parlay math, and get flagged if any leg lacks individual edge (per the
-  "only stack already-+EV legs" rule in the Betting Strategy section above)
+- **Parlay Builder** — browse Underdog props, see the trained model's real predicted
+  probability and confidence next to each one (🟢 high / 🟡 medium / ⚪ low confidence,
+  matched by player name), filter to only show props clearing a confidence bar (default
+  0.4 — validated ~78% accuracy at this threshold, pooled across 5 real seasons), add
+  legs to a slip with the model's real probability pre-filled (still editable), see
+  combined parlay math, and get flagged if any leg lacks individual edge. Currently only
+  covers receiving yards (WR/TE) — other prop types fall back to manual probability entry
+  until their models are built. Run `python3 models/current_predictions.py` to refresh
+  predictions with the latest pulled data.
 - **NFL Stats / ESPN News / Underdog Props** — browse/filter/search each pulled dataset
 - **Bet Log** — manually log bets for now (form + table); will connect to the automated
   flow once Phase 4/5 are built
