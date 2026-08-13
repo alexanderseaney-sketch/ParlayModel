@@ -3,21 +3,28 @@
 An AI-assisted NFL betting agent: pulls odds + stats, runs prediction models through backtesting,
 and (eventually) drives an approval-gated bet-placement flow via browser automation.
 
-## Status (last updated 2026-08-13)
+## Status
 
 **Currently on: Phase 1 — Data & infra setup**
-
-Done:
-- [x] Repo structure created (`data/`, `models/`, `backtesting/`, `bet_logs/`, `notebooks/`)
-- [x] `data/pull_nflverse.py` built and tested live — pulls schedules, play-by-play, weekly
-      stats, Next Gen Stats (passing/rushing/receiving), injuries, and snap counts, with
-      validation checks on every pull (row counts, nulls, duplicates)
 
 Not done yet:
 - [ ] Run a real historical pull at home (`--years 2019 2020 2021 2022 2023 2024`) — this
       env's network can't reach the schedules data source, needs testing on unrestricted network
 - [ ] Pick and wire up an odds API (The Odds API vs. SportsDataIO — not yet decided)
 - [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
+
+## Progress Log
+
+*Newest entry on top. Check this first to see exactly where to pick back up.*
+
+**2026-08-13** — Added README status/progress tracking.
+
+**2026-08-13** — Built and tested `data/pull_nflverse.py`: pulls schedules, play-by-play,
+weekly stats, Next Gen Stats (passing/rushing/receiving), injuries, and snap counts.
+Added validation checks on every pull (row counts, nulls, duplicates). Tested live for
+2023–2024, all sources returned clean data. Not yet run for the full historical range.
+
+**2026-08-13** — Repo initialized: folder structure, requirements.txt, .gitignore, .env.example.
 
 ## Roadmap
 
