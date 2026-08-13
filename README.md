@@ -12,8 +12,9 @@ See the Progress Log below for the detailed handoff notes — the short version:
 Not done yet:
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see latest log entry
 - [ ] Run a real historical pull at home (see next step in latest log entry)
-- [ ] Pick and wire up an odds API with **multi-book coverage** (needed for line shopping —
-      see Betting Strategy section below; The Odds API vs. SportsDataIO — not yet decided)
+- [ ] **Platform confirmed: Underdog Champions.** Figure out what data it actually exposes
+      (player prop pool, projection lines, Champions scoring) — replaces the earlier
+      generic "pick an odds API" task, since Underdog isn't a traditional sportsbook line
 - [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
 
 ## Progress Log
@@ -32,6 +33,16 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Alex confirmed Underdog is available and working from his CA location — platform
+  decision is settled, no longer tentative.
+- Blocked: nothing.
+- Next: figure out what data Underdog's Champions/Pick'em product actually exposes
+  (player prop pool, projection lines, how Champions scoring works) — this determines
+  what the model needs to predict against, since it's not a traditional sportsbook line.
+  Check whether Underdog has any accessible endpoints (official or otherwise) similar to
+  how the ESPN news feeder works, or whether this needs manual/browser-based data capture.
 
 **2026-08-13 — [work]**
 - Did: Researched Underdog Fantasy's legal status in California. It's operating today via
