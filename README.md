@@ -12,7 +12,8 @@ See the Progress Log below for the detailed handoff notes — the short version:
 Not done yet:
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see latest log entry
 - [ ] Run a real historical pull at home (see next step in latest log entry)
-- [ ] Pick and wire up an odds API (The Odds API vs. SportsDataIO — not yet decided)
+- [ ] Pick and wire up an odds API with **multi-book coverage** (needed for line shopping —
+      see Betting Strategy section below; The Odds API vs. SportsDataIO — not yet decided)
 - [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
 
 ## Progress Log
@@ -31,6 +32,32 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Researched parlay strategy, bankroll management, and how sharp bettors find edges
+  (multiple sources: correlation math, NJ regulatory data, professional betting guides).
+  Key findings:
+  - Parlay house hold is ~17-26% (4-leg) vs. ~4.5% single bets; same-game parlays run
+    15-25%+ due to opaque correlation pricing. NJ 2024 data: parlays are ~22% of handle
+    but ~41% of sportsbook net win — parlays are the house's best product, by design.
+    Sharp/professional bettors avoid parlays almost entirely for this reason.
+  - Bankroll: flat betting (1-3% of bankroll/bet) recommended until a full tracked season
+    of results exists. Fractional (quarter/half) Kelly after that, once edge estimates are
+    validated — never full Kelly, it assumes exact probability estimates.
+  - CLV (closing line value) confirmed again across every source as the strongest
+    long-run profitability predictor, independent of variance/win rate.
+  - Line shopping matters — same bet prices differently across books; that spread is
+    real, capturable edge. Confirms we need multi-book odds coverage, not one source.
+  - Timing: lines softest Sun night-Tue, sharpen through the week. Wed-Fri injury
+    reports create lagging mispricing in player props specifically (backups' props lag
+    behind the target-share shift). Preseason lines are especially soft since outcomes
+    depend on which players coaches choose to rest.
+- Blocked: nothing — this is a strategy/research finding, not code.
+- Next: **project direction change worth discussing with Alex explicitly** — the model
+  should prioritize finding +EV straight bets first; parlays (if used at all) should only
+  combine legs that are already independently +EV, never used to manufacture edge from
+  stacking picks. Also: Phase 1's odds API pick needs to support multi-book comparison,
+  not just one book's lines, to support line shopping.
 
 **2026-08-13 — [work]**
 - Did: Added a "Pre-approval sanity check" requirement — before showing any bet
@@ -78,13 +105,32 @@ before starting work to see what the other side left you.*
 
 ## Roadmap
 
-1. **Data & infra setup** — odds API + nflverse stats pipeline *(current phase)*
+1. **Data & infra setup** — odds API (multi-book, for line shopping) + nflverse stats pipeline *(current phase)*
 2. **Baseline model + backtesting harness** — power-rating baseline, ROI/CLV scoring
 3. **Model iteration** — logistic regression → gradient-boosted trees on EPA-based features
-4. **Bankroll & risk logic** — staking rules, approval-time bet summary, including a live
+4. **Bankroll & risk logic** — flat betting (1-3% of bankroll) until a tracked season of
+   results exists, then fractional Kelly; approval-time bet summary includes a live
    web-search sanity check (see "Pre-approval sanity check" below)
 5. **Browser automation** — Claude in Chrome drives bet placement, human approves each bet
 6. **Paper trading** — shadow-mode validation before any real money is wagered
+
+## Betting strategy — key findings (research pass 2026-08-13)
+
+Full writeup in the progress log below; short version, since it changes how the model
+should actually be used:
+
+- **Parlays carry a structurally worse house edge than straight bets** — book hold runs
+  ~17-26% on multi-leg parlays and 15-25%+ on same-game parlays, vs. ~4.5% on a single
+  bet. Sharp/professional bettors avoid parlays almost entirely for this reason.
+- **Implication for this project**: the model's real job is finding +EV on individual
+  games/props (straight bets). Parlays should only ever combine legs that are *already*
+  independently +EV on their own — never used to manufacture value from stacking picks.
+- **Line shopping across multiple books is required, not optional** — the odds layer
+  needs multi-book coverage so we can compare prices, not just pull from one source.
+- **Bet timing**: lines are softest Sun night-Tue (least information priced in), sharpen
+  through the week. Injury reports (Wed-Fri) create lagging mispricing in player props.
+- **Preseason specifically** (starting this Saturday) is a soft-line environment — outcomes
+  hinge on which players coaches rest, which the news feeder should help catch.
 
 ## Structure
 
