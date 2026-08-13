@@ -24,6 +24,19 @@ bet_logs/       # logged bets: odds at bet time, closing odds, outcome, CLV
 notebooks/      # exploratory analysis
 ```
 
+## Data sources (all pulled by `data/pull_nflverse.py`)
+
+- **Schedules & results** — games, scores, closing spread/total lines
+- **Play-by-play** — source for EPA, success rate, and other advanced stats *(`--skip-pbp` to skip, it's large)*
+- **Weekly player stats** — box score stats by player/week
+- **Next Gen Stats** (AWS-powered tracking data) — passing, rushing, receiving: completion probability, separation, time to throw, air yards, etc.
+- **Injuries** — weekly injury report status by player
+- **Snap counts** — offensive/defensive/special teams snap share by player/week
+
+Every pull is validated on the way in — row counts, missing key columns, duplicates, and
+null rates on important fields are checked and reported, so a broken or changed upstream
+source gets caught immediately instead of silently corrupting downstream models.
+
 ## Setup
 
 ```bash
