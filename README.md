@@ -34,6 +34,23 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-13 — [work]**
+- Did: Researched Underdog Fantasy's legal status in California. It's operating today via
+  its **Champions** format (peer-to-peer picks vs. other users, not against the house) —
+  switched from standard Pick'em after CA AG Bonta issued a July 2025 opinion that DFS is
+  illegal gambling under state law. That opinion is advisory/non-binding, unenforced by
+  courts, and Underdog (a real US company, not offshore) continues operating on the theory
+  the P2P structure is defensible. Materially different risk profile than offshore
+  sportsbooks — legally contested, not clearly illegal.
+- Blocked: nothing.
+- Next: **platform decision made — building toward Underdog Champions.** Important
+  structural note: since Champions is peer-to-peer (picks vs. other users' picks, not vs.
+  a sportsbook line), there's no traditional closing-line to beat — CLV as the primary
+  model-quality metric doesn't translate directly here. The EPA/Next Gen Stats model work
+  still matters for pick quality, but the backtesting/evaluation approach (Phase 2) needs
+  to be rethought for a peer-to-peer format rather than assuming CLV tracking against a
+  sportsbook line.
+
+**2026-08-13 — [work]**
 - Did: Researched California sports betting legal status, since Alex wants the model to
   eventually cover any bet type. Finding: **California has no legal, regulated sportsbook
   at any age** — voters rejected both legalization measures in 2022, realistic timeline
