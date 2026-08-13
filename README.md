@@ -15,6 +15,9 @@ Done:
       combined model averages 64.1% accuracy, consistently beating Elo alone (63.1%) in
       every one of the 5 tested seasons** — a real but modest ~1pt edge, not the earlier
       70.4% single-split number (which was corrected — see log for why)
+- [x] Tested whether model agreement across bootstrap-resampled runs predicts accuracy:
+      **yes — high-consensus games (≥90% of 100 resampled models agree) hit 70.7%
+      accuracy vs. 57.7% on low-consensus games.** Usable confidence filter for later.
 
 See the Progress Log below for full detail.
 
@@ -79,6 +82,27 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Tested whether model AGREEMENT is itself a useful signal — trained the same
+  logistic regression architecture on 100 different bootstrap resamples of the 2019-2023
+  training data, tested each on the full 2024 season, then checked whether games where
+  those 100 runs agree with each other are actually the ones it gets right more often.
+  **Real result**: when ≥90% of the 100 models agree (188 of 240 games — most games have
+  high consensus, median agreement was 100%), accuracy is **70.7%**. When agreement drops
+  below 90% (52 harder/closer games), accuracy drops to **57.7%**. Overall: 67.9%.
+  Correlation between agreement level and correctness: +0.137 (positive, weak-but-real —
+  strongest signal is the high vs. low split, not fine-grained agreement percentages,
+  which get noisy with small sample sizes in the middle buckets).
+- Blocked: nothing — real bootstrap run, real per-game results saved to
+  `models/ensemble_agreement_results.csv`.
+- Next: **this is a usable confidence filter for the betting side** — the model
+  shouldn't be trusted equally on every game. Once the approval-flow (Phase 4) is built,
+  it should surface this agreement/consensus level alongside each pick, and probably
+  default to skipping or flagging low-agreement games rather than betting them at the
+  same size as high-agreement ones. Worth testing this same bootstrap-agreement approach
+  again once QB-specific NGS and market-based features are added, to see if agreement
+  gets sharper (more games pushed into the high-consensus bucket) with better features.
 
 **2026-08-13 — [work]**
 - Did: Added turnover margin (turnovers forced − committed, via the same opponent-lookup
