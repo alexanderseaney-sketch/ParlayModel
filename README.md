@@ -34,6 +34,11 @@ Done:
 See the Progress Log below for full detail on every round of testing.
 
 Not done yet:
+- [ ] **TOP PRIORITY: build a real historical Underdog line archive** (test
+      `pull_underdog.py`, then run it regularly and save snapshots over time) — every
+      player-prop accuracy number so far is against a proxy line (player's own rolling
+      average), not real Underdog lines. That's the number that actually tells us if this
+      is profitable. See latest log entry for why this matters more than it might seem.
 - [ ] **Build the same player-prop pipeline for rushing yards, passing yards, and
       receptions** — only receiving yards is done so far, out of Underdog's likely
       prop menu
@@ -98,6 +103,23 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Clarified an important distinction for Alex — the 77.9% confidence-filtered
+  accuracy is real and well-validated, but it measures beating the player's OWN trailing
+  average (the proxy line), not a real Underdog line. Underdog's actual lines already
+  price in recent form and matchup, so beating a real line is meaningfully harder than
+  beating a personal average — real professional prop bettors sustain edges around
+  55-58% against actual market lines. 77.9% is strong evidence the model found genuine
+  signal (good news), but shouldn't be read as "expect to win 78% of real bets."
+- Blocked: nothing — this is a documentation/expectations entry, no code changed.
+- Next: **this is exactly why building a real historical Underdog line archive is the
+  top priority**, not just a nice-to-have. Once `pull_underdog.py` is tested and running
+  regularly (saving what it sees over time, even just a snapshot per day/week), the model
+  can finally be backtested against real lines instead of the proxy — that's the number
+  that will actually answer "is this profitable," not the proxy number. Until that
+  archive exists, treat every player-prop accuracy number in this repo as "evidence the
+  model works," not "expected real-world win rate."
 
 **2026-08-13 — [work]**
 - Did: Wired the real trained receiving-yards model into the dashboard's Parlay Builder,
