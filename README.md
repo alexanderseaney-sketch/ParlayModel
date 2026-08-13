@@ -5,33 +5,31 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 ## Status
 
-**Currently on: Phase 2 — Baseline model + backtesting harness (final model assembled)**
+**Currently on: Phase 2 — Baseline model + backtesting harness (game model done, player-prop models started)**
 
 Done:
 - [x] Real 6-season historical pull (2019-2024) — nflverse works from any environment
-- [x] Baseline Elo power-rating model, walk-forward backtested: 62-67% accuracy by season
-- [x] Feature engineering (EPA, injuries, NGS, turnovers, weather, rest days) + proper
-      5-season leave-one-season-out cross-validation: **Elo+stats combined averages
-      64.1% accuracy**, consistently beating Elo alone (63.1%) in every tested season
-- [x] Bootstrap agreement analysis: high-consensus predictions (≥90% of 100 resampled
-      models agree) hit **70.7%** accuracy vs. **57.7%** on low-consensus games
-- [x] **Final model assembled and saved**: `models/final_model.pkl` — 100-model bootstrap
-      ensemble trained on all 2019-2024 data. Tested QB-specific CPOE (lost to team-avg)
-      and a market-ceiling diagnostic (Vegas spread alone would push accuracy to 67.6% —
-      confirms real room to improve, kept OUT of the production model on purpose)
+- [x] **Game-winner model**: Elo + stats bootstrap ensemble, 64.1% avg accuracy across 5
+      seasons (70.7% on high-confidence games) — saved to `models/final_model.pkl`
+- [x] **Player-prop model (receiving yards, WR/TE)**: 66.7% avg accuracy across 5 seasons,
+      very stable (65.6%-67.2% range) — saved to
+      `models/player_prop_receiving_yards_model.pkl`. Strongest signal: target share.
+      **Important caveat**: backtested against the player's own rolling average as a
+      proxy line, since no historical Underdog line archive exists yet — see log for detail.
 
 See the Progress Log below for full detail on every round of testing.
 
 Not done yet:
-- [ ] Wire `final_model.pkl` into the dashboard's Parlay Builder, replacing the manual
-      "your probability estimate" slider with real model predictions
-- [ ] Consider pulling real play-by-play data (not `--skip-pbp`) for richer EPA features —
-      flagged as the most promising remaining lever to close the gap toward the 67.6%
-      market-ceiling number
+- [ ] **Build the same player-prop pipeline for rushing yards, passing yards, and
+      receptions** — only receiving yards is done so far, out of Underdog's likely
+      prop menu
+- [ ] Start saving real Underdog prop lines over time (once `pull_underdog.py` is
+      tested) to replace the proxy-line backtesting approach with real historical lines
+- [ ] Wire both `final_model.pkl` and `player_prop_receiving_yards_model.pkl` into the
+      dashboard's Parlay Builder, replacing the manual probability slider
+- [ ] Consider pulling real play-by-play data (not `--skip-pbp`) for richer EPA features
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
 - [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
-- [ ] **Check dashboard's Parlay Builder odds-column detection against real Underdog data**
-      once pulled — see relevant log entry
 
 ## Progress Log
 
@@ -86,6 +84,41 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: **First player-prop model** — Alex flagged that everything built so far predicts
+  game WINNERS, but Underdog Champions is about PLAYER PROPS. Built a receiving-yards
+  model for WR/TE (RBs excluded — Next Gen Stats receiving data has zero coverage for
+  RBs in this pull, a real gap not a bug). Features: player's own rolling receiving
+  yards/targets/target share/air yards (season-to-date + trailing-3-game), NGS rolling
+  (avg separation, cushion, YAC over expectation), and opponent's rolling defensive EPA
+  allowed (matchup difficulty).
+  - **Important honest limitation**: there's no historical archive of real Underdog prop
+    lines to backtest against. Used the player's own trailing rolling average as a
+    backtestable proxy line instead — this tests "can the model beat recent-form
+    momentum," which is a reasonable stand-in (real lines are usually set close to recent
+    form + matchup adjustment) but is NOT the same as testing against real historical
+    Underdog lines, which don't exist to test against.
+  - **Real cross-validated result (5-season leave-one-out, same discipline as the team
+    model)**: 66.7% mean accuracy, remarkably stable — 65.6% to 67.2% across all 5
+    seasons (much tighter than the team-win model's 61.3%-67.1% range). Naive "always
+    guess over" baseline is only 43-48%, so this beats naive by a wide margin.
+  - **Strongest signal by far: target share** (rolling), coefficient dwarfs every other
+    feature. Makes sense — target share is the cleanest predictor of receiving
+    opportunity. Separation and cushion (open receivers) also help meaningfully.
+  - Saved production model (100-model bootstrap ensemble, same approach as the team-win
+    model) to `models/player_prop_receiving_yards_model.pkl`.
+- Blocked: nothing structurally, but the proxy-line caveat above is real and matters —
+  once real Underdog lines start getting pulled (`pull_underdog.py`, still untested),
+  backtesting against actual historical lines (saved over time) will be the honest
+  version of this test.
+- Next: **this same pipeline generalizes directly to other prop types** — rushing yards
+  (RB-focused, would need NGS rushing instead of receiving), passing yards (QB-focused,
+  NGS passing), and receptions (same data already pulled here, just a different target
+  column). Each needs its own model built and validated the same rigorous way — not yet
+  done, scoped as the next round of work. Also worth starting to actually save Underdog's
+  real prop lines over time (via `pull_underdog.py`, once tested) to build a true
+  historical archive — that replaces the proxy-line approximation with the real thing.
 
 **2026-08-13 — [work]**
 - Did: Assembled everything validated so far into a final production model
