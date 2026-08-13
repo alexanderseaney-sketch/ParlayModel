@@ -10,10 +10,13 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 See the Progress Log below for the detailed handoff notes — the short version:
 
 Not done yet:
-- [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see latest log entry
-- [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see latest log entry
+- [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
+- [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
 - [ ] Run a real historical nflverse pull at home (see earlier log entry)
-- [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
+- [ ] **Check dashboard's Parlay Builder odds-column detection against real Underdog data**
+      once pulled — see latest log entry
+- [ ] Then move to Phase 2: baseline power-rating model + backtesting harness (needed
+      before Parlay Builder's "your probability estimate" can be model-driven)
 
 ## Progress Log
 
@@ -31,6 +34,29 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Built `dashboard/` — a Streamlit UI. Originally scoped as a general data browser,
+  then Alex redirected it into a **Parlay Builder**: browse Underdog props, add legs to
+  a slip, enter a probability estimate per leg, see combined parlay math, get flagged if
+  any leg lacks individual edge (enforces the "only stack already-+EV legs" rule from the
+  Betting Strategy section). Also has Overview (data status), NFL Stats/ESPN News/Underdog
+  Props browsers, a manual Bet Log (form + table), and Run Data Pulls (buttons to trigger
+  each pull script). Fully tested here using Streamlit's `AppTest` framework against fake
+  data — clicked through all 7 pages and the actual "add a leg" interaction, no exceptions.
+  Caught and fixed one real bug during testing (an edit had accidentally deleted the
+  `run_pull_script` function signature) — this is why testing before pushing matters, an
+  untested "should work" version had a real crash in it.
+- Blocked: nothing structurally, but three honest limitations to know about:
+  1. No real model yet — "your probability estimate" is manual input until Phase 2/3 exist.
+  2. Underdog's actual odds/payout field names are unknown until `pull_underdog.py` runs
+     against live data — the UI looks for several likely column names and gracefully
+     shows "odds unknown" if none match. Re-check this once real data exists.
+  3. Doesn't place bets — that's Phase 5, human-approved, home-only.
+- Next: run `streamlit run dashboard/app.py` at home once real data has been pulled, and
+  check whether the odds/multiplier column detection actually finds Underdog's real field
+  names (see `find_column()` calls in `dashboard/app.py`'s Parlay Builder section) — if
+  not, the column candidate lists need updating to match reality.
 
 **2026-08-13 — [work]**
 - Did: Built `data/pull_underdog.py`. There's no official Underdog API, but found their
@@ -193,6 +219,29 @@ should actually be used:
 - **Preseason specifically** (starting this Saturday) is a soft-line environment — outcomes
   hinge on which players coaches rest, which the news feeder should help catch.
 
+## Dashboard
+
+Local UI for managing project data and building parlays, built with Streamlit.
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Pages:
+- **Overview** — status of every data file (pulled or not, row count, last updated)
+- **Parlay Builder** — browse Underdog props, add legs to a slip, enter a probability
+  estimate per leg (manual for now — will pull from the model once Phase 2/3 exist),
+  see combined parlay math, and get flagged if any leg lacks individual edge (per the
+  "only stack already-+EV legs" rule in the Betting Strategy section above)
+- **NFL Stats / ESPN News / Underdog Props** — browse/filter/search each pulled dataset
+- **Bet Log** — manually log bets for now (form + table); will connect to the automated
+  flow once Phase 4/5 are built
+- **Run Data Pulls** — buttons to run each pull script and see its output
+
+**What this doesn't do yet**: place bets. That's Phase 5 (Claude in Chrome, home only,
+human-approved each time) — the Parlay Builder gets you to a clean slip to place manually
+in the meantime.
+
 ## Structure
 
 ```
@@ -203,6 +252,7 @@ models/         # model definitions, one file per model type
 backtesting/    # backtest engine + results
 bet_logs/       # logged bets: odds at bet time, closing odds, outcome, CLV
 notebooks/      # exploratory analysis
+dashboard/      # Streamlit UI — data browser + Parlay Builder (see Dashboard section below)
 ```
 
 ## Data sources (all pulled by `data/pull_nflverse.py`)

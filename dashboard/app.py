@@ -1,0 +1,361 @@
+"""
+ParlayModel Dashboard — local UI for managing project data.
+
+Run with:
+    streamlit run dashboard/app.py
+"""
+from datetime import datetime, date
+
+import pandas as pd
+import streamlit as st
+
+from utils import (
+    EXPECTED_FILES, PULL_SCRIPTS,
+    file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
+    find_column, parlay_combined_multiplier,
+)
+
+st.set_page_config(page_title="ParlayModel Dashboard", layout="wide")
+
+PAGE = st.sidebar.radio(
+    "Navigate",
+    ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "Underdog Props", "Bet Log", "Run Data Pulls"],
+)
+
+st.sidebar.markdown("---")
+st.sidebar.caption("ParlayModel — local data management UI")
+
+
+# ---------------------------------------------------------------- Overview
+if PAGE == "Overview":
+    st.title("Data Status")
+    st.caption("What's been pulled, when, and how much of it there is.")
+
+    rows = []
+    for filename, source in EXPECTED_FILES.items():
+        status = file_status(filename)
+        if status["exists"]:
+            rows.append({
+                "File": filename,
+                "Status": "✅ pulled",
+                "Rows": f"{status['rows']:,}" if status["rows"] is not None else "?",
+                "Size": f"{status['size_kb']:.0f} KB",
+                "Last pulled": status["modified"].strftime("%Y-%m-%d %H:%M"),
+                "Source script": source,
+            })
+        else:
+            rows.append({
+                "File": filename,
+                "Status": "⬜ not pulled",
+                "Rows": "—",
+                "Size": "—",
+                "Last pulled": "—",
+                "Source script": source,
+            })
+
+    st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
+
+    n_missing = sum(1 for r in rows if r["Status"].startswith("⬜"))
+    if n_missing:
+        st.info(f"{n_missing} file(s) not pulled yet — head to **Run Data Pulls** to fetch them.")
+    else:
+        st.success("All expected data files are present.")
+
+
+# ---------------------------------------------------------------- Parlay Builder
+elif PAGE == "Parlay Builder":
+    st.title("Parlay Builder")
+    st.caption(
+        "Add legs, compare Underdog's line against your (or the model's) edge estimate, "
+        "and see the real combined math before anything gets placed."
+    )
+
+    df = load_csv_if_exists("underdog_props.csv")
+    if df is None:
+        st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls** first.")
+        st.stop()
+
+    if "slip" not in st.session_state:
+        st.session_state.slip = []  # list of dicts: player, stat, choice, line, my_prob
+
+    # --- Add a leg ---
+    with st.expander("➕ Add a leg", expanded=len(st.session_state.slip) == 0):
+        name_col = find_column(df, ["full_name", "player_name", "name"])
+        stat_col = find_column(df, ["stat_name", "stat"])
+        line_col = find_column(df, ["stat_value", "line", "value"])
+        choice_col = find_column(df, ["choice"])
+        mult_col = find_column(df, ["payout_multiplier", "multiplier", "odds", "american_price"])
+
+        if not name_col or not stat_col:
+            st.error(
+                "Couldn't find the expected player/stat columns in underdog_props.csv. "
+                "The schema may differ from what the puller script assumed — check the "
+                f"actual column names: {list(df.columns)}"
+            )
+        else:
+            search = st.text_input("Search player")
+            options_df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)] if search else df.head(50)
+
+            for idx, row in options_df.iterrows():
+                label = f"{row[name_col]} — {row.get(stat_col, '?')} {row.get(choice_col, '')} {row.get(line_col, '')}"
+                c1, c2 = st.columns([4, 1])
+                c1.write(label)
+                if c2.button("Add", key=f"add_{idx}"):
+                    st.session_state.slip.append({
+                        "player": row[name_col],
+                        "stat": row.get(stat_col),
+                        "choice": row.get(choice_col, ""),
+                        "line": row.get(line_col),
+                        "underdog_multiplier": row.get(mult_col) if mult_col else None,
+                        "my_prob": 0.55,
+                    })
+                    st.rerun()
+
+        if not mult_col:
+            st.info(
+                "Note: no obvious odds/payout column found in the pulled data yet — Underdog's "
+                "exact schema won't be known until `pull_underdog.py` has actually run against "
+                "live data. Once it has, re-check this page; the odds comparison below will "
+                "populate automatically if the field is there."
+            )
+
+    st.markdown("---")
+
+    # --- Current slip ---
+    if not st.session_state.slip:
+        st.info("No legs added yet.")
+    else:
+        st.subheader(f"Current slip ({len(st.session_state.slip)} legs)")
+
+        for i, leg in enumerate(st.session_state.slip):
+            c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
+            c1.write(f"**{leg['player']}** — {leg['stat']} {leg['choice']} {leg['line']}")
+            leg["my_prob"] = c2.slider(
+                "Your win prob.", 0.0, 1.0, leg["my_prob"], 0.01, key=f"prob_{i}", label_visibility="collapsed",
+            )
+            fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
+            ud_mult = leg["underdog_multiplier"]
+            if ud_mult:
+                edge = "✅ +EV" if fair_mult < float(ud_mult) else "⚠️ -EV"
+                c3.write(f"UD: {ud_mult}x · fair: {fair_mult:.2f}x · {edge}")
+            else:
+                c3.write(f"fair: {fair_mult:.2f}x (UD odds unknown)")
+            if c4.button("Remove", key=f"rm_{i}"):
+                st.session_state.slip.pop(i)
+                st.rerun()
+
+        st.markdown("---")
+
+        # --- Combined slip math ---
+        probs = [leg["my_prob"] for leg in st.session_state.slip]
+        combined_prob = 1.0
+        for p in probs:
+            combined_prob *= p
+        combined_fair_mult = parlay_combined_multiplier(probs)
+
+        weak_legs = [leg for leg in st.session_state.slip if leg["underdog_multiplier"] and combined_fair_mult and 1 / leg["my_prob"] >= float(leg["underdog_multiplier"])]
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Combined true probability", f"{combined_prob * 100:.1f}%")
+        col2.metric("Your fair combined payout", f"{combined_fair_mult:.2f}x")
+        col3.metric("Legs without individual edge", len(weak_legs))
+
+        if weak_legs:
+            st.warning(
+                f"{len(weak_legs)} leg(s) don't show positive edge on their own. Per the project's "
+                "betting strategy notes, parlays should only combine legs that are *already* "
+                "independently +EV — stacking a weak leg for a bigger number is exactly the "
+                "mistake that makes parlays the sportsbook's best product, not yours."
+            )
+        else:
+            st.success("Every leg shows positive edge individually, based on your probability estimates.")
+
+        stake = st.number_input("Stake ($)", min_value=0.0, value=10.0, step=1.0)
+        st.write(f"Potential payout at your fair odds: **${stake * combined_fair_mult:.2f}**")
+
+        st.markdown("---")
+        st.caption(
+            "Placement isn't automated yet (that's Phase 5 — Claude in Chrome, home only, "
+            "human-approved each time). For now this gives you a clean slip to place manually."
+        )
+        if st.button("Clear slip"):
+            st.session_state.slip = []
+            st.rerun()
+
+
+
+elif PAGE == "NFL Stats":
+    st.title("NFL Stats (nflverse)")
+
+    dataset = st.selectbox(
+        "Dataset",
+        ["schedules.csv", "weekly_stats.csv", "ngs_passing.csv", "ngs_rushing.csv",
+         "ngs_receiving.csv", "injuries.csv", "snap_counts.csv"],
+    )
+    df = load_csv_if_exists(dataset)
+
+    if df is None:
+        st.warning(f"`{dataset}` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if "season" in df.columns:
+                seasons = sorted(df["season"].dropna().unique(), reverse=True)
+                season_filter = st.multiselect("Season", seasons, default=seasons[:1] if seasons else [])
+            else:
+                season_filter = None
+        with col2:
+            team_col = next((c for c in ["team", "recent_team", "home_team", "club_code"] if c in df.columns), None)
+            if team_col:
+                teams = sorted(df[team_col].dropna().unique())
+                team_filter = st.multiselect("Team", teams)
+            else:
+                team_filter = None
+                team_col = None
+        with col3:
+            search = st.text_input("Search (any column, text match)")
+
+        filtered = df.copy()
+        if season_filter:
+            filtered = filtered[filtered["season"].isin(season_filter)]
+        if team_filter and team_col:
+            filtered = filtered[filtered[team_col].isin(team_filter)]
+        if search:
+            mask = filtered.astype(str).apply(lambda col: col.str.contains(search, case=False, na=False)).any(axis=1)
+            filtered = filtered[mask]
+
+        st.caption(f"{len(filtered):,} of {len(df):,} rows")
+        st.dataframe(filtered, width='stretch', height=500)
+
+
+# ---------------------------------------------------------------- ESPN News
+elif PAGE == "ESPN News":
+    st.title("ESPN News Feed")
+    df = load_csv_if_exists("espn_news.csv")
+
+    if df is None:
+        st.warning("`espn_news.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            sources = sorted(df["source"].dropna().unique()) if "source" in df.columns else []
+            source_filter = st.multiselect("Source (league / team:XXX)", sources)
+        with col2:
+            search = st.text_input("Search headlines/description")
+
+        filtered = df.copy()
+        if source_filter:
+            filtered = filtered[filtered["source"].isin(source_filter)]
+        if search:
+            mask = (
+                filtered["headline"].astype(str).str.contains(search, case=False, na=False)
+                | filtered["description"].astype(str).str.contains(search, case=False, na=False)
+            )
+            filtered = filtered[mask]
+
+        st.caption(f"{len(filtered):,} of {len(df):,} articles")
+        for _, row in filtered.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**{row.get('headline', '(no headline)')}**")
+                st.caption(f"{row.get('source', '')} · {row.get('published', '')}")
+                if pd.notna(row.get("description")):
+                    st.write(row["description"])
+                if pd.notna(row.get("athletes_tagged")) and row.get("athletes_tagged"):
+                    st.caption(f"Athletes: {row['athletes_tagged']}")
+                if pd.notna(row.get("link")):
+                    st.markdown(f"[Read more]({row['link']})")
+
+
+# ---------------------------------------------------------------- Underdog Props
+elif PAGE == "Underdog Props":
+    st.title("Underdog Pick'em Props")
+    df = load_csv_if_exists("underdog_props.csv")
+
+    if df is None:
+        st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            stat_col = "stat_name" if "stat_name" in df.columns else None
+            stats = sorted(df[stat_col].dropna().unique()) if stat_col else []
+            stat_filter = st.multiselect("Stat type", stats)
+        with col2:
+            search = st.text_input("Search player name")
+
+        filtered = df.copy()
+        if stat_filter and stat_col:
+            filtered = filtered[filtered[stat_col].isin(stat_filter)]
+        if search and "full_name" in filtered.columns:
+            filtered = filtered[filtered["full_name"].astype(str).str.contains(search, case=False, na=False)]
+
+        st.caption(f"{len(filtered):,} of {len(df):,} prop options")
+        st.dataframe(filtered, width='stretch', height=500)
+
+
+# ---------------------------------------------------------------- Bet Log
+elif PAGE == "Bet Log":
+    st.title("Bet Log")
+    st.caption("Manual tracking for now — will connect to the automated flow once Phase 4/5 are built.")
+
+    with st.expander("➕ Log a new bet", expanded=False):
+        with st.form("new_bet_form", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                bet_date = st.date_input("Date", value=date.today())
+                sport = st.text_input("Sport/League", value="NFL")
+                player = st.text_input("Player")
+            with c2:
+                stat = st.text_input("Stat (e.g. rushing_yards)")
+                choice = st.selectbox("Choice", ["over", "under"])
+                line = st.number_input("Line", step=0.5)
+            with c3:
+                multiplier = st.text_input("Multiplier / odds")
+                stake = st.number_input("Stake ($)", min_value=0.0, step=1.0)
+                result = st.selectbox("Result", ["pending", "won", "lost", "push"])
+            notes = st.text_area("Notes")
+
+            if st.form_submit_button("Save bet"):
+                append_bet({
+                    "date": bet_date.isoformat(),
+                    "sport": sport,
+                    "player": player,
+                    "stat": stat,
+                    "choice": choice,
+                    "line": line,
+                    "multiplier_or_odds": multiplier,
+                    "stake": stake,
+                    "result": result,
+                    "notes": notes,
+                    "logged_at": datetime.now().isoformat(),
+                })
+                st.success("Bet logged.")
+                st.rerun()
+
+    bets = load_bet_log()
+    if bets.empty:
+        st.info("No bets logged yet.")
+    else:
+        c1, c2, c3 = st.columns(3)
+        n_pending = (bets["result"] == "pending").sum()
+        n_won = (bets["result"] == "won").sum()
+        n_lost = (bets["result"] == "lost").sum()
+        c1.metric("Pending", n_pending)
+        c2.metric("Won", n_won)
+        c3.metric("Lost", n_lost)
+        st.dataframe(bets.sort_values("date", ascending=False), width='stretch', height=400)
+
+
+# ---------------------------------------------------------------- Run Data Pulls
+elif PAGE == "Run Data Pulls":
+    st.title("Run Data Pulls")
+    st.caption("Runs the actual pull scripts. Output streams below once finished (can take a minute).")
+
+    for label, cmd in PULL_SCRIPTS.items():
+        if st.button(f"Run: {label}"):
+            with st.spinner(f"Running {label}..."):
+                success, output = run_pull_script(cmd)
+            if success:
+                st.success(f"{label} completed.")
+            else:
+                st.error(f"{label} failed or had errors.")
+            st.code(output or "(no output)")
