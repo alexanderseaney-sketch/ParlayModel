@@ -7,24 +7,50 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 **Currently on: Phase 1 — Data & infra setup**
 
+See the Progress Log below for the detailed handoff notes — the short version:
+
 Not done yet:
-- [ ] Run a real historical pull at home (`--years 2019 2020 2021 2022 2023 2024`) — this
-      env's network can't reach the schedules data source, needs testing on unrestricted network
+- [ ] Run a real historical pull at home (see next step in latest log entry)
 - [ ] Pick and wire up an odds API (The Odds API vs. SportsDataIO — not yet decided)
 - [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
 
 ## Progress Log
 
-*Newest entry on top. Check this first to see exactly where to pick back up.*
+*This log is also how "work Claude" and "home Claude" hand off to each other — since
+neither has live access to the other's session, this file is the shared context. Every
+entry is tagged with environment and dated. Newest entry on top. Read the top entry
+before starting work to see what the other side left you.*
 
-**2026-08-13** — Added README status/progress tracking.
+**Entry format:**
+```
+**YYYY-MM-DD — [work | home]**
+- Did: what got done this session
+- Blocked: anything that couldn't be finished here + why (e.g. network restriction, need a decision)
+- Next: what the other environment (or next session) should pick up
+```
 
-**2026-08-13** — Built and tested `data/pull_nflverse.py`: pulls schedules, play-by-play,
-weekly stats, Next Gen Stats (passing/rushing/receiving), injuries, and snap counts.
-Added validation checks on every pull (row counts, nulls, duplicates). Tested live for
-2023–2024, all sources returned clean data. Not yet run for the full historical range.
+---
 
-**2026-08-13** — Repo initialized: folder structure, requirements.txt, .gitignore, .env.example.
+**2026-08-13 — [work]**
+- Did: Added this progress log format so work/home sessions can hand off cleanly.
+- Blocked: nothing.
+- Next: read this log at the start of every session, here or at home, before doing anything else.
+
+**2026-08-13 — [work]**
+- Did: Built and tested `data/pull_nflverse.py` — pulls schedules, play-by-play, weekly
+  stats, Next Gen Stats (passing/rushing/receiving), injuries, snap counts. Validation
+  checks on every pull (row counts, nulls, duplicates). Tested live for 2023–2024, all
+  sources returned clean data.
+- Blocked: this sandbox's network can't reach the full historical pull range or confirm
+  behavior outside 2023-2024 — needs a real run on an unrestricted network.
+- Next (home): run `python3 data/pull_nflverse.py --years 2019 2020 2021 2022 2023 2024`
+  (drop `--skip-pbp` if you want play-by-play too, it's slow). Confirm it completes clean,
+  then this phase's data side is basically done — next up is picking an odds API.
+
+**2026-08-13 — [work]**
+- Did: Repo initialized — folder structure, requirements.txt, .gitignore, .env.example.
+- Blocked: nothing.
+- Next: build the data feeder script.
 
 ## Roadmap
 
