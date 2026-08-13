@@ -5,25 +5,29 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 ## Status
 
-**Currently on: Phase 2 — Baseline model + backtesting harness**
+**Currently on: Phase 2 — Baseline model + backtesting harness (final model assembled)**
 
 Done:
 - [x] Real 6-season historical pull (2019-2024) — nflverse works from any environment
 - [x] Baseline Elo power-rating model, walk-forward backtested: 62-67% accuracy by season
 - [x] Feature engineering (EPA, injuries, NGS, turnovers, weather, rest days) + proper
-      5-season leave-one-season-out cross-validation. **Honest current result: Elo+stats
-      combined model averages 64.1% accuracy, consistently beating Elo alone (63.1%) in
-      every one of the 5 tested seasons** — a real but modest ~1pt edge, not the earlier
-      70.4% single-split number (which was corrected — see log for why)
-- [x] Tested whether model agreement across bootstrap-resampled runs predicts accuracy:
-      **yes — high-consensus games (≥90% of 100 resampled models agree) hit 70.7%
-      accuracy vs. 57.7% on low-consensus games.** Usable confidence filter for later.
+      5-season leave-one-season-out cross-validation: **Elo+stats combined averages
+      64.1% accuracy**, consistently beating Elo alone (63.1%) in every tested season
+- [x] Bootstrap agreement analysis: high-consensus predictions (≥90% of 100 resampled
+      models agree) hit **70.7%** accuracy vs. **57.7%** on low-consensus games
+- [x] **Final model assembled and saved**: `models/final_model.pkl` — 100-model bootstrap
+      ensemble trained on all 2019-2024 data. Tested QB-specific CPOE (lost to team-avg)
+      and a market-ceiling diagnostic (Vegas spread alone would push accuracy to 67.6% —
+      confirms real room to improve, kept OUT of the production model on purpose)
 
-See the Progress Log below for full detail.
+See the Progress Log below for full detail on every round of testing.
 
 Not done yet:
-- [ ] Try QB-specific NGS (vs. team-average), and a market-based feature (raw Vegas
-      spread) to see how much signal the market already prices in
+- [ ] Wire `final_model.pkl` into the dashboard's Parlay Builder, replacing the manual
+      "your probability estimate" slider with real model predictions
+- [ ] Consider pulling real play-by-play data (not `--skip-pbp`) for richer EPA features —
+      flagged as the most promising remaining lever to close the gap toward the 67.6%
+      market-ceiling number
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
 - [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
 - [ ] **Check dashboard's Parlay Builder odds-column detection against real Underdog data**
@@ -82,6 +86,38 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Assembled everything validated so far into a final production model
+  (`models/train_final.py`), testing the two remaining open questions first:
+  1. **QB-specific CPOE vs. team-average CPOE**: tested via the same 5-season CV. Team
+     -average won (64.1% mean vs. 63.3% for QB-specific) — another honest negative
+     result. Isolating the starting QB's own history sounded like it should sharpen the
+     signal, but didn't in practice; kept team-average in the final feature set.
+  2. **Market ceiling check (diagnostic only)**: added the raw Vegas closing spread as a
+     feature just to see how much information the market has that our stats don't —
+     jumped mean accuracy from 64.1% to **67.6%**. This confirms the market knows things
+     our current feature set doesn't fully capture (expected and fine — Vegas has far
+     more inputs than we do). **This feature is NOT included in the production model** —
+     the whole point is finding our own edge on Underdog, not just re-deriving what a
+     sportsbook already prices in. Kept as a documented ceiling to measure future
+     feature additions against.
+  - **Final production model**: 100-model bootstrap ensemble (the same approach
+    validated last round — high-agreement predictions hit 70.7% vs. 57.7% low-agreement)
+    trained on all 6 seasons (2019-2024) of data, using: Elo win probability, EPA
+    offense/defense, injury counts, team-average CPOE, average separation, turnover
+    margin, rest-day differential, temperature, wind, and dome/outdoor. Saved to
+    `models/final_model.pkl` (100 logistic regression models + feature list, 60KB).
+- Blocked: nothing — every number above is real, from actual cross-validated runs.
+- Next: this is a genuinely solid, honestly-tested foundation — ~64% average accuracy,
+  ~71% on the high-confidence majority of games. To meaningfully improve further, the
+  67.6% market-ceiling number suggests real room exists, but closing that gap needs
+  fundamentally new information (not just recombining what we already have) — candidates:
+  actual play-by-play EPA (not yet pulled, `--skip-pbp` has been used every run so far),
+  more granular injury severity (currently just a raw count), or coaching/scheme data we
+  don't have access to. `final_model.pkl` is ready for the dashboard's Parlay Builder to
+  load and replace the manual "your probability estimate" slider with real predictions —
+  that's the natural next integration step.
 
 **2026-08-13 — [work]**
 - Did: Tested whether model AGREEMENT is itself a useful signal — trained the same

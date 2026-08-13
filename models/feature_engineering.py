@@ -105,6 +105,22 @@ def build_team_week_turnovers(weekly_stats: pd.DataFrame, schedules: pd.DataFram
 
 
 
+def build_qb_rolling_cpoe(ngs_passing: pd.DataFrame) -> pd.DataFrame:
+    """Each starting QB's own rolling CPOE (completion % above expectation), computed
+    the same no-leakage way (strictly prior games only) — sharper than team-average NGS
+    since it isolates the actual starter's skill rather than blending in backup appearances."""
+    qb = ngs_passing[["player_gsis_id", "season", "week", "completion_percentage_above_expectation"]].copy()
+    qb = qb.rename(columns={"completion_percentage_above_expectation": "qb_cpoe"})
+    qb = qb.sort_values(["player_gsis_id", "season", "week"]).reset_index(drop=True)
+    qb["qb_cpoe_rolling"] = (
+        qb.groupby(["player_gsis_id", "season"])["qb_cpoe"]
+        .apply(lambda s: s.shift(1).expanding().mean())
+        .reset_index(level=[0, 1], drop=True)
+    )
+    return qb[["player_gsis_id", "season", "week", "qb_cpoe_rolling"]]
+
+
+
 def add_rolling_pregame_features(team_week: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
     """For each feature, computes the team's season-to-date average using only STRICTLY
     PRIOR weeks (shift(1) before the expanding mean) — this is what makes it usable as a
@@ -151,6 +167,17 @@ def build_game_features(min_week: int = 3) -> pd.DataFrame:
     games = schedules[schedules["game_type"] == "REG"].copy()
     games = games.dropna(subset=["home_score", "away_score"])
     games = games[games["week"] >= min_week]
+
+    qb_cpoe = build_qb_rolling_cpoe(ngs_passing)
+    games = games.merge(
+        qb_cpoe.rename(columns={"player_gsis_id": "home_qb_id", "qb_cpoe_rolling": "home_qb_cpoe_rolling"}),
+        on=["home_qb_id", "season", "week"], how="left",
+    )
+    games = games.merge(
+        qb_cpoe.rename(columns={"player_gsis_id": "away_qb_id", "qb_cpoe_rolling": "away_qb_cpoe_rolling"}),
+        on=["away_qb_id", "season", "week"], how="left",
+    )
+    games["diff_qb_cpoe_rolling"] = games["home_qb_cpoe_rolling"] - games["away_qb_cpoe_rolling"]
 
     games = games.merge(
         team_week_pregame.rename(columns={c: f"home_{c}" for c in rolling_cols} | {"team": "home_team"}),
