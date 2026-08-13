@@ -20,6 +20,11 @@ Done:
       (garbage-time filtered) on the game-winner model — **result: flat-to-worse than
       current best (63.5-63.9% vs. 64.1%)**. Real negative result, disproves last
       round's hypothesis that PBP data was the key to closing the market-ceiling gap.
+- [x] Tested scheme/tendency features (pass rate over expected, tempo, defenders in
+      box) on the game-winner model — **also flat-to-worse (63.9% combined vs. 64.1%
+      base)**. Third round in a row where a reasonable new feature didn't help — **the
+      game-winner model has likely hit a practical ceiling with ~1,400 games of data.
+      Redirecting further iteration to the player-prop models instead** (see log).
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -88,6 +93,35 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Built scheme/tendency features from real PBP data (`models/scheme_features.py`):
+  pass rate over expected (nflverse's own `pass_oe`, situation-adjusted play-calling
+  aggression), shotgun/no-huddle rate (tempo), early-down pass rate (scheme identity
+  before game script forces play-calling), and average defenders in box (defensive
+  scheme). Mix-and-match tested each individually and combined against the current best
+  model, same rigorous 5-season CV.
+  **Real result — another honest negative**: none of the four beat the base model
+  individually (pass_oe -0.3pt, tempo -0.3pt, early-down rate -0.2pt, defenders in box
+  -0.7pt). Combined: 63.9%, still below base's 64.1%.
+- **Meta-conclusion worth stating plainly**: this is now the third round in a row
+  (team-avg vs QB-specific NGS, real PBP efficiency, and now scheme/tendency features)
+  where a reasonable, well-built new feature failed to beat the existing Elo+basic-stats
+  combo on the GAME-WINNER model specifically. The honest read: with only ~1,400 total
+  games across 6 seasons, this model has likely hit a practical ceiling — Elo plus a
+  handful of stats already captures what's extractable from this much data, and adding
+  more granular features just adds noise/dilution rather than signal at this sample size.
+  Further iteration on the game-winner model likely has diminishing returns.
+- Blocked: nothing — real, consistent, honest results across three rounds of testing.
+- Next: **redirect iteration effort to the player-prop models instead of the game-winner
+  model.** This matters because Alex's actual use case is player prop parlays on
+  Underdog, not picking game winners — and scheme/tendency features are much more
+  directly actionable there (e.g., a team's pass_oe directly determines how many pass
+  attempts exist to distribute among that team's pass-catchers, which flows straight into
+  receiving-yards predictions) than they are for a binary win/loss outcome. Also: these
+  scheme features, plus the real PBP data now available, haven't been applied to the
+  receiving-yards model yet, or to building out rushing/passing/receptions props — that's
+  where the next real gains are more likely to come from.
 
 **2026-08-13 — [work]**
 - Did: Pulled real play-by-play data (293,478 plays, 2019-2024 — previous runs all used
