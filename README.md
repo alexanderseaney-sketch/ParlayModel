@@ -16,6 +16,10 @@ Done:
       `models/player_prop_receiving_yards_model.pkl`. Strongest signal: target share.
       **Important caveat**: backtested against the player's own rolling average as a
       proxy line, since no historical Underdog line archive exists yet — see log for detail.
+- [x] Pulled real play-by-play data and tested proper per-play efficiency features
+      (garbage-time filtered) on the game-winner model — **result: flat-to-worse than
+      current best (63.5-63.9% vs. 64.1%)**. Real negative result, disproves last
+      round's hypothesis that PBP data was the key to closing the market-ceiling gap.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -84,6 +88,36 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Pulled real play-by-play data (293,478 plays, 2019-2024 — previous runs all used
+  `--skip-pbp`). Built proper per-play efficiency features (`models/pbp_features.py`):
+  EPA/play and success rate (offense and defense, computed directly from defensive plays
+  rather than inferred from opponents), pass/rush EPA split, explosive play rate — all
+  with **garbage time filtered out** (16+ pt margin in Q4, or 21+ pt margin in the second
+  half — standard practice in public EPA models, since blowout garbage-time plays distort
+  true efficiency numbers).
+  **Real result, tested the same rigorous 5-season CV way**: these better-constructed
+  features did NOT beat the current best model. Current best (EPA totals from weekly_stats
+  + Elo + injuries + NGS + turnovers + weather/rest): 64.1% mean. Same setup with PBP
+  per-play features swapped in for the EPA totals: 63.5%. Adding PBP features alongside
+  the existing ones instead of replacing: 63.9%. Both PBP variants came in flat-to-worse.
+- **This disproves the hypothesis from the previous log entry** — I'd flagged real PBP
+  data as "the most promising remaining lever" to close the gap toward the 67.6% market-
+  ceiling number. It wasn't. Honest read on why: Elo already implicitly captures most of
+  the efficiency signal through margin-of-victory updates each week, so a more precise
+  version of the same underlying information (per-play rate vs. volume total) doesn't add
+  much the model didn't already have access to some other way. This is a real, useful
+  negative result, not a wasted afternoon — it rules out a specific hypothesis rather than
+  leaving it as an untested "probably would help" assumption.
+- Blocked: nothing — real data, real test, real (if unexciting) result.
+- Next: the market-ceiling gap (67.6% vs. our 64.1%) likely isn't closed by more precise
+  box-score-derived stats at all — it's probably from information categories we don't have
+  any version of yet: real injury *severity* (not just a raw count), actual line movement
+  over the week (sharp money signals), or coaching/scheme tendencies. Worth being honest
+  that closing this gap may need fundamentally different data sources, not more iteration
+  on what we already have. The PBP data isn't wasted, though — it's still useful for the
+  player-prop models (this round only tested it on the game-winner model).
 
 **2026-08-13 — [work]**
 - Did: **First player-prop model** — Alex flagged that everything built so far predicts
