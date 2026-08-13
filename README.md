@@ -5,18 +5,22 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 ## Status
 
-**Currently on: Phase 1 — Data & infra setup**
+**Currently on: Phase 2 — Baseline model + backtesting harness**
 
-See the Progress Log below for the detailed handoff notes — the short version:
+Done:
+- [x] Real 6-season historical pull (2019-2024) — nflverse works from any environment
+- [x] Baseline Elo power-rating model, walk-forward backtested on 1,599 real games:
+      **62.3% straight-up accuracy**, 2.83 pt MAE vs. Vegas closing spread
+
+See the Progress Log below for full detail.
 
 Not done yet:
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
 - [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
-- [ ] Run a real historical nflverse pull at home (see earlier log entry)
 - [ ] **Check dashboard's Parlay Builder odds-column detection against real Underdog data**
-      once pulled — see latest log entry
-- [ ] Then move to Phase 2: baseline power-rating model + backtesting harness (needed
-      before Parlay Builder's "your probability estimate" can be model-driven)
+      once pulled — see relevant log entry
+- [ ] Build feature engineering pipeline (EPA, NGS, injuries, snap counts) for a real
+      ML model (logistic regression → XGBoost) to beat the Elo baseline
 
 ## Progress Log
 
@@ -34,6 +38,27 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: **Phase 2 started for real, with actual results (not just written code).** Pulled
+  real 6-season historical data (2019-2024, schedules + weekly stats + NGS + injuries +
+  snap counts — nflverse is reachable from this sandbox, unlike ESPN/Underdog). Built
+  `models/elo_baseline.py` (standard Elo power-rating system with home-field advantage
+  and margin-of-victory scaling) and `backtesting/backtest_elo.py` (proper walk-forward
+  backtest — predicts each game using only ratings built from prior games, no future
+  leakage). Verified the nflverse `spread_line` sign convention against real data
+  (positive = home favored) before trusting it in the spread-comparison math.
+  **Real results on 1,599 games (2019-2024 regular season):**
+  - Straight-up accuracy: **62.3%** (vs. 52.9% home-field-only baseline — real signal)
+  - Mean absolute error vs. Vegas closing spread: **2.83 points** (model is "sane" —
+    tracks the market's general shape; this is a sanity check, not an edge metric)
+  - By season: ranged 59.4%-66.2%, no season looked broken or like an outlier bug
+- Blocked: nothing — this all ran and was verified in this environment.
+- Next: this Elo baseline is the reference point for every future model (logistic
+  regression, XGBoost on EPA/NGS features) to beat. Next step is building out the feature
+  engineering pipeline (EPA, NGS, injury/snap-count features) so a real ML model can be
+  trained and backtested against this same 1,599-game set, using the same walk-forward
+  approach to avoid leakage.
 
 **2026-08-13 — [work]**
 - Did: Built `dashboard/` — a Streamlit UI. Originally scoped as a general data browser,
