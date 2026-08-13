@@ -10,17 +10,22 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 Done:
 - [x] Real 6-season historical pull (2019-2024) — nflverse works from any environment
 - [x] Baseline Elo power-rating model, walk-forward backtested on 1,599 real games:
-      **62.3% straight-up accuracy**, 2.83 pt MAE vs. Vegas closing spread
+      62.3% straight-up accuracy, 2.83 pt MAE vs. Vegas closing spread
+- [x] Feature engineering (EPA, injuries, Next Gen Stats) + iterative model testing,
+      trained on 2019-2023, tested on 2024 held out: **current best model is 70.4%
+      accuracy** (logistic regression combining Elo + EPA + injuries + NGS) — see full
+      results table and caveats in the latest log entry
 
 See the Progress Log below for full detail.
 
 Not done yet:
+- [ ] **Validate 70.4% with additional holdout seasons** — currently only tested on one
+      240-game holdout (2024); worth confirming this isn't a lucky split before trusting it
+- [ ] Try turnover margin, weather, and rest-day features (data already pulled, unused so far)
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
 - [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
 - [ ] **Check dashboard's Parlay Builder odds-column detection against real Underdog data**
       once pulled — see relevant log entry
-- [ ] Build feature engineering pipeline (EPA, NGS, injuries, snap counts) for a real
-      ML model (logistic regression → XGBoost) to beat the Elo baseline
 
 ## Progress Log
 
@@ -38,6 +43,41 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Built `models/feature_engineering.py` — pre-game team-week features from real
+  data (EPA offense/defense, injury counts, Next Gen Stats CPOE + avg separation), each
+  computed as a strictly-prior rolling average (no leakage, same discipline as the Elo
+  backtest). Then ran real iterative model training (`models/train_iterate.py`,
+  `models/train_iterate_v2.py`): **trained on 2019-2023, tested on the entire 2024
+  season held out** — every number below is real, not estimated.
+
+  | Model | Accuracy (2024 holdout) | Brier |
+  |---|---|---|
+  | Elo alone (baseline) | 67.1% | — |
+  | Logistic regression, EPA only | 66.2% | 0.222 |
+  | + injury counts | 66.2% | 0.219 |
+  | + Next Gen Stats (CPOE, separation) | 67.1% | 0.213 |
+  | XGBoost, same features | 65.0% | 0.227 |
+  | **Logistic regression: EPA + injuries + NGS + Elo win prob** | **70.4%** | **0.202** |
+  | XGBoost, same combined features | 67.1% | 0.214 |
+
+  **Key finding**: pure box-score/EPA features alone don't beat Elo — they carry
+  overlapping information. The real gain came from *combining* Elo's rating with the
+  richer features, not replacing it. XGBoost underperformed logistic regression across
+  the board here, likely overfitting on only 1,167 training games — simpler model
+  generalized better on this amount of data.
+- Blocked: nothing — this all ran for real in this environment, using real 2019-2024
+  nflverse data.
+- Next: **current best model is the "EPA + injuries + NGS + Elo" logistic regression at
+  70.4%.** Caveats worth taking seriously before trusting this number fully: it's a
+  single 240-game holdout (2024 only) — worth validating with additional holdout seasons
+  (e.g. repeat with 2023 held out, 2019-2022+2024 trained) before concluding 70.4% is the
+  real generalization accuracy rather than a lucky split. Other features worth testing
+  next: turnover margin, weather (temp/wind columns already in schedules.csv), rest days
+  (home_rest/away_rest already in schedules.csv, unused so far), and QB-specific NGS
+  rather than team-average. This is genuinely a solid working model for now, not a
+  finished one — good foundation to keep iterating on.
 
 **2026-08-13 — [work]**
 - Did: **Phase 2 started for real, with actual results (not just written code).** Pulled
