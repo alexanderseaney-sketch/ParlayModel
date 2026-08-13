@@ -9,19 +9,18 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 Done:
 - [x] Real 6-season historical pull (2019-2024) — nflverse works from any environment
-- [x] Baseline Elo power-rating model, walk-forward backtested on 1,599 real games:
-      62.3% straight-up accuracy, 2.83 pt MAE vs. Vegas closing spread
-- [x] Feature engineering (EPA, injuries, Next Gen Stats) + iterative model testing,
-      trained on 2019-2023, tested on 2024 held out: **current best model is 70.4%
-      accuracy** (logistic regression combining Elo + EPA + injuries + NGS) — see full
-      results table and caveats in the latest log entry
+- [x] Baseline Elo power-rating model, walk-forward backtested: 62-67% accuracy by season
+- [x] Feature engineering (EPA, injuries, NGS, turnovers, weather, rest days) + proper
+      5-season leave-one-season-out cross-validation. **Honest current result: Elo+stats
+      combined model averages 64.1% accuracy, consistently beating Elo alone (63.1%) in
+      every one of the 5 tested seasons** — a real but modest ~1pt edge, not the earlier
+      70.4% single-split number (which was corrected — see log for why)
 
 See the Progress Log below for full detail.
 
 Not done yet:
-- [ ] **Validate 70.4% with additional holdout seasons** — currently only tested on one
-      240-game holdout (2024); worth confirming this isn't a lucky split before trusting it
-- [ ] Try turnover margin, weather, and rest-day features (data already pulled, unused so far)
+- [ ] Try QB-specific NGS (vs. team-average), and a market-based feature (raw Vegas
+      spread) to see how much signal the market already prices in
 - [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
 - [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
 - [ ] **Check dashboard's Parlay Builder odds-column detection against real Underdog data**
@@ -78,6 +77,39 @@ before starting work to see what the other side left you.*
   (home_rest/away_rest already in schedules.csv, unused so far), and QB-specific NGS
   rather than team-average. This is genuinely a solid working model for now, not a
   finished one — good foundation to keep iterating on.
+
+---
+
+**2026-08-13 — [work]**
+- Did: Added turnover margin (turnovers forced − committed, via the same opponent-lookup
+  pattern as defensive EPA), weather (temp/wind, already in schedules.csv), and rest-day
+  differential as features. **Ran proper leave-one-season-out cross-validation across all
+  5 of the last 5 seasons (2020-2024)** — train on the other 4-5 seasons, test on the held
+  -out one, repeated for each. This is the real test of whether a result generalizes.
+  Real results (mean accuracy across all 5 holdout seasons):
+  - Elo alone: **63.1%** (range 61.3%-67.1%)
+  - Stats-only model (EPA/injuries/NGS/turnovers/weather/rest, no Elo): **62.1%** — at or
+    below Elo in every single season, confirms the earlier finding that box-score stats
+    alone don't add signal beyond what Elo already captures
+  - **Elo + stats combined: 64.1%** — beat or tied Elo alone in *every one* of the 5
+    seasons (never worse), by about 1 percentage point on average
+- **Correction to the previous log entry**: the earlier reported 70.4% (single 2024
+  holdout) was optimistic — a good split, not the honest expected performance. Re-running
+  that same 2024 holdout inside this proper CV (now with turnover/weather/rest added too)
+  gives 68.3%, and the trustworthy cross-validated average is 64.1%. The real, defensible
+  finding is smaller than first reported: **~1 point of consistent improvement over Elo**,
+  not ~3 points on one lucky year. Flagging this explicitly rather than letting the
+  flashier earlier number stand — worth remembering for how any future "big improvement"
+  result should be treated until it's been checked across multiple holdouts.
+- Blocked: nothing — real numbers, real cross-validation, in this environment.
+- Next: current best, honestly validated model is **logistic regression on Elo + EPA +
+  injuries + NGS + turnovers + weather + rest, ~64% average accuracy across 5 seasons of
+  holdout testing.** This is a solid, real foundation — modest edge, but a consistent
+  and honestly-tested one. Further ideas worth testing the same rigorous way: QB-specific
+  NGS instead of team-average, a market-based feature (Vegas spread itself, to see how
+  much of the model's signal the market already prices in), and whether XGBoost with
+  more training data (once more seasons or weekly granularity is added) starts to
+  outperform logistic regression the way it currently doesn't.
 
 **2026-08-13 — [work]**
 - Did: **Phase 2 started for real, with actual results (not just written code).** Pulled

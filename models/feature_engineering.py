@@ -76,6 +76,35 @@ def build_team_week_ngs(ngs_passing: pd.DataFrame, ngs_rushing: pd.DataFrame, ng
     return merged
 
 
+def build_team_week_turnovers(weekly_stats: pd.DataFrame, schedules: pd.DataFrame) -> pd.DataFrame:
+    """Turnovers committed by a team's offense that week (interceptions thrown + fumbles
+    lost, across passing/rushing/receiving/sacks), and turnovers forced (= opponent's
+    turnovers committed that week, same matchup-lookup pattern as defensive EPA)."""
+    for col in ["interceptions", "sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"]:
+        weekly_stats[col] = weekly_stats[col].fillna(0)
+
+    committed = weekly_stats.groupby(["recent_team", "season", "week"]).apply(
+        lambda g: (g["interceptions"] + g["sack_fumbles_lost"] + g["rushing_fumbles_lost"] + g["receiving_fumbles_lost"]).sum(),
+        include_groups=False,
+    ).reset_index(name="turnovers_committed").rename(columns={"recent_team": "team"})
+
+    games = schedules[schedules["game_type"] == "REG"][["season", "week", "home_team", "away_team"]].copy()
+    home_side = games.rename(columns={"home_team": "team", "away_team": "opponent"})
+    away_side = games.rename(columns={"away_team": "team", "home_team": "opponent"})
+    matchups = pd.concat([home_side, away_side], ignore_index=True)
+
+    matchups = matchups.merge(
+        committed.rename(columns={"team": "opponent", "turnovers_committed": "turnovers_forced"}),
+        on=["opponent", "season", "week"], how="left",
+    )
+    turnovers = committed.merge(
+        matchups[["team", "season", "week", "turnovers_forced"]], on=["team", "season", "week"], how="left"
+    )
+    turnovers["turnover_margin"] = turnovers["turnovers_forced"].fillna(0) - turnovers["turnovers_committed"]
+    return turnovers[["team", "season", "week", "turnover_margin"]]
+
+
+
 def add_rolling_pregame_features(team_week: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
     """For each feature, computes the team's season-to-date average using only STRICTLY
     PRIOR weeks (shift(1) before the expanding mean) — this is what makes it usable as a
@@ -105,13 +134,15 @@ def build_game_features(min_week: int = 3) -> pd.DataFrame:
     defense = build_team_week_defense(offense, schedules)
     inj = build_team_week_injuries(injuries)
     ngs = build_team_week_ngs(ngs_passing, ngs_rushing, ngs_receiving)
+    turnovers = build_team_week_turnovers(weekly_stats, schedules)
 
     team_week = offense.merge(defense, on=["team", "season", "week"], how="outer")
     team_week = team_week.merge(inj, on=["team", "season", "week"], how="left")
     team_week = team_week.merge(ngs, on=["team", "season", "week"], how="left")
+    team_week = team_week.merge(turnovers, on=["team", "season", "week"], how="left")
     team_week["injury_count"] = team_week["injury_count"].fillna(0)
 
-    feature_cols = ["off_epa_total", "def_epa_allowed", "injury_count", "cpoe", "avg_separation"]
+    feature_cols = ["off_epa_total", "def_epa_allowed", "injury_count", "cpoe", "avg_separation", "turnover_margin"]
     team_week = add_rolling_pregame_features(team_week, feature_cols)
 
     rolling_cols = [f"{c}_rolling" for c in feature_cols]
@@ -131,6 +162,12 @@ def build_game_features(min_week: int = 3) -> pd.DataFrame:
     )
 
     games["home_win"] = (games["home_score"] > games["away_score"]).astype(int)
+
+    # Weather and rest are known BEFORE kickoff already — no rolling needed, use directly.
+    games["rest_diff"] = games["home_rest"] - games["away_rest"]
+    games["temp"] = games["temp"].fillna(games["temp"].median())
+    games["wind"] = games["wind"].fillna(0)
+    games["is_dome"] = games["roof"].isin(["dome", "closed"]).astype(int)
 
     for c in rolling_cols:
         home_col, away_col = f"home_{c}", f"away_{c}"
