@@ -34,6 +34,24 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-13 — [work]**
+- Did: Researched California sports betting legal status, since Alex wants the model to
+  eventually cover any bet type. Finding: **California has no legal, regulated sportsbook
+  at any age** — voters rejected both legalization measures in 2022, realistic timeline
+  for legalization is 2028 at the earliest. Turning 21 (Sept 18) does not unlock sports
+  betting in CA the way it would in most states, since the barrier isn't age, it's that
+  no legal market exists. Real options: (1) prediction markets like Kalshi/Polymarket,
+  federally regulated as event contracts, legal in CA at 18+, though CA lawmakers are
+  actively introducing bills targeting sports-specific prediction contracts specifically
+  — unsettled ground; (2) betting while physically present in a state where it's actually
+  legal, once 21, using real regulated sportsbooks; (3) offshore/unlicensed sportsbooks,
+  which is what most CA bettors use in practice but carries real legal risk and no
+  consumer protection — not something I'll help automate placing bets on.
+- Blocked: waiting on Alex's decision on which platform path to build the execution side
+  toward — this changes what "odds API" and the browser automation phase actually target.
+- Next: once decided, update Phase 1 (odds API choice) and Phase 5 (browser automation
+  target) accordingly.
+
+**2026-08-13 — [work]**
 - Did: Researched parlay strategy, bankroll management, and how sharp bettors find edges
   (multiple sources: correlation math, NJ regulatory data, professional betting guides).
   Key findings:
