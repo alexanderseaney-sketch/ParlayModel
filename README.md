@@ -10,6 +10,7 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 See the Progress Log below for the detailed handoff notes — the short version:
 
 Not done yet:
+- [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see latest log entry
 - [ ] Run a real historical pull at home (see next step in latest log entry)
 - [ ] Pick and wire up an odds API (The Odds API vs. SportsDataIO — not yet decided)
 - [ ] Then move to Phase 2: baseline power-rating model + backtesting harness
@@ -30,6 +31,19 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Built `data/pull_espn_news.py` — pulls league-wide + per-team NFL news (injuries,
+  signings, trades, drama, anything storyline-relevant) from ESPN's unofficial public API.
+  Tags each article with athletes/teams mentioned where ESPN provides that metadata.
+- Blocked: **could not test this at all** — `espn.com` isn't reachable from this sandbox's
+  network allowlist (confirmed via direct curl, got `host_not_allowed`). The code is
+  reasoned through carefully but completely unverified against a live response.
+- Next (home): run `python3 data/pull_espn_news.py` and actually check the output —
+  confirm articles come back with real headlines/dates, spot-check that team news
+  filtering works, and check `get_team_ids()` returns all 32 teams correctly. ESPN's
+  endpoints are undocumented and can change without notice, so don't trust this script
+  until it's been seen working on real data at least once.
 
 **2026-08-13 — [work]**
 - Did: Added this progress log format so work/home sessions can hand off cleanly.
@@ -81,6 +95,9 @@ notebooks/      # exploratory analysis
 - **Next Gen Stats** (AWS-powered tracking data) — passing, rushing, receiving: completion probability, separation, time to throw, air yards, etc.
 - **Injuries** — weekly injury report status by player
 - **Snap counts** — offensive/defensive/special teams snap share by player/week
+- **ESPN news** (`data/pull_espn_news.py`) — league-wide + per-team news: injuries, signings,
+  trades, suspensions, and general storylines. Untested in this environment (ESPN's domain
+  isn't reachable here) — needs a live test run before it's trusted.
 
 Every pull is validated on the way in — row counts, missing key columns, duplicates, and
 null rates on important fields are checked and reported, so a broken or changed upstream
