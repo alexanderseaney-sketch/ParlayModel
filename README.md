@@ -14,16 +14,16 @@ Done:
 - [x] **Player-prop model (receiving yards, WR/TE)**: 66.7% avg accuracy across 5 seasons,
       very stable (65.6%-67.2% range) — saved to
       `models/player_prop_receiving_yards_model.pkl`. Strongest signal: target share.
-- [x] **Player-prop model (rushing yards, RB)**: 70.0% avg accuracy, stronger than
-      receiving at every confidence level (81.7% at 0.4 confidence vs. receiving's
-      77.9%) — saved to `models/player_prop_rushing_yards_model.pkl`. Strongest signal:
-      NGS efficiency (rush yards over expected), not volume — different driver than
-      receiving's target-share signal.
-- [x] **Player-prop model (passing yards, QB)**: 60.8% avg accuracy — the weakest of the
-      three, honestly, due to a much smaller dataset (only one starting QB per team).
-      At 0.4 confidence: 79.1% but only on 17.2% of games — more selective than the
-      other two props. Saved to `models/player_prop_passing_yards_model.pkl`. Strongest
-      signal: time to throw + TD rate — a third distinct pattern from receiving/rushing.
+- [x] **Player-prop model (rushing yards, RB)**: 70.3% avg accuracy (updated with
+      implied team total + weather + snap share), 82.0% at 0.4 confidence on 45.5% of
+      games — saved to `models/player_prop_rushing_yards_model.pkl`. Strongest signal:
+      NGS efficiency (rush yards over expected).
+- [x] **Player-prop model (passing yards, QB)**: 61.7% avg accuracy (updated with
+      weather), 79.7% at 0.4 confidence on 20.3% of games — saved to
+      `models/player_prop_passing_yards_model.pkl`. Strongest signals: time to throw,
+      TD rate, and weather (wind/cold meaningfully affect passing).
+- [x] **Receiving yards stays unchanged** — tested game context + snap share, none of
+      it helped (66.7% / 77.9% unchanged). Real, honest null result.
       **Important caveat (applies to all three prop models)**: backtested against the
       player's own rolling average as a proxy line, since no historical Underdog line
       archive exists yet — see log for detail. This is why building that archive is
@@ -81,6 +81,36 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-14 — [work]**
+- Did: Built `models/game_context_features.py` — game-context features usable across
+  all prop models: Vegas implied team total (game total split by spread), home/away,
+  weather, rest days. Also unlocked snap share (previously skipped — `snap_counts` uses
+  `pfr_player_id`, `weekly_stats` uses gsis `player_id`, two different ID systems) via
+  `nfl_data_py`'s real ID crosswalk (7,797 players mapped). Tested these, individually
+  and combined, on all three prop models.
+  **Honest, mixed results — genuinely different per prop type, not a blanket win**:
+  - **Receiving**: null again. Nothing beat base individually, combined was a wash
+    (78.2% vs 77.9% at 0.4 confidence — within noise). Snap share had 100% real
+    coverage but still added nothing — makes sense in hindsight: target share is
+    already a more precise "does he get the ball" signal than raw snap count.
+  - **Rushing**: small, real, consistent improvement. Implied total + weather + snap
+    share combined: 70.3% overall / 82.0% at 0.4 confidence (was 70.0%/81.7%). Modest
+    but genuine — **production model updated and retrained** with these three added.
+  - **Passing**: the clearest win of the round. **Weather alone**: 61.7% overall / 79.7%
+    at 0.4 confidence on 20.3% of games (was 60.8%/79.1% on 17.2%) — improved accuracy
+    AND qualifying game count. Makes strong intuitive sense (wind/cold directly affect
+    passing). Important nuance: weather+rest combined actually had WORSE confidence-
+    calibration (77.5%) than weather alone despite slightly higher raw accuracy — rest
+    wasn't reliably useful and can hurt calibration even when it nudges raw accuracy up.
+    **Production model updated and retrained** with weather only (not rest).
+- Blocked: nothing — real, honest, three genuinely different outcomes per prop type.
+- Next: this confirms a pattern worth trusting going forward — test every new feature
+  per prop type individually rather than assuming a signal that works for one transfers
+  to another (weather mattered a lot for passing, barely at all for rushing, nothing for
+  receiving). Receptions model is still the one remaining major prop type to build.
+  Also worth re-wiring `current_predictions.py` to use the updated rushing/passing
+  feature sets once those get wired into the dashboard (currently only receiving is wired in).
 
 **2026-08-14 — [work]**
 - Did: Built the third player-prop model — **passing yards (QB)**, same rigor as
