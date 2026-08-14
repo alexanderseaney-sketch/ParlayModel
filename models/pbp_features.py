@@ -14,6 +14,23 @@ import pandas as pd
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 
+RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
+
+# Only the columns actually used across pbp_features/scheme_features/matchup_features —
+# a full pbp.csv load (397 columns) uses ~3.6GB RAM by itself, close to this sandbox's
+# entire memory budget. Loading only what's needed cuts that dramatically.
+PBP_USECOLS = [
+    "season", "week", "posteam", "defteam", "play_type", "epa", "success",
+    "pass", "rush", "yards_gained", "qtr", "score_differential",
+    "shotgun", "no_huddle", "down", "xpass", "pass_oe", "defenders_in_box",
+    "receiver_player_id", "rusher_player_id", "sack",
+]
+
+
+def load_pbp() -> pd.DataFrame:
+    return pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), usecols=PBP_USECOLS, low_memory=False)
+
+
 def filter_garbage_time(pbp: pd.DataFrame) -> pd.DataFrame:
     pbp = pbp[pbp["play_type"].isin(["pass", "run"])].copy()
     pbp = pbp.dropna(subset=["epa", "posteam", "defteam"])
@@ -75,7 +92,7 @@ def add_rolling(team_week: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 
 def build_pbp_team_week_features(pbp: pd.DataFrame = None) -> pd.DataFrame:
     if pbp is None:
-        pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
+        pbp = load_pbp()
 
     off = build_team_week_pbp_offense(pbp)
     defn = build_team_week_pbp_defense(pbp)

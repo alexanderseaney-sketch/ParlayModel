@@ -99,7 +99,8 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     from scheme_features import build_team_week_scheme
     from pbp_features import build_pbp_team_week_features
 
-    pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
+    from pbp_features import load_pbp
+    pbp = load_pbp()
     scheme = build_team_week_scheme(pbp)
     pbp_eff = build_pbp_team_week_features(pbp)
 

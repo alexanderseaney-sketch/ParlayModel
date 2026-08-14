@@ -83,6 +83,47 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-14 — [work]**
+- Did: Built `models/matchup_features.py` — real matchup-specific defensive splits from
+  PBP: pass defense vs. run defense (split cleanly, not blended like the earlier
+  `def_epa_allowed`), defense's EPA allowed specifically against each receiver position
+  group (WR/TE/RB — the real "player matchup" signal), sack rate allowed, and run-stuff
+  rate. Tested against all three prop models.
+  **Hit and fixed a real infrastructure bug first**: a single full `pbp.csv` load (397
+  columns) uses ~3.6GB RAM by itself — nearly this sandbox's entire memory budget — and
+  multiple functions were each independently re-loading the full file from disk,
+  guaranteeing an OOM kill the moment more than one was in memory at once. Fixed by
+  adding `load_pbp()` to `pbp_features.py` with an explicit `usecols` list (only the ~20
+  columns actually used anywhere), cutting a load from 3.6GB to a fraction of that, and
+  updated every function that read `pbp.csv` directly (`matchup_features.py`,
+  `player_prop_features.py`, `scheme_features.py`, `pbp_features.py`'s own internal
+  default) to use the shared trimmed loader instead of independently re-reading the full
+  file. This matters for any future PBP-based feature work, not just this round.
+  **Real results, mostly null again**: receiving showed nothing (all within noise).
+  Rushing and passing each had one feature nudge raw accuracy up slightly
+  (`def_rush_success_rate_allowed`, `def_pass_epa_allowed`, both +0.3pt) but both came
+  with a drop in confidence-filtered accuracy — same false-economy pattern as the
+  passing+rest situation last round. Neither kept in production.
+- **Broader honest pattern worth stating plainly now**: across every round today —
+  QB-specific stats, real PBP efficiency, scheme/tendency, game context, and now
+  matchup-specific defensive splits — the opponent/defense side has consistently failed
+  to add real value beyond the single simple `def_epa_allowed_rolling` already in each
+  model. What HAS worked: the player's own history/opportunity signals (target share,
+  rush efficiency, time to throw), and a couple of specific game-context features
+  (weather for passing, a smaller combo for rushing). The lesson: more defensive
+  granularity isn't the lever here — it's been tested from several angles now and
+  doesn't move these models. Further defensive-side feature engineering on these three
+  models likely has very low expected value at this point.
+- Blocked: nothing — real, honest, consistent results, plus a genuinely important
+  infrastructure fix for future PBP work.
+- Next: given the defensive-side ceiling appears real and consistent, the higher-value
+  remaining work is (1) receptions model (still not built), (2) the real Underdog line
+  archive (still top priority, unblocks testing against real lines instead of proxy),
+  and (3) if more feature work is wanted, trying something genuinely different in
+  category rather than another defensive split — e.g., a player's own matchup history
+  (has this specific player historically performed well/poorly against this specific
+  opponent, not just "how good is the opponent's defense in general").
+
+**2026-08-14 — [work]**
 - Did: Built `models/game_context_features.py` — game-context features usable across
   all prop models: Vegas implied team total (game total split by spread), home/away,
   weather, rest days. Also unlocked snap share (previously skipped — `snap_counts` uses

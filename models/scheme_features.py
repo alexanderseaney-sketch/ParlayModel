@@ -50,7 +50,8 @@ def build_team_week_scheme(pbp: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
+    from pbp_features import load_pbp
+    pbp = load_pbp()
     df = build_team_week_scheme(pbp)
     print(df.shape)
     rolling_cols = [c for c in df.columns if c.endswith("_rolling")]
