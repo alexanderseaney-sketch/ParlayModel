@@ -74,6 +74,24 @@ before starting work to see what the other side left you.*
 
 ---
 
+**2026-08-14 — [work]**
+- Did: Re-confirmed Underdog is the right platform with fresh research (current sources,
+  not just this morning's). Underdog still has the best overall payout structure, though
+  ParlayPlay/Dabble edge it out on specific entry sizes (3-pick, 6-pick) — not enough to
+  justify switching given Underdog's CA-legal status is already confirmed and the API
+  integration already exists. **New consideration for later**: multiple current sources
+  specifically advise against using Underdog on desktop (mobile-first product) — relevant
+  for Phase 5 (Claude in Chrome browser automation, which is desktop-based) once that
+  phase actually starts. Not a blocker now, just something to test carefully when the
+  time comes, possibly meaning placement automation needs to target Underdog's mobile
+  web view rather than a full desktop experience.
+- Blocked: nothing — this was a research/decision confirmation, no code changed.
+- Next: no immediate action — this is context for whenever Phase 5 (browser automation)
+  actually starts, which is still gated behind having a real Underdog line archive and a
+  model validated against real lines, not just the proxy line.
+
+---
+
 **2026-08-13 — [work]**
 - Did: Built `models/feature_engineering.py` — pre-game team-week features from real
   data (EPA offense/defense, injury counts, Next Gen Stats CPOE + avg separation), each
