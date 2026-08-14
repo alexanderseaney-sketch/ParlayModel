@@ -14,16 +14,22 @@ Done:
 - [x] **Player-prop model (receiving yards, WR/TE)**: 66.7% avg accuracy across 5 seasons,
       very stable (65.6%-67.2% range) — saved to
       `models/player_prop_receiving_yards_model.pkl`. Strongest signal: target share.
-- [x] **Player-prop model (rushing yards, RB)**: 70.3% avg accuracy (updated with
-      implied team total + weather + snap share), 82.0% at 0.4 confidence on 45.5% of
-      games — saved to `models/player_prop_rushing_yards_model.pkl`. Strongest signal:
-      NGS efficiency (rush yards over expected).
-- [x] **Player-prop model (passing yards, QB)**: 61.7% avg accuracy (updated with
-      weather), 79.7% at 0.4 confidence on 20.3% of games — saved to
-      `models/player_prop_passing_yards_model.pkl`. Strongest signals: time to throw,
-      TD rate, and weather (wind/cold meaningfully affect passing).
-- [x] **Receiving yards stays unchanged** — tested game context + snap share, none of
-      it helped (66.7% / 77.9% unchanged). Real, honest null result.
+- [x] **Player-prop model (receiving yards, WR/TE)**: switched to XGBoost + injury/div/
+      primetime features — 67.1% base, 80.3% at 0.4 confidence, saved to
+      `models/player_prop_receiving_yards_model.pkl`.
+- [x] **Player-prop model (rushing yards, RB)**: switched to XGBoost + primetime —
+      70.6% base, 83.2% at 0.4 confidence on 47.7% of games — saved to
+      `models/player_prop_rushing_yards_model.pkl`.
+- [x] **Player-prop model (passing yards, QB)**: stays LogReg + weather (XGBoost lost
+      on this smaller dataset) — 61.7% base, 79.7% at 0.4 confidence — saved to
+      `models/player_prop_passing_yards_model.pkl`.
+- [x] **Player-prop model (receptions, WR/TE)**: NEW, and the strongest of all four —
+      XGBoost + divisional game — 72.7% base, 84.4% at 0.4 confidence on 51% of games
+      — saved to `models/player_prop_receptions_model.pkl`.
+      **Important caveat (applies to all four prop models)**: backtested against the
+      player's own rolling average as a proxy line, since no historical Underdog line
+      archive exists yet — see log for detail. This is why building that archive is
+      still the top priority, ranked above adding more prop-type models.
       **Important caveat (applies to all three prop models)**: backtested against the
       player's own rolling average as a proxy line, since no historical Underdog line
       archive exists yet — see log for detail. This is why building that archive is
@@ -51,8 +57,8 @@ Not done yet:
       time) — every player-prop accuracy number so far is against a proxy line (player's
       own rolling average), not real Underdog lines. That's the number that actually
       tells us if this is profitable.
-- [ ] Build receptions prop model — same pipeline as receiving yards, different target
-      column, the last remaining major prop type
+- [ ] Wire rushing, passing, and receptions models into `current_predictions.py` and
+      the dashboard (only receiving yards is wired in so far)
 - [ ] Wire the rushing-yards model into `current_predictions.py` and the dashboard
       (only receiving yards is wired in so far)
 - [ ] **Test `data/pull_espn_news.py` for real** (needs home network) — built but
@@ -81,6 +87,49 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-14 — [work]**
+- Did: Alex gave open-ended time to test/combine as many theories as possible. Big
+  round, several real findings:
+  1. **Built the receptions model** (last missing major prop type) — and it's the
+     **strongest model of all four**: 71.2% base, 81.2% at 0.4 confidence on 57.5% of
+     games (far more coverage than any other prop at that threshold). Makes sense —
+     a catch is closer to binary and less influenced by big-play variance than yardage.
+  2. **Re-tested XGBoost on props** (it lost on the game-winner model with only 1,400
+     rows) — with much bigger prop datasets, it won clearly on three of four:
+     - Receptions (12,266 rows): 72.4%/84.2% vs. LogReg's 71.2%/81.2% — XGBoost wins
+     - Receiving yards (12,266 rows): 66.9%/79.8% vs. 66.7%/77.9% — XGBoost wins
+     - Rushing yards (5,053 rows): 70.2%/82.7% vs. 70.0%/81.7% — XGBoost wins, more coverage too
+     - Passing yards (2,705 rows, smallest): LogReg wins (60.8%/79.1% vs. XGBoost's
+       worse 59.1%/75.9%) — confirms the original hypothesis that XGBoost needs enough
+       data; there's a clear line between "enough" (~5k+) and "not enough" (~2.7k) here.
+     **All three winning models switched to XGBoost in production.**
+  3. **Built individual-level context features** (`models/individual_context_features.py`):
+     player's own injury/practice status (not team-wide count — this specific player's
+     designation), divisional game flag, primetime flag, usage trend. Real, small,
+     genuinely positive results (unlike several recent all-null rounds):
+     - Receiving: combined (injury+div+primetime) beat base — 67.1%/80.3% vs. 66.9%/79.8%
+     - Rushing: primetime ALONE beat both base and the combined set — 70.6%/83.2%
+       (same "don't blindly combine individual winners" lesson as the passing+rest
+       situation two rounds ago — combined was 70.5%/82.8%, worse than primetime alone)
+     - Receptions: divisional game ALONE was best — 72.7%/84.4%
+     - Passing: nothing helped (consistent with weather already being the dominant
+       context signal there)
+     **All updated production models retrained and saved** with their real best config.
+  4. **Caught and fixed a real bug during this**: `current_predictions.py` (used by the
+     dashboard) broke after the receiving model was retrained with new features — it
+     was still building the old feature set, missing the new injury/div/primetime
+     columns the updated model expected. Fixed by adding the same feature-merge steps
+     used in training. Re-verified the full dashboard test suite (all 7 pages) after
+     the fix — all clean.
+- Blocked: nothing — a lot of real, tested ground covered.
+- Next: passing yards is now the clear outlier — smallest dataset, weakest base rate,
+  and neither XGBoost nor individual-context features have moved it much beyond the
+  weather addition from two rounds ago. Worth considering whether QB props need a
+  fundamentally different approach (more seasons of data? different target variable?)
+  rather than more feature mixing on the same small dataset. Also: `current_predictions.py`
+  currently only covers receiving yards — rushing, passing, and receptions all need the
+  same live-prediction wiring to actually show up in the dashboard's confidence filter.
 
 **2026-08-14 — [work]**
 - Did: Alex raised an important methodological point — team-level historical data

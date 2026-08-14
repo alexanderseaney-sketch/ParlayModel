@@ -15,9 +15,11 @@ import pickle
 import pandas as pd
 
 from player_prop_features import build_receiving_yards_dataset
+from individual_context_features import build_player_injury_status, build_game_flags
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "player_prop_receiving_yards_model.pkl")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "current_player_predictions.csv")
+RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 
 def build_current_predictions() -> pd.DataFrame:
@@ -25,9 +27,20 @@ def build_current_predictions() -> pd.DataFrame:
     df = df[df["position"].isin(["WR", "TE"])].copy()
     df = df.dropna(subset=["receiving_yards_rolling"])
 
+    # Same feature merges used in training — the model expects these columns to exist.
+    injuries = pd.read_csv(os.path.join(RAW_DIR, "injuries.csv"), low_memory=False)
+    schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
+    inj_status = build_player_injury_status(injuries)
+    flags = build_game_flags(schedules).rename(columns={"team": "recent_team"})
+    df = df.merge(inj_status, on=["player_id", "season", "week"], how="left")
+    df = df.merge(flags, on=["recent_team", "season", "week"], how="left")
+
     # Take each player's MOST RECENT row — their current rolling form going into their
     # next game. This is a projection base, not a backtest, so it uses whatever the
-    # latest real data actually shows.
+    # latest real data actually shows. NOTE: own_injury_severity/div_game/is_primetime
+    # here reflect that LATEST COMPLETED game, not a genuinely future upcoming game —
+    # for true forward-looking predictions once real current-season games exist, these
+    # would need to come from the actual upcoming schedule/injury report instead.
     latest = df.sort_values(["player_id", "season", "week"]).groupby("player_id").tail(1).copy()
 
     with open(MODEL_PATH, "rb") as f:
