@@ -41,21 +41,24 @@ Done:
 See the Progress Log below for full detail on every round of testing.
 
 Not done yet:
-- [ ] **TOP PRIORITY: build a real historical Underdog line archive** (test
-      `pull_underdog.py`, then run it regularly and save snapshots over time) — every
-      player-prop accuracy number so far is against a proxy line (player's own rolling
-      average), not real Underdog lines. That's the number that actually tells us if this
-      is profitable. See latest log entry for why this matters more than it might seem.
-- [ ] **Build the same player-prop pipeline for rushing yards, passing yards, and
-      receptions** — only receiving yards is done so far, out of Underdog's likely
-      prop menu
-- [ ] Start saving real Underdog prop lines over time (once `pull_underdog.py` is
-      tested) to replace the proxy-line backtesting approach with real historical lines
-- [ ] Wire both `final_model.pkl` and `player_prop_receiving_yards_model.pkl` into the
-      dashboard's Parlay Builder, replacing the manual probability slider
-- [ ] Consider pulling real play-by-play data (not `--skip-pbp`) for richer EPA features
-- [ ] **Test `data/pull_espn_news.py` for real** — built but completely unverified, see log
-- [ ] **Test `data/pull_underdog.py` for real** — built but completely unverified, see log
+- [ ] **TOP PRIORITY (needs home network): build a real historical Underdog line
+      archive** (test `pull_underdog.py`, then run it regularly and save snapshots over
+      time) — every player-prop accuracy number so far is against a proxy line (player's
+      own rolling average), not real Underdog lines. That's the number that actually
+      tells us if this is profitable.
+- [ ] Build passing yards (QB) and receptions prop models — same pipeline as
+      receiving/rushing, not yet done
+- [ ] Wire the rushing-yards model into `current_predictions.py` and the dashboard
+      (only receiving yards is wired in so far)
+- [ ] **Test `data/pull_espn_news.py` for real** (needs home network) — built but
+      completely unverified, see log
+- [ ] **Test `data/pull_underdog.py` for real** (needs home network) — built but
+      completely unverified, see log
+- [ ] Deploy the dashboard to Streamlit Community Cloud (code is ready, just needs the
+      GitHub login handoff — see Dashboard section below)
+- [ ] Minor: some player-prop model training runs throw sklearn convergence warnings
+      (lbfgs hitting max_iter) — doesn't change results but worth fixing with more
+      iterations or feature scaling if these models get revisited
 
 ## Progress Log
 
