@@ -137,6 +137,28 @@ before starting work to see what the other side left you.*
   tags instead of falling back to manual entry. Passing yards (QB) and receptions are
   still the two remaining major prop types without a model.
 
+---
+
+**2026-08-14 — [work]**
+- Did: Prepped the dashboard for real hosted deployment (Alex wants it usable from his
+  phone alongside Underdog's own app, not just running locally). Added a password gate
+  to `dashboard/app.py` that only activates when a `dashboard_password` secret is
+  configured — stays fully open for local `streamlit run` use, requires login once
+  deployed to Streamlit Community Cloud. **Caught and fixed a real bug during testing**:
+  the first version crashed on pure local use (no `secrets.toml` file at all) because
+  `st.secrets` throws rather than returning empty — wrapped in try/except to handle that
+  case. Verified all three states with Streamlit's AppTest: no-secrets-file (gate
+  skipped), wrong password (stays locked), correct password (unlocks) — all pass. Added
+  `.streamlit/secrets.toml.example` as a template and gitignored the real secrets file.
+  Documented the full deployment steps (share.streamlit.io, connect the GitHub repo,
+  paste the password into Community Cloud's Secrets UI) in the README's Dashboard section.
+- Blocked: the actual deployment handoff (connecting Streamlit Community Cloud to the
+  GitHub account) needs to happen from Alex's own login — that's not something doable
+  from this sandbox.
+- Next (home or wherever): go to share.streamlit.io, sign in with GitHub, deploy
+  pointing at `dashboard/app.py`, set the `dashboard_password` secret. Should take a
+  few minutes and needs no further code changes — everything's ready on this end.
+
 **2026-08-13 — [work]**
 - Did: Applied the full PBP/scheme feature set (team pass_oe, tempo/shotgun/no-huddle,
   early-down pass rate, offensive EPA/play, pass EPA/play, explosive rate) to the
@@ -638,6 +660,26 @@ Local UI for managing project data and building parlays, built with Streamlit.
 ```bash
 streamlit run dashboard/app.py
 ```
+
+### Deploying as a real website (usable from your phone)
+
+Runs on [Streamlit Community Cloud](https://streamlit.io/cloud) — free, connects
+directly to this GitHub repo, auto-redeploys on every push.
+
+1. Go to share.streamlit.io, sign in with GitHub, click "New app"
+2. Repo: `alexanderseaney-sketch/ParlayModel`, branch: `main`, file: `dashboard/app.py`
+3. Before deploying, go to **Advanced settings → Secrets** and paste:
+   ```
+   dashboard_password = "choose-a-real-password-here"
+   ```
+4. Deploy — you'll get a public URL like `parlaymodel.streamlit.app`
+
+**Password protection**: the app checks for a `dashboard_password` secret on startup.
+If it's set (as on Community Cloud), it shows a login screen first. If it's not set (as
+in plain local `streamlit run`), the gate is skipped automatically — no password needed
+for local use. For local testing of the password screen itself, copy
+`.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` (gitignored, never gets
+committed) and set your own password there.
 
 Pages:
 - **Overview** — status of every data file (pulled or not, row count, last updated)

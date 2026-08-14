@@ -17,6 +17,36 @@ from utils import (
 
 st.set_page_config(page_title="ParlayModel Dashboard", layout="wide")
 
+
+def check_password() -> bool:
+    """Simple password gate for hosted deployment. Locally (no secrets.toml file at
+    all), this is skipped entirely — auth only matters once this is reachable from the
+    open internet via Streamlit Community Cloud."""
+    try:
+        has_secret = "dashboard_password" in st.secrets
+    except Exception:
+        has_secret = False  # no secrets.toml file present at all — local dev, skip the gate
+
+    if not has_secret:
+        return True
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("ParlayModel")
+    pw = st.text_input("Password", type="password")
+    if st.button("Enter"):
+        if pw == st.secrets["dashboard_password"]:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Wrong password.")
+    return False
+
+
+if not check_password():
+    st.stop()
+
 PAGE = st.sidebar.radio(
     "Navigate",
     ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "Underdog Props", "Bet Log", "Run Data Pulls"],
