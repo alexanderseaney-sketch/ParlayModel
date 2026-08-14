@@ -37,11 +37,19 @@ class EloRatings:
     def get(self, team: str) -> float:
         return self.ratings.get(team, DEFAULT_RATING)
 
-    def regress_to_mean(self):
-        """Called between seasons — teams regress partway back toward average."""
+    def regress_to_mean(self, new_hc_teams: set = None, extra_regression: float = 0.0):
+        """Called between seasons — teams regress partway back toward average.
+        new_hc_teams: team abbreviations getting extra regression this season (new HC).
+        extra_regression: additional regression fraction applied on top of the standard
+        amount for those teams (e.g. 0.15 means 15 extra percentage points of pull
+        toward the mean, since a coaching change makes prior performance less reliable)."""
+        new_hc_teams = new_hc_teams or set()
         for team in self.ratings:
+            regression = SEASON_REGRESSION
+            if team in new_hc_teams:
+                regression = min(regression + extra_regression, 1.0)
             self.ratings[team] = (
-                self.ratings[team] * (1 - SEASON_REGRESSION) + DEFAULT_RATING * SEASON_REGRESSION
+                self.ratings[team] * (1 - regression) + DEFAULT_RATING * regression
             )
 
     def update(self, home_team: str, away_team: str, home_score: float, away_score: float):

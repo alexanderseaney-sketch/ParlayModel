@@ -83,6 +83,45 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-14 — [work]**
+- Did: Alex raised an important methodological point — team-level historical data
+  (especially Elo, which carries across seasons) shouldn't be trusted blindly through a
+  coaching change (e.g. Giants under new HC John Harbaugh for 2026 vs. last year's
+  Daboll-era team). Researched real current 2026 coaching changes (11 teams, including
+  confirmed Giants→Harbaugh) and compiled historical coaching-change years (2020-2024)
+  from known history — **flagging honestly that the historical list is from training
+  knowledge, not independently verified year-by-year, worth spot-checking before fully
+  trusting**. Built a configurable mechanism in `elo_baseline.py`: extra regression-to-
+  mean for teams with a new HC, on top of standard between-season regression. Then
+  **actually tested it against 5 seasons of real backtested games rather than assuming
+  it would help** (471 real new-HC-involved games).
+  **Honest result: it didn't help — slightly hurt.** Overall accuracy dropped from 62.3%
+  (no adjustment) to 61.9% as extra regression increased. Accuracy specifically on
+  new-HC games didn't improve either — stayed flat around 64.1-64.5% with no upward
+  trend. **This doesn't mean coaching changes don't matter for real prediction — it
+  means a blunt "new HC = extra uncertainty" flag isn't the right way to capture it.**
+  Most likely reasons: (1) Elo already self-corrects within a season as real results
+  come in, so pre-emptive regression may just add noise before evidence exists; (2) not
+  all coaching changes are equal — an internally-promoted OC keeping the same system is
+  very different from a full scheme overhaul, and one flag can't distinguish them.
+- **This is exactly why the "similar scheme" version of the idea is more promising than
+  the "new coach" version** — the real driver is probably WHAT scheme changed, not WHO
+  the coach is. That's a sharper, more specific signal, but a much bigger undertaking:
+  it needs real scheme categorization (e.g. is the new OC's play-calling background
+  closer to a Shanahan-tree/outside-zone system or an Air Raid system), which isn't
+  something readily available in the data already pulled — would need real research and
+  curation, not just another rolling stat.
+- Blocked: nothing — real, honest test, real negative result. Mechanism (extra Elo
+  regression) is built and available if a smarter, more targeted version of this idea
+  gets tried later (e.g. only applying it to confirmed full-scheme-overhaul teams
+  specifically, rather than every new-HC team blanket).
+- Next: **NOT adding the coaching-change adjustment to the production Elo model** — it
+  tested worse, not better, so it stays off (extra_regression defaults to 0.0). The
+  scheme-similarity version remains a real, well-scoped future idea but needs real data
+  curation work before it can be tested the same rigorous way. In the meantime: verify
+  the historical coaching-change list (2020-2024) is actually accurate before trusting
+  it for any future test, since an unverified list could be part of why no signal showed up.
+
+**2026-08-14 — [work]**
 - Did: Built `models/matchup_features.py` — real matchup-specific defensive splits from
   PBP: pass defense vs. run defense (split cleanly, not blended like the earlier
   `def_epa_allowed`), defense's EPA allowed specifically against each receiver position
