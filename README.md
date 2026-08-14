@@ -14,18 +14,22 @@ Done:
 - [x] **Player-prop model (receiving yards, WR/TE)**: 66.7% avg accuracy across 5 seasons,
       very stable (65.6%-67.2% range) — saved to
       `models/player_prop_receiving_yards_model.pkl`. Strongest signal: target share.
-- [x] **Player-prop model (receiving yards, WR/TE)**: switched to XGBoost + injury/div/
-      primetime features — 67.1% base, 80.3% at 0.4 confidence, saved to
+- [x] **Player-prop model (receiving yards, WR/TE)**: XGBoost (tuned) + injury/div/
+      primetime — 67.1% base, 80.3%+ at 0.4 confidence, saved to
       `models/player_prop_receiving_yards_model.pkl`.
-- [x] **Player-prop model (rushing yards, RB)**: switched to XGBoost + primetime —
-      70.6% base, 83.2% at 0.4 confidence on 47.7% of games — saved to
+- [x] **Player-prop model (rushing yards, RB)**: XGBoost (tuned) + primetime —
+      70.6%+ base, 83%+ at 0.4 confidence — saved to
       `models/player_prop_rushing_yards_model.pkl`.
-- [x] **Player-prop model (passing yards, QB)**: stays LogReg + weather (XGBoost lost
-      on this smaller dataset) — 61.7% base, 79.7% at 0.4 confidence — saved to
-      `models/player_prop_passing_yards_model.pkl`.
-- [x] **Player-prop model (receptions, WR/TE)**: NEW, and the strongest of all four —
-      XGBoost + divisional game — 72.7% base, 84.4% at 0.4 confidence on 51% of games
+- [x] **Player-prop model (passing yards, QB)**: LogReg + weather (XGBoost/blending
+      both lost on this smaller dataset) — 61.7% base, 79.7% at 0.4 confidence — saved
+      to `models/player_prop_passing_yards_model.pkl`. Remains the weakest/most-
+      resistant-to-improvement of the four.
+- [x] **Player-prop model (receptions, WR/TE)**: strongest of all four — XGBoost
+      (tuned) + divisional game — 72.6%+ base, 84%+ at 0.4 confidence on ~51% of games
       — saved to `models/player_prop_receptions_model.pkl`.
+- [x] Tested player-vs-opponent history, ensemble blending, and XGBoost hyperparameter
+      tuning — real gain from tuning (kept), opponent history is real but conditional
+      (better as a dashboard indicator than a core feature), blending was null/negative.
       **Important caveat (applies to all four prop models)**: backtested against the
       player's own rolling average as a proxy line, since no historical Underdog line
       archive exists yet — see log for detail. This is why building that archive is
@@ -87,6 +91,42 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-14 — [work]**
+- Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
+  ideas per prop type.
+  1. **Player-vs-specific-opponent history** (`models/opponent_history_features.py`):
+     has THIS player historically over/under-performed against THIS specific opponent?
+     Full-population inclusion showed no effect (dilution — most players haven't faced
+     a given opponent more than once). **Restricted to players with 2+ prior meetings,
+     a real signal emerged**: receptions +0.4pt (2 meetings) to +0.7pt (3 meetings),
+     receiving yards +0.2 to +0.4pt, same direction. **Rushing was inconsistent/mixed**
+     (RB-opponent matchups noisier — likely because run-game scheme/personnel turns
+     over more year to year than what a WR is beating in coverage). Given this is a
+     conditional effect (~20-24% of rows have real history) rather than a full-
+     population improvement, **not added to the core production feature set** — better
+     suited as a dashboard-level "rematch" indicator shown alongside a prediction than
+     baked uniformly into training. Real, useful finding either way.
+  2. **Ensemble blending (XGBoost + LogReg averaged)**: tested on receptions and
+     passing. **Null-to-negative in both cases** — blend never beat just using whichever
+     single model type already won for that prop (72.3% blend vs. 72.4% pure XGBoost on
+     receptions; 60.3% blend vs. 60.8% pure LogReg — actually worse — on passing).
+     Confirms picking the single best model type per prop (already established) is
+     correct; averaging two models pulls toward mediocrity when one clearly outperforms.
+  3. **XGBoost hyperparameter tuning**: the n_estimators=150/max_depth=4/lr=0.05 used
+     throughout today were arbitrary, never actually tuned. Light sweep found a real
+     small improvement: **max_depth=3 (shallower trees) + subsample/colsample=0.8
+     (regularization)** beat the original config (72.6% vs. 72.4% on receptions) —
+     makes sense, shallower + regularized trees overfit less even at 12k rows.
+     **All three XGBoost production models (receiving, rushing, receptions) retrained
+     with the tuned config.** Verified `current_predictions.py` still works after.
+- Blocked: nothing — three real tests, two honest nulls (opponent history full-
+  population, ensemble blending), one real gain (hyperparameter tuning) kept in production.
+- Next: the opponent-history "rematch" signal is a good candidate for a dashboard
+  enhancement (flag when a player has 2+ meetings vs. the upcoming opponent) rather than
+  a model retraining task. Passing yards remains the outlier needing the most further
+  work — smallest dataset, no benefit from XGBoost, blending, or most context features
+  tried so far beyond the original weather addition.
 
 **2026-08-14 — [work]**
 - Did: Alex gave open-ended time to test/combine as many theories as possible. Big
