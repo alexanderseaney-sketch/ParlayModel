@@ -14,8 +14,15 @@ Done:
 - [x] **Player-prop model (receiving yards, WR/TE)**: 66.7% avg accuracy across 5 seasons,
       very stable (65.6%-67.2% range) — saved to
       `models/player_prop_receiving_yards_model.pkl`. Strongest signal: target share.
-      **Important caveat**: backtested against the player's own rolling average as a
-      proxy line, since no historical Underdog line archive exists yet — see log for detail.
+- [x] **Player-prop model (rushing yards, RB)**: 70.0% avg accuracy, stronger than
+      receiving at every confidence level (81.7% at 0.4 confidence vs. receiving's
+      77.9%) — saved to `models/player_prop_rushing_yards_model.pkl`. Strongest signal:
+      NGS efficiency (rush yards over expected), not volume — different driver than
+      receiving's target-share signal.
+      **Important caveat (applies to both prop models)**: backtested against the
+      player's own rolling average as a proxy line, since no historical Underdog line
+      archive exists yet — see log for detail. This is why building that archive is
+      still the top priority, ranked above adding more prop-type models.
 - [x] Pulled real play-by-play data and tested proper per-play efficiency features
       (garbage-time filtered) on the game-winner model — **result: flat-to-worse than
       current best (63.5-63.9% vs. 64.1%)**. Real negative result, disproves last
@@ -103,6 +110,32 @@ before starting work to see what the other side left you.*
   finished one — good foundation to keep iterating on.
 
 ---
+
+**2026-08-13 — [work]**
+- Did: Built the second player-prop model — **rushing yards (RB)**, same rigor as
+  receiving yards. Features: rolling carries/rushing yards/targets (own history), NGS
+  rushing efficiency (rush yards over expected/attempt, "efficiency" metric, 8+
+  defenders in box %), and opponent's rolling defensive EPA allowed.
+  **Real result, stronger than the receiving model at every level**:
+  - Base (no filter): **70.0%** mean accuracy across 5 seasons (vs. receiving's 66.7%)
+  - At 0.4 confidence: **81.7%** on 45.4% of games (vs. receiving's 77.9% on 39.7%)
+  - At 0.5 confidence: **84.4%** on 34.8% of games
+  - **Dominant signal is completely different from receiving**: NGS efficiency metrics
+    (rush yards over expected, "efficiency") dwarf everything else — makes sense once
+    understood: for receiving, OPPORTUNITY (target share) drives outcomes; for rushing,
+    once a back has real carry volume, EFFICIENCY (are they breaking tackles beyond
+    expectation) predicts better than raw volume does. Two different games, two
+    different real signals — not a copy-paste of the same model.
+  - Saved production model (100-model bootstrap ensemble) to
+    `models/player_prop_rushing_yards_model.pkl`.
+- Blocked: nothing — real data, real 5-season validation, genuinely strong result. Same
+  honest caveat as receiving: this is against a proxy line (player's own rolling
+  average), not a real historical Underdog line — see the priority note above about why
+  that archive still matters more than any single model's accuracy number.
+- Next: wire this into `current_predictions.py` and the dashboard's Parlay Builder the
+  same way receiving yards was wired in, so RB rushing props also get real confidence
+  tags instead of falling back to manual entry. Passing yards (QB) and receptions are
+  still the two remaining major prop types without a model.
 
 **2026-08-13 — [work]**
 - Did: Applied the full PBP/scheme feature set (team pass_oe, tempo/shotgun/no-huddle,
