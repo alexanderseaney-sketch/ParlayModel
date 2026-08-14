@@ -73,8 +73,9 @@ def add_rolling(team_week: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     return team_week
 
 
-def build_pbp_team_week_features() -> pd.DataFrame:
-    pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
+def build_pbp_team_week_features(pbp: pd.DataFrame = None) -> pd.DataFrame:
+    if pbp is None:
+        pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
 
     off = build_team_week_pbp_offense(pbp)
     defn = build_team_week_pbp_defense(pbp)

@@ -105,6 +105,35 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-13 — [work]**
+- Did: Applied the full PBP/scheme feature set (team pass_oe, tempo/shotgun/no-huddle,
+  early-down pass rate, offensive EPA/play, pass EPA/play, explosive rate) to the
+  receiving-yards prop model, individually and combined — testing the hypothesis from
+  the game-winner model's log that these features "should matter more for props than for
+  game outcomes" since they directly affect target volume.
+  **Real result: that hypothesis was also wrong.** Base model: 66.7% overall / 77.9% at
+  0.4 confidence. Every individual addition landed within 0.1-0.3pt of base — noise, not
+  signal. All six combined: 66.7% overall / 78.0% at 0.4 confidence — a 0.1pt difference,
+  not meaningfully different from base.
+  (Minor technical note: some runs threw sklearn convergence warnings —
+  lbfgs hit max_iter before fully converging. Doesn't change the conclusion since it's a
+  solver-stability issue not a correctness one, but worth fixing with more iterations or
+  feature scaling if this model gets revisited.)
+- **Broader honest pattern now**: this is the fourth round in a row (game-winner model:
+  QB-specific NGS, PBP efficiency, scheme features; now the prop model too) where a
+  reasonable, well-built feature failed to add real signal. The individual player's own
+  rolling history (target share, separation, recent yards) already seems to capture
+  nearly everything team-context features would add on top. This model may also be near
+  its practical ceiling with current data.
+- Blocked: nothing — real, consistent, honest results.
+- Next: given four rounds of feature-engineering plateaus, the highest-value remaining
+  work probably isn't more feature mixing on these two models — it's (1) the still-
+  untested `pull_underdog.py`/`pull_espn_news.py` (the actual real-line archive is what
+  turns proxy accuracy into trustworthy accuracy — still the top priority from the
+  previous entry), and (2) building the rushing/passing/receptions prop models fresh,
+  where there's real unexplored ground rather than diminishing returns on what's already
+  built.
+
+**2026-08-13 — [work]**
 - Did: Clarified an important distinction for Alex — the 77.9% confidence-filtered
   accuracy is real and well-validated, but it measures beating the player's OWN trailing
   average (the proxy line), not a real Underdog line. Underdog's actual lines already

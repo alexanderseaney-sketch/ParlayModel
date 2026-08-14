@@ -93,13 +93,29 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
 
     wr_te = wr_te[wr_te["week"] >= min_week].reset_index(drop=True)
 
-    # Team-level scheme signal: this player's own team's pass rate over expected —
-    # a pass-heavy offense means more targets exist to go around, regardless of the player's own history
+    # Team-level scheme + PBP efficiency signals: a pass-heavy, efficient, fast-paced
+    # offense means more targets and more scoring opportunity exist to go around,
+    # regardless of this specific player's own history.
     from scheme_features import build_team_week_scheme
+    from pbp_features import build_pbp_team_week_features
+
     pbp = pd.read_csv(os.path.join(RAW_DIR, "pbp.csv"), low_memory=False)
     scheme = build_team_week_scheme(pbp)
+    pbp_eff = build_pbp_team_week_features(pbp)
+
+    team_cols_scheme = ["pass_oe_rolling", "shotgun_rate_rolling", "no_huddle_rate_rolling",
+                         "early_down_pass_rate_rolling", "avg_defenders_in_box_rolling"]
+    team_cols_pbp = ["off_epa_per_play_rolling", "off_success_rate_rolling",
+                      "off_pass_epa_per_play_rolling", "off_explosive_rate_rolling"]
+
     wr_te = wr_te.merge(
-        scheme[["team", "season", "week", "pass_oe_rolling"]].rename(columns={"team": "recent_team", "pass_oe_rolling": "team_pass_oe_rolling"}),
+        scheme[["team", "season", "week"] + team_cols_scheme].rename(
+            columns={"team": "recent_team", **{c: f"team_{c}" for c in team_cols_scheme}}),
+        on=["recent_team", "season", "week"], how="left",
+    )
+    wr_te = wr_te.merge(
+        pbp_eff[["team", "season", "week"] + team_cols_pbp].rename(
+            columns={"team": "recent_team", **{c: f"team_{c}" for c in team_cols_pbp}}),
         on=["recent_team", "season", "week"], how="left",
     )
 
