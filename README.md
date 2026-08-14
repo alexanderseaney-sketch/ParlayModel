@@ -19,7 +19,12 @@ Done:
       77.9%) — saved to `models/player_prop_rushing_yards_model.pkl`. Strongest signal:
       NGS efficiency (rush yards over expected), not volume — different driver than
       receiving's target-share signal.
-      **Important caveat (applies to both prop models)**: backtested against the
+- [x] **Player-prop model (passing yards, QB)**: 60.8% avg accuracy — the weakest of the
+      three, honestly, due to a much smaller dataset (only one starting QB per team).
+      At 0.4 confidence: 79.1% but only on 17.2% of games — more selective than the
+      other two props. Saved to `models/player_prop_passing_yards_model.pkl`. Strongest
+      signal: time to throw + TD rate — a third distinct pattern from receiving/rushing.
+      **Important caveat (applies to all three prop models)**: backtested against the
       player's own rolling average as a proxy line, since no historical Underdog line
       archive exists yet — see log for detail. This is why building that archive is
       still the top priority, ranked above adding more prop-type models.
@@ -46,8 +51,8 @@ Not done yet:
       time) — every player-prop accuracy number so far is against a proxy line (player's
       own rolling average), not real Underdog lines. That's the number that actually
       tells us if this is profitable.
-- [ ] Build passing yards (QB) and receptions prop models — same pipeline as
-      receiving/rushing, not yet done
+- [ ] Build receptions prop model — same pipeline as receiving yards, different target
+      column, the last remaining major prop type
 - [ ] Wire the rushing-yards model into `current_predictions.py` and the dashboard
       (only receiving yards is wired in so far)
 - [ ] **Test `data/pull_espn_news.py` for real** (needs home network) — built but
@@ -76,6 +81,31 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-14 — [work]**
+- Did: Built the third player-prop model — **passing yards (QB)**, same rigor as
+  receiving/rushing. Features: rolling attempts/passing yards/TDs/INTs (own history),
+  NGS passing (CPOE, avg intended air yards, aggressiveness, time to throw), opponent's
+  rolling defensive EPA allowed.
+  **Real result — honestly the weakest of the three, worth stating plainly**:
+  - Base (no filter): **60.8%** mean accuracy (vs. receiving's 66.7%, rushing's 70.0%)
+  - At 0.4 confidence: **79.1%**, but only on **17.2%** of games (392 of 2,279) — much
+    more selective than rushing's 45.4% or receiving's 39.7% at the same threshold
+  - Smaller, noisier dataset (2,705 QB player-games vs. thousands for WR/RB — only one
+    starting QB per team per week) is the likely reason: less data to learn from, more
+    game-script/weather variance per outcome
+  - **Third distinct signal driver**: avg_time_to_throw (longer-developing plays → deeper
+    passes → more yards) and passing TD rate dominate — neither target share (receiving)
+    nor efficiency-over-expected (rushing). Three prop types, three genuinely different
+    real patterns — good evidence these models are finding real domain signal, not noise.
+  - Saved production model to `models/player_prop_passing_yards_model.pkl`.
+- Blocked: nothing — real data, real validation. Same proxy-line caveat as the other two
+  prop models applies here too.
+- Next: receptions is the last major prop type without a model (same pipeline as
+  receiving yards, different target column — should be quick). Passing yards' smaller
+  qualifying pool at high confidence (17.2%) is worth keeping in mind for parlay
+  construction — it'll be the prop type contributing fewest high-confidence picks on
+  a given week, purely because fewer QBs exist than WR/RB/TE.
 
 **2026-08-14 — [work]**
 - Did: Re-confirmed Underdog is the right platform with fresh research (current sources,
