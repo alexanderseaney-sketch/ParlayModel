@@ -724,6 +724,20 @@ before starting work to see what the other side left you.*
   Alex runs when actually planning a week's bets, rather than another automated
   output to keep track of.
 
+  **Later same day**: "on demand" landed as a dashboard page rather than a schedule
+  -- Alex wants it to run "when I want to start making bets," which is a moment, not
+  a time of day, so a fixed cron wouldn't actually fit. Added a "Weekly Bet Slip" page
+  to `dashboard/app.py`: budget input, a "Generate this week's bets" button, results
+  rendered as real cards (stake/description/model prob/real price/edge) instead of
+  raw console text. Imports `generate_weekly_bet_slip.py`'s functions directly rather
+  than shelling out to the script, so the dashboard and the CLI tool share one
+  implementation and can't drift apart. Verified live in a browser: clicked the
+  button, got the exact same 3 bets/stakes as the already-verified CLI run, zero
+  console errors.
+- Next: same as above -- unproven beyond one live snapshot, worth revisiting once
+  real weeks of data exist to see if these opportunities were real edge or a
+  preseason-line-efficiency artifact.
+
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
   ideas per prop type.

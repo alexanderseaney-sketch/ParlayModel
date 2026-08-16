@@ -4,6 +4,8 @@ ParlayModel Dashboard — local UI for managing project data.
 Run with:
     streamlit run dashboard/app.py
 """
+import os
+import sys
 from datetime import datetime, date
 
 import pandas as pd
@@ -14,6 +16,11 @@ from utils import (
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name,
     correlation_adjusted_parlay_probability,
+)
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
+from generate_weekly_bet_slip import (  # noqa: E402
+    load_matched_props, build_single_leg_candidates, build_parlay_candidates, allocate_budget,
 )
 
 st.set_page_config(page_title="ParlayModel Dashboard", layout="wide")
@@ -50,7 +57,7 @@ if not check_password():
 
 PAGE = st.sidebar.radio(
     "Navigate",
-    ["Overview", "Parlay Builder", "NFL Stats", "Depth Charts", "ESPN News", "SB Nation News", "NBC/PFT Rumor Mill", "Underdog Props", "Bet Log", "Run Data Pulls"],
+    ["Overview", "Weekly Bet Slip", "Parlay Builder", "NFL Stats", "Depth Charts", "ESPN News", "SB Nation News", "NBC/PFT Rumor Mill", "Underdog Props", "Bet Log", "Run Data Pulls"],
 )
 
 st.sidebar.markdown("---")
@@ -91,6 +98,68 @@ if PAGE == "Overview":
         st.info(f"{n_missing} file(s) not pulled yet — head to **Run Data Pulls** to fetch them.")
     else:
         st.success("All expected data files are present.")
+
+
+# ---------------------------------------------------------------- Weekly Bet Slip
+elif PAGE == "Weekly Bet Slip":
+    st.title("Weekly Bet Slip")
+    st.caption(
+        "Generates real, sized bet suggestions from live model predictions and "
+        "current Underdog prices, on demand -- run it whenever you're actually about "
+        "to bet. You place every bet yourself; this only suggests and sizes."
+    )
+    st.warning(
+        "Model confidence is validated against each player's own rolling average "
+        "(a proxy line), NOT a real historical Underdog line -- that archive is "
+        "still accumulating. Real accuracy against actual market prices is "
+        "unvalidated. Sizing uses Kelly-fraction edge ranking against REAL live "
+        "prices (not assumed odds), with a strict line-divergence check so a "
+        "prediction is never used against a materially different number than what "
+        "it was actually computed against. Only wager what you can afford to lose."
+    )
+
+    budget = st.number_input("Weekly budget ($)", min_value=1.0, value=10.0, step=1.0)
+
+    if st.button("Generate this week's bets", type="primary"):
+        try:
+            with st.spinner("Pulling live predictions and current Underdog prices..."):
+                matched = load_matched_props()
+                candidates = build_single_leg_candidates(matched) + build_parlay_candidates(matched)
+                allocated = allocate_budget(candidates, budget)
+            st.session_state["bet_slip_result"] = {
+                "matched_count": len(matched), "candidate_count": len(candidates),
+                "allocated": allocated, "budget": budget,
+            }
+        except FileNotFoundError as e:
+            st.error(f"Missing data: {e}. Run the data pulls first from **Run Data Pulls**.")
+
+    result = st.session_state.get("bet_slip_result")
+    if result:
+        st.markdown("---")
+        st.caption(
+            f"{result['matched_count']} live props matched to a model prediction and passed "
+            f"the line-divergence check · {result['candidate_count']} genuinely +EV at real prices."
+        )
+
+        if not result["allocated"]:
+            st.info("No +EV opportunities clear the bar right now. Suggestion: skip this week rather than force a weak bet.")
+        else:
+            for c in result["allocated"]:
+                edge = c["model_prob"] * c["decimal_odds"] - 1
+                with st.container(border=True):
+                    st.markdown(f"**${c['suggested_stake']:.2f}**  ·  [{c['type'].upper()}]  {c['description']}")
+                    st.caption(
+                        f"model prob: {c['model_prob']*100:.1f}%   ·   real price: {c['decimal_odds']:.2f}x   ·   "
+                        f"implied edge: {edge*100:+.1f}%"
+                    )
+
+            total = sum(c["suggested_stake"] for c in result["allocated"])
+            col1, col2 = st.columns(2)
+            col1.metric("Total suggested", f"${total:.2f}")
+            col2.metric("Of budget", f"${result['budget']:.2f}")
+            if total < result["budget"] - 0.01:
+                st.caption(f"${result['budget'] - total:.2f} intentionally unallocated -- not enough qualifying "
+                           "+EV opportunities to use the full budget this week. That's fine; forcing it isn't.")
 
 
 # ---------------------------------------------------------------- Parlay Builder
