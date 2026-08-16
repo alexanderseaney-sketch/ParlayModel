@@ -174,18 +174,48 @@ See the Progress Log below for full detail on every round of testing.
 
 Not done yet:
 - [ ] **TOP PRIORITY: keep building the real historical Underdog line archive** —
-      `pull_underdog.py` is confirmed working from home and now scheduled to run daily,
-      appending timestamped snapshots to `data/raw/underdog_history/`. Archive just
-      started (2026-08-15) — needs weeks of accumulated snapshots, ideally through the
-      regular season, before it's enough to replace the proxy-line backtesting approach.
-      Every player-prop accuracy number so far is still against a proxy line (player's
-      own rolling average), not real Underdog lines. That's the number that actually
-      tells us if this is profitable.
-- [ ] Deploy the dashboard to Streamlit Community Cloud (code is ready, just needs the
-      GitHub login handoff — see Dashboard section below)
-- [ ] Minor: some player-prop model training runs throw sklearn convergence warnings
-      (lbfgs hitting max_iter) — doesn't change results but worth fixing with more
-      iterations or feature scaling if these models get revisited
+      `pull_underdog.py` confirmed working, scheduled daily, appending timestamped
+      snapshots to `data/raw/underdog_history/`. Started 2026-08-15 — needs weeks of
+      accumulated snapshots, ideally through the regular season, before it's enough to
+      replace the proxy-line backtesting approach. Every player-prop accuracy number
+      so far is still against a proxy line (player's own rolling average), not real
+      Underdog lines. That's the number that actually tells us if this is profitable.
+      Nothing to build here right now — this one just needs time.
+- [ ] **Validate the weekly bet-slip generator against real weeks**, not just one
+      preseason snapshot. The 3 opportunities it found on 2026-08-15 (Jameson
+      Williams, Alec Pierce, Romeo Doubs, all receiving-yards unders) are unproven --
+      preseason lines may just be less efficient than regular-season ones, which would
+      look identical to "the model has an edge" without actually being one. Watch
+      real weeks as they happen.
+- [ ] **nflverse behavior against a partial in-progress season is untested** —
+      the daily task's nflverse step is written to tolerate this gracefully, but
+      that's inferred, not confirmed against real data. Will resolve itself once
+      Week 1 (2026-09-09) actually happens.
+- [ ] **Receptions single-game Underdog lines aren't posted yet** (preseason only has
+      season-long totals) — receptions is the strongest of the four models but
+      currently has nothing to bet against. Recheck once the regular season starts.
+- [ ] **2025 nflverse weekly_stats/injuries/snap_counts still isn't published** at the
+      source (confirmed via their GitHub release API, not just inferred) — external,
+      out of this project's control. Worth rechecking periodically, especially once
+      2026 games start feeding a more actively-maintained part of their pipeline than
+      a stalled prior-season backfill.
+- [ ] **Depth-chart data (Footballguys) isn't fed into the trained models yet** — no
+      historical archive exists to validate it as a feature against. The daily pull
+      is already quietly building that archive; revisit once there's enough of it.
+- [ ] **Parlay correlation math only covers same-team pairs** — whether a shootout
+      lifts props on BOTH teams (cross-team correlation) is untested. Also: the
+      pairwise-multiplication approach only stays valid for 2-leg parlays (the
+      one-factor copula fix used in the bankroll simulator would need to move into
+      the actual dashboard tool if 3+-leg correlated slips turn out to matter).
+- [ ] **Operational, not a build task**: the deployed dashboard's live data (odds,
+      news, depth charts) doesn't auto-refresh from the local daily pipeline --
+      click through "Run Data Pulls" on the deployed site itself before checking it
+      if it's been a while.
+- [ ] Minor/cosmetic, low priority: some player-prop model training runs throw
+      sklearn convergence warnings (lbfgs hitting max_iter) -- doesn't change
+      results; an orphaned unused helper function exists in `dashboard/utils.py`;
+      saved model pickles throw harmless XGBoost/scikit-learn version-mismatch
+      warnings on load.
 
 ## Progress Log
 
@@ -737,6 +767,36 @@ before starting work to see what the other side left you.*
 - Next: same as above -- unproven beyond one live snapshot, worth revisiting once
   real weeks of data exist to see if these opportunities were real edge or a
   preseason-line-efficiency artifact.
+
+  **Later same day — deployed to Streamlit Community Cloud**: live at
+  parlaymodel.streamlit.app. Verified what would and wouldn't carry over before
+  deploying rather than assuming: all 4 trained models, `current_player_predictions.csv`,
+  and `parlay_leg_correlations.csv` are tracked in git and deployed correctly;
+  `data/raw/*` is gitignored by design, so the live site starts with zero pulled data
+  until "Run Data Pulls" is clicked on the deployed instance itself -- confirmed this
+  is genuinely true post-deploy (Overview page correctly showed "12 files not pulled").
+  GitHub OAuth sign-in and the Secrets/password field were both done by Alex directly
+  -- neither is something this project executes on Alex's behalf, a hard boundary
+  independent of authorization, and also not something the tooling in this environment
+  can technically reach (no access to Alex's authenticated browser session either way).
+  First deploy attempt had no password gate active (the `dashboard_password` secret
+  hadn't been set yet) -- caught by actually loading the live URL and checking rather
+  than assuming the earlier instructions had been followed, not by any error being
+  surfaced. Re-verified after Alex set it: real password prompt now blocks the
+  dashboard, confirmed via screenshot.
+
+  Clarified for Alex how the pieces fit together, since it's genuinely not obvious:
+  the deployed site runs on Streamlit's servers (Alex's PC doesn't need to be on for
+  it to be reachable), but the daily local automation still needs this specific PC/
+  Claude installation running around 9am for that day's refresh to fire -- and only
+  the git-tracked files (models, predictions) auto-sync to the deployed site when that
+  runs; live odds/news/depth-chart data needs a manual "Run Data Pulls" click on the
+  deployed site itself regardless of the local PC's state. Also confirmed continuing
+  development from a work computer is exactly what this project's own existing
+  work/home README convention was already built for.
+- Next: everything genuinely open at this point needs real-world TIME rather than more
+  building -- see the "Not done yet" list at the top, cleaned up today to reflect
+  actual current state rather than a stale pre-session snapshot.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
