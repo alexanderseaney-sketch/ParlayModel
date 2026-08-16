@@ -78,7 +78,14 @@ def parse_depth_charts(html: str) -> tuple[pd.DataFrame, str | None]:
             li_classes = pos_li.get("class", [])
             category = next((v for k, v in CATEGORY_MAP.items() if k in li_classes), "other")
 
-            for depth_rank, player_a in enumerate(pos_li.select("a.player"), start=1):
+            # Footballguys only links "fantasy relevant" positions (QB/RB/WR/TE/PK/KR/PR,
+            # marked with a depth-chart-fantasy class on the <li>) to a player page as
+            # <a class="player">. Everyone else -- the offensive line, P/H/LS -- gets the
+            # same "player" class on a plain <span> instead, since nobody drafts a punter.
+            # Selecting only a.player silently dropped every one of those positions across
+            # all 32 teams (confirmed 2026-08-16 by fetching the live page directly and
+            # diffing against what this parser actually returned).
+            for depth_rank, player_a in enumerate(pos_li.select("a.player, span.player"), start=1):
                 name_raw = player_a.get_text(strip=True)
                 status_match = STATUS_RE.search(name_raw)
                 status = status_match.group(1) if status_match else None

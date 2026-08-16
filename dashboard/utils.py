@@ -260,6 +260,24 @@ def get_player_detail(player_name: str) -> dict:
     return result
 
 
+def load_player_photos() -> dict[str, str]:
+    """normalize_name() -> Underdog headshot image_url, for whichever players
+    currently have an active Underdog prop. Coverage is strong for offensive skill
+    positions (~87% of starters, measured 2026-08-16) but weak for most defenders
+    (~14%) since Underdog mostly only carries props for skill positions and a
+    handful of premium defenders -- callers need a placeholder fallback for
+    everyone else, not an assumption every player has a photo."""
+    props = load_csv_if_exists("underdog_props.csv")
+    if props is None or "full_name" not in props.columns or "image_url" not in props.columns:
+        return {}
+    deduped = props.drop_duplicates("full_name")
+    return {
+        normalize_name(name): url
+        for name, url in zip(deduped["full_name"], deduped["image_url"])
+        if isinstance(url, str) and url
+    }
+
+
 def run_pull_script(cmd: list[str]) -> tuple[bool, str]:
     """Runs a data-pull script and returns (success, combined_output)."""
     try:

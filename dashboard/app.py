@@ -15,7 +15,7 @@ from utils import (
     EXPECTED_FILES, PULL_SCRIPTS, MAX_LINE_DIVERGENCE, BET_LOG_PATH,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
-    correlation_adjusted_parlay_probability,
+    load_player_photos, correlation_adjusted_parlay_probability,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -583,15 +583,19 @@ STATUS_LABELS = {
     "NFI": ("Non-Football Injury", "gray"),
 }
 
-# Canonical left-to-right order within each position group -- deliberately a superset
+# The offensive line + TE render as one straight "line of scrimmage" row -- deliberately
+# a superset of what any one team carries (e.g. most teams have no listed Center in this
+# data source, a known upstream gap -- see pull_footballguys_depth.py) so a team only
+# shows the slots it actually has a starter for.
+OFFENSE_LINE_ORDER = ["LT", "LG", "C", "RG", "RT", "TE"]
+
+# Canonical left-to-right order within each defensive/special-teams group -- a superset
 # of any one team's actual scheme (e.g. a 4-3 team has LDT/RDT, a 3-4 team has NT
 # instead) so both render correctly: a team only shows the codes it actually has data
-# for, in this order, rather than every team being forced into one scheme's slots.
-OFFENSE_GROUPS = [
-    ("Backfield", ["QB", "RB", "FB"]),
-    ("Receivers", ["WR", "TE"]),
-    ("Offensive Line", ["LT", "LG", "C", "RG", "RT"]),
-]
+# for, in this order, rather than every team being forced into one scheme's slots. This
+# is also *why* the front row genuinely reflects each team's real looks: a 3-4 team's
+# data only ever has an NT entry, never LDT/RDT, so its line row is 3 players wide
+# instead of 4 -- driven by their real depth chart, not a guessed formation.
 DEFENSE_GROUPS = [
     ("Line", ["LDE", "LDT", "NT", "RDT", "RDE"]),
     ("Linebackers", ["LOLB", "LILB", "MLB", "RILB", "ROLB", "WLB", "SLB"]),
@@ -601,7 +605,19 @@ SPECIAL_TEAMS_GROUPS = [
     ("Specialists", ["PK", "P", "LS", "H"]),
     ("Return Game", ["KR", "PR"]),
 ]
-POSITION_GROUPS = {"offense": OFFENSE_GROUPS, "defense": DEFENSE_GROUPS, "special_teams": SPECIAL_TEAMS_GROUPS}
+POSITION_GROUPS = {"defense": DEFENSE_GROUPS, "special_teams": SPECIAL_TEAMS_GROUPS}
+
+_CARD_CSS = """
+<style>
+.pm-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+            display: block; margin: 4px auto; border: 2px solid rgba(128,128,128,0.35); }
+.pm-photo-placeholder { width: 64px; height: 64px; border-radius: 50%; background: #6b7280;
+            color: white; display: flex; align-items: center; justify-content: center;
+            margin: 4px auto; font-weight: 700; font-size: 20px; }
+.pm-pos-pill { text-align: center; font-size: 11px; font-weight: 600; opacity: 0.65;
+            text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+</style>
+"""
 
 
 def _status_badge(status):
@@ -660,47 +676,129 @@ def _player_detail_dialog(row: dict):
             st.dataframe(games[cols], hide_index=True, width="stretch")
 
 
-def _position_slot(team_df: pd.DataFrame, position: str):
-    """One position's card: depth-ordered clickable players, top 4 visible, any
-    deeper backups tucked into an expander so a 13-deep WR room doesn't dominate
-    the page the way it would in a flat table."""
-    players = team_df[team_df["position"] == position].sort_values("depth_rank")
-    if players.empty:
-        return
-
-    with st.container(border=True):
-        st.markdown(f"**{position}**")
-        for i, (_, p) in enumerate(players.iterrows()):
-            if i == 4:
-                remaining = players.iloc[4:]
-                with st.expander(f"+{len(remaining)} more"):
-                    for _, p2 in remaining.iterrows():
-                        _player_button(p2)
-                break
-            _player_button(p)
-
-
-def _player_button(p: pd.Series):
-    label = f"{p['depth_rank']}. {p['player_name']}"
+def _card_button(p: pd.Series, is_starter_card: bool):
+    label = p["player_name"] if is_starter_card else f"{p['depth_rank']}. {p['player_name']}"
     if isinstance(p.get("status"), str) and p["status"].strip():
         label += f"  ({p['status']})"
     # team_abbr+position+depth_rank, not footballguys_player_id -- the same real player
     # often appears twice in the source data (e.g. a WR who's also the punt returner
     # shows up under both WR and PR), which makes their player_id a legitimate
     # duplicate here even though each occurrence needs its own widget key.
-    key = f"depth_player_{p['team_abbr']}_{p['position']}_{p['depth_rank']}"
-    if st.button(label, key=key,
-                 type="primary" if p["depth_rank"] == 1 else "secondary", width="stretch"):
+    key = f"depth_card_{p['team_abbr']}_{p['position']}_{p['depth_rank']}"
+    if st.button(label, key=key, type="primary" if is_starter_card else "tertiary", width="stretch"):
         _player_detail_dialog(p.to_dict())
+
+
+def _player_card(starter: pd.Series, cat_df: pd.DataFrame, photo_map: dict, show_backups: bool = True):
+    """One formation slot: starter's photo (or an initials placeholder when they have
+    no Underdog prop to source a photo from -- common for non-skill positions), then
+    up to 2 backups inline and any deeper depth in a '+N more' expander, so real depth
+    stays reachable without the starter row turning into a wall of names.
+
+    show_backups=False for every starter at a position except the deepest-ranked one
+    (see _formation_row) -- a position can have more than one starter (every current
+    team starts 3 WRs), and those co-starters aren't "backups" of each other, so only
+    the last one in the group should list who's actually behind them on the depth
+    chart."""
+    with st.container(border=True):
+        key = normalize_name(starter["player_name"])
+        photo_url = photo_map.get(key)
+        if isinstance(photo_url, str) and photo_url:
+            st.markdown(f'<img src="{photo_url}" class="pm-photo">', unsafe_allow_html=True)
+        else:
+            initials = "".join(p[0] for p in starter["player_name"].split()[:2] if p).upper()
+            st.markdown(f'<div class="pm-photo-placeholder">{initials}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="pm-pos-pill">{starter["position"]}</div>', unsafe_allow_html=True)
+
+        _card_button(starter, is_starter_card=True)
+
+        if not show_backups:
+            return
+        same_position = cat_df[cat_df["position"] == starter["position"]].sort_values("depth_rank")
+        backups = same_position[same_position["depth_rank"] > starter["depth_rank"]]
+        for _, b in backups.head(2).iterrows():
+            _card_button(b, is_starter_card=False)
+        rest = backups.iloc[2:]
+        if len(rest):
+            with st.expander(f"+{len(rest)} more"):
+                for _, b in rest.iterrows():
+                    _card_button(b, is_starter_card=False)
+
+
+def _formation_row(starters: list[pd.Series], cat_df: pd.DataFrame, photo_map: dict):
+    if not starters:
+        return
+    max_rank_by_position: dict[str, int] = {}
+    for s in starters:
+        pos = s["position"]
+        max_rank_by_position[pos] = max(max_rank_by_position.get(pos, -1), s["depth_rank"])
+
+    cols = st.columns(len(starters))
+    for col, starter in zip(cols, starters):
+        show_backups = starter["depth_rank"] == max_rank_by_position[starter["position"]]
+        with col:
+            _player_card(starter, cat_df, photo_map, show_backups=show_backups)
+
+
+def _offense_formation(cat_df: pd.DataFrame, photo_map: dict):
+    starters = cat_df[cat_df["is_starter"] == True]  # noqa: E712
+
+    st.markdown("##### Offensive Line")
+    line = [starters[starters["position"] == p].iloc[0] for p in OFFENSE_LINE_ORDER
+            if p in starters["position"].values]
+    _formation_row(line, cat_df, photo_map)
+
+    # Skill positions arranged like a real backfield/receiver split rather than a
+    # generic list: RB and FB (if the team carries one -- plenty don't anymore) flank
+    # the QB, WRs at the outside edges. This uses each team's REAL starters, not a
+    # fixed template -- e.g. every current team happens to start 3 WRs, but a team
+    # that only started 2 would only show 2, because "starter" here comes straight
+    # from Footballguys' own depth chart rather than an assumed personnel package.
+    st.markdown("##### Skill Positions")
+    wrs = starters[starters["position"] == "WR"].sort_values("depth_rank")
+    rbs = starters[starters["position"] == "RB"].sort_values("depth_rank")
+    qbs = starters[starters["position"] == "QB"]
+    fbs = starters[starters["position"] == "FB"]
+    skill = []
+    if len(wrs) >= 1:
+        skill.append(wrs.iloc[0])
+    if len(rbs) >= 1:
+        skill.append(rbs.iloc[0])
+    if len(qbs) >= 1:
+        skill.append(qbs.iloc[0])
+    if len(fbs) >= 1:
+        skill.append(fbs.iloc[0])
+    if len(wrs) >= 2:
+        skill.append(wrs.iloc[1])
+    if len(wrs) >= 3:
+        skill.append(wrs.iloc[2])
+    _formation_row(skill, cat_df, photo_map)
+
+
+def _grouped_formation(cat_df: pd.DataFrame, groups: list, photo_map: dict):
+    starters = cat_df[cat_df["is_starter"] == True]  # noqa: E712
+    present = set(cat_df["position"].unique())
+    covered = {p for _, ps in groups for p in ps}
+    uncovered = sorted(present - covered)
+    for group_name, canonical_positions in groups + [("Other", uncovered)]:
+        positions_here = [p for p in canonical_positions
+                           if p in present and p in starters["position"].values]
+        if not positions_here:
+            continue
+        st.markdown(f"##### {group_name}")
+        row = [starters[starters["position"] == p].iloc[0] for p in positions_here]
+        _formation_row(row, cat_df, photo_map)
 
 
 def page_depth_charts():
     st.title("🏈 Team Depth Charts")
     st.caption(
-        "Offense, defense, and special teams by team, in depth order. Click a player "
-        "for their injury status, model predictions, current Underdog lines, and "
-        "recent games. Source: Footballguys, with structured status tags "
-        "(Q/PUP/IR/SUS/NFI/O) that update faster than the official injury report."
+        "Each team's real starters, laid out like a formation rather than a flat "
+        "table -- a 3-4 team's line is 3 wide because that's what's actually on "
+        "their depth chart, not a template. Click any player for their injury "
+        "status, model predictions, current Underdog lines, and recent games. "
+        "Source: Footballguys, with structured status tags (Q/PUP/IR/SUS/NFI/O) "
+        "that update faster than the official injury report."
     )
     df = load_csv_if_exists("footballguys_depth.csv")
 
@@ -708,31 +806,33 @@ def page_depth_charts():
         st.warning("`footballguys_depth.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
         return
 
+    st.markdown(_CARD_CSS, unsafe_allow_html=True)
+    photo_map = load_player_photos()
+
     team_names = df.drop_duplicates("team_abbr").set_index("team_name")["team_abbr"].sort_index()
     chosen_team_name = st.selectbox("Team", team_names.index)
     team_abbr = team_names[chosen_team_name]
     team_df = df[df["team_abbr"] == team_abbr]
 
     tabs = st.tabs(["Offense", "Defense", "Special Teams"])
-    for tab, category in zip(tabs, ["offense", "defense", "special_teams"]):
-        with tab:
-            cat_df = team_df[team_df["category"] == category]
-            if cat_df.empty:
-                st.caption("No data pulled for this unit.")
-                continue
-            present_positions = set(cat_df["position"].unique())
-            groups = POSITION_GROUPS[category]
-            covered = {p for _, ps in groups for p in ps}
-            uncovered = sorted(present_positions - covered)
-            for group_name, canonical_positions in groups + [("Other", uncovered)]:
-                positions_here = [p for p in canonical_positions if p in present_positions]
-                if not positions_here:
-                    continue
-                st.markdown(f"##### {group_name}")
-                cols = st.columns(len(positions_here))
-                for col, position in zip(cols, positions_here):
-                    with col:
-                        _position_slot(cat_df, position)
+    with tabs[0]:
+        cat_df = team_df[team_df["category"] == "offense"]
+        if cat_df.empty:
+            st.caption("No data pulled for this unit.")
+        else:
+            _offense_formation(cat_df, photo_map)
+    with tabs[1]:
+        cat_df = team_df[team_df["category"] == "defense"]
+        if cat_df.empty:
+            st.caption("No data pulled for this unit.")
+        else:
+            _grouped_formation(cat_df, DEFENSE_GROUPS, photo_map)
+    with tabs[2]:
+        cat_df = team_df[team_df["category"] == "special_teams"]
+        if cat_df.empty:
+            st.caption("No data pulled for this unit.")
+        else:
+            _grouped_formation(cat_df, SPECIAL_TEAMS_GROUPS, photo_map)
 
 
 def page_underdog_props():
