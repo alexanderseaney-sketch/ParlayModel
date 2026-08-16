@@ -91,9 +91,30 @@ def pull_pbp(years):
     return df
 
 
+def _pull_per_year(fetch_one_year, years, label):
+    """Some nflverse endpoints (weekly stats, injuries, snap counts) fetch a
+    per-year file under the hood and raise a single hard error for the WHOLE
+    request if any one requested year has nothing published yet -- normal during
+    the gap between a new season being added to the pull range (see
+    utils._default_pull_years) and nflverse actually publishing anything for it,
+    not a real failure. Fetching year-by-year instead of all-at-once means one
+    not-yet-available season doesn't take down years that do have real data,
+    and this starts succeeding for it automatically once nflverse publishes it --
+    no code change needed when the season actually starts."""
+    frames = []
+    for year in years:
+        try:
+            frames.append(fetch_one_year(year))
+        except Exception as e:
+            print(f"[{label}] {year}: skipped ({e})")
+    if not frames:
+        raise ValueError(f"[{label}] no years succeeded out of {years}")
+    return pd.concat(frames, ignore_index=True)
+
+
 def pull_weekly_stats(years):
     """Weekly player-level box score stats."""
-    df = nfl.import_weekly_data(years)
+    df = _pull_per_year(lambda y: nfl.import_weekly_data([y]), years, "weekly_stats")
     key_cols = ["player_id", "season", "week"]
     validate(df, "weekly_stats", key_cols=key_cols)
     save(df, "weekly_stats.csv", key_cols)
@@ -105,7 +126,7 @@ def pull_ngs(years):
     frames = {}
     key_cols = ["player_gsis_id", "season", "week"]
     for stat_type in ("passing", "rushing", "receiving"):
-        df = nfl.import_ngs_data(stat_type, years)
+        df = _pull_per_year(lambda y, st=stat_type: nfl.import_ngs_data(st, [y]), years, f"ngs_{stat_type}")
         validate(df, f"ngs_{stat_type}", key_cols=key_cols)
         save(df, f"ngs_{stat_type}.csv", key_cols)
         frames[stat_type] = df
@@ -113,7 +134,7 @@ def pull_ngs(years):
 
 
 def pull_injuries(years):
-    df = nfl.import_injuries(years)
+    df = _pull_per_year(lambda y: nfl.import_injuries([y]), years, "injuries")
     key_cols = ["gsis_id", "season", "week"]
     validate(df, "injuries", key_cols=key_cols, warn_null_cols=["report_status"])
     save(df, "injuries.csv", key_cols)
@@ -121,7 +142,7 @@ def pull_injuries(years):
 
 
 def pull_snap_counts(years):
-    df = nfl.import_snap_counts(years)
+    df = _pull_per_year(lambda y: nfl.import_snap_counts([y]), years, "snap_counts")
     key_cols = ["pfr_player_id", "season", "week"]
     validate(df, "snap_counts", key_cols=key_cols)
     save(df, "snap_counts.csv", key_cols)

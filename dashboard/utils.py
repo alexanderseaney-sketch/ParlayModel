@@ -47,6 +47,22 @@ EXPECTED_FILES = {
     "underdog_props.csv": "data/pull_underdog.py",
 }
 
+def _default_pull_years(lookback: int = 3) -> list[str]:
+    """NFL seasons are labeled by their START year (the "2025 season" runs Sep 2025 -
+    Feb 2026), so the most recently completed season is still last calendar year's
+    label through Feb -- before March, current_season steps back a year so that
+    boundary doesn't get missed. Previously this was a hardcoded ["2023", "2024"] in
+    PULL_SCRIPTS below, which is exactly why it went stale: nothing recomputed it, so
+    it just silently stopped covering the current season once enough time passed
+    (confirmed 2026-08-16 -- it had never once included the already-complete 2025
+    season). data/pull_nflverse.py's save() merges into existing files rather than
+    overwriting, so widening this is safe -- it adds whatever's missing without
+    touching or re-fetching years already on disk."""
+    today = datetime.now()
+    current_season = today.year if today.month >= 3 else today.year - 1
+    return [str(y) for y in range(current_season - lookback + 1, current_season + 1)]
+
+
 # sys.executable, not a hardcoded "python3"/"python" string -- a bare name is resolved
 # via PATH in the subprocess's environment, which is NOT guaranteed to be the same
 # interpreter running this app (and on Windows there's usually no "python3" at all,
@@ -54,7 +70,7 @@ EXPECTED_FILES = {
 # running, so it's guaranteed to have every package in requirements.txt installed,
 # on both local dev and Streamlit Cloud's container.
 PULL_SCRIPTS = {
-    "nflverse (schedules + stats + NGS + injuries + snaps)": [sys.executable, "data/pull_nflverse.py", "--years", "2023", "2024", "--skip-pbp"],
+    "nflverse (schedules + stats + NGS + injuries + snaps)": [sys.executable, "data/pull_nflverse.py", "--years", *_default_pull_years(), "--skip-pbp"],
     "ESPN news": [sys.executable, "data/pull_espn_news.py"],
     "SB Nation team news": [sys.executable, "data/pull_sbnation_news.py"],
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
