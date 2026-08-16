@@ -62,6 +62,23 @@ TOP_N_OPPORTUNITIES = 3
 MIN_STAKE = 0.50
 
 
+def _leg_detail(row: dict) -> dict:
+    """Standardized per-leg record, structurally matching what the dashboard's
+    st.session_state.slip entries need -- lets the Weekly Bet Slip page push a
+    suggestion directly into the Parlay Builder's slip with one click, leg by leg,
+    rather than the two tools only being able to show the same data side by side."""
+    return {
+        "player": row["full_name"],
+        "stat": row["stat_name"],
+        "choice": row["my_side"],
+        "line": row["stat_value"],
+        "decimal_price": row["decimal_price"],
+        "my_prob": row["my_prob"],
+        "team": row["recent_team"],
+        "position_prop": f"{row['position']} {row['prop_type']}",
+    }
+
+
 def kelly_fraction(p: float, decimal_odds: float) -> float:
     b = decimal_odds - 1
     if b <= 0:
@@ -131,6 +148,7 @@ def build_single_leg_candidates(matched: pd.DataFrame) -> list[dict]:
             "description": f"{row['full_name']} — {row['stat_name']} {row['my_side']} {row['stat_value']} "
                             f"(our proxy: {row['proxy_line']:.1f}, {row['line_divergence']*100:.0f}% off)",
             "legs": [row["full_name"]],
+            "leg_details": [_leg_detail(row)],
             "model_prob": p,
             "decimal_odds": d,
             "kelly_fraction": f,
@@ -184,6 +202,7 @@ def build_parlay_candidates(matched: pd.DataFrame) -> list[dict]:
                     "description": f"{a['full_name']} ({a['stat_name']} {a['my_side']}) + "
                                     f"{b['full_name']} ({b['stat_name']} {b['my_side']}) [{team}, phi={effective_phi:+.2f}]",
                     "legs": [a["full_name"], b["full_name"]],
+                    "leg_details": [_leg_detail(a), _leg_detail(b)],
                     "model_prob": p_joint,
                     "decimal_odds": d_parlay,
                     "kelly_fraction": f,

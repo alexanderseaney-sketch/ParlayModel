@@ -169,6 +169,19 @@ Done:
       drift. Verified against live data: ~74% of matched props are naturally within
       20% of each other, so this excludes genuinely incomparable cases, not most of
       the board. See log for the full before/after numbers.
+- [x] **Redesigned the dashboard for actually managing parlays**, per Alex's request
+      to make it more polished and user-friendly. Real navigation now (icon-grouped
+      sidebar via `st.navigation`/`st.Page` instead of one flat 11-item radio list),
+      badges instead of emoji-in-text-strings, and — the actual functional gap this
+      closed — Weekly Bet Slip suggestions can now be sent directly into the Parlay
+      Builder's slip with one click instead of being two disconnected tools. Bet Log
+      also connected: a slip can be sent there as pending bets in one click, and
+      results are now editable inline instead of needing a separate form. Caught two
+      real bugs live in the browser while testing this, not just in code review: a
+      Streamlit "magic" auto-display artifact from a bare ternary expression, and a
+      caption regression where consolidating 3 near-identical news pages into one
+      shared function leaked a raw internal URL into SB Nation's cards that was never
+      shown before. See log for both.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -797,6 +810,71 @@ before starting work to see what the other side left you.*
 - Next: everything genuinely open at this point needs real-world TIME rather than more
   building -- see the "Not done yet" list at the top, cleaned up today to reflect
   actual current state rather than a stale pre-session snapshot.
+
+  **Later same day — dashboard polish pass, per Alex's request to make it more user-
+  friendly for actually managing parlays**: read the whole `dashboard/app.py` fresh
+  (709 lines, grown incrementally all session) before touching anything, rather than
+  making more piecemeal edits on top of a session's worth of them.
+
+  **Navigation**: confirmed the installed Streamlit (1.61.1) actually supports
+  `st.navigation`/`st.Page`/`st.badge` before designing around them, rather than
+  assuming. Restructured from one flat 11-item `st.sidebar.radio` into icon-grouped
+  sections (Betting / Research / Admin) via `st.navigation({...})` — each existing
+  page's body became a function (`def page_xxx():`), same content, no page dropped.
+  Weekly Bet Slip is now the default landing page (`default=True`) instead of the old
+  data-status Overview page, since it's the actual "start here" action for what this
+  tool is for.
+
+  **The real functional gap, not just visual polish**: Weekly Bet Slip and Parlay
+  Builder were two disconnected tools -- a suggestion had no way to become a slip leg
+  without manually re-finding and re-adding it. Added `leg_details` to
+  `generate_weekly_bet_slip.py`'s candidate dicts (player/stat/choice/line/price/team/
+  position_prop/my_prob per underlying leg, including both legs of a 2-leg parlay
+  candidate separately) so "➕ Add to slip" on a suggestion pushes real leg(s) directly
+  into `st.session_state.slip` -- and since that's the exact same slip the Parlay
+  Builder already reads, its existing correlation-detection logic picks up
+  multi-leg additions automatically, no new logic needed there. Added
+  `st.switch_page` so a "go build your parlay" button actually navigates there (this
+  needed the `st.Page` objects to be named module-level variables rather than
+  inlined in the `st.navigation` dict, so page functions can reference a specific
+  target page by name).
+
+  **Bet Log connected too**: a finished slip can now be sent there as pending bets in
+  one click (stake split evenly across legs) instead of retyping everything into the
+  manual form. Also switched its results table to `st.data_editor` so results can be
+  updated inline (double-click a cell) instead of needing a separate edit flow that
+  didn't exist before.
+
+  **Visual language**: replaced emoji-concatenated-into-label-strings with real
+  `st.badge` calls (confidence tier, staleness, line-mismatch, injury status) inside
+  `st.container(border=True)` cards -- same information, actually scannable instead of
+  a wall of text per row.
+
+  **Two real bugs caught live in the browser, not in code review**:
+  1. A ternary expression used as a bare statement (`st.badge(...) if cond else
+     st.badge(...)`) is syntactically valid Python but not valid Streamlit -- its
+     result (a DeltaGenerator) got caught by Streamlit's "magic" auto-display and
+     dumped a full class docstring onto the page. Only found by actually clicking
+     through to that specific card and reading what rendered, not by reading the
+     code (which looked fine). Fixed by converting to a real if/else block.
+  2. Consolidating the three near-identical news pages (ESPN/SB Nation/NBC-PFT) into
+     one shared `_news_page()` helper introduced a real regression: a generic
+     `"source"` column reference leaked SB Nation's raw blog URL into its cards' 
+     captions, which the original separate page never showed -- because ESPN's
+     "source" column is a meaningful league/team label but SB Nation's column of the
+     same name is an internal field, and generalizing across both without checking
+     collapsed that distinction. Fixed with an explicit `caption_cols` parameter per
+     page instead of a column-presence guess, and verified all three news pages
+     against their real live data afterward, not just the one that broke.
+
+  Tested every page live in a browser after the rewrite, not just the two that
+  changed most: full flow (generate suggestions → add to slip → switch page → adjust
+  → send to Bet Log → confirm it landed) plus a spot-check of all 6 otherwise-
+  unchanged pages, zero console errors throughout.
+- Next: same open items as the rest of today's entries -- this was correctness/UX
+  work, not new modeling. Worth a manual click-through by Alex at some point since
+  the automated browser's click-registration has been flaky all session (noted
+  several times above) even though everything tested clean here.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
