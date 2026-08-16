@@ -9,9 +9,19 @@ access even for read-only data. This carries real account risk, same category as
 sportsbook browser-automation caveat noted elsewhere in this project — just lower stakes
 since it's read-only. Worth deciding deliberately whether to run this regularly.
 
-UNTESTED in this environment: api.underdogfantasy.com isn't reachable from this sandbox's
-network (confirmed via curl, host_not_allowed). Needs a live test at home before trusting
-the schema assumptions below.
+CONFIRMED WORKING (2026-08-15, home environment): api.underdogfantasy.com is NOT
+reachable from the work sandbox (host_not_allowed), but works fine from home. Schema
+assumptions below are validated against a real pull. As of this date (preseason), most
+live NFL lines are season-long totals (season_receiving_yards, season_pass_tds, etc.)
+rather than single-game props — per-game stat names (receiving_yds, rushing_yds,
+passing_yds, passing_tds, passing_ints, sacks) do appear for preseason games already
+underway, but no "receptions" single-game line was live yet. Re-check once the regular
+season starts.
+
+Each run now appends a timestamped snapshot to data/raw/underdog_history/ (in addition
+to overwriting the latest-pull file) so that running this on a schedule actually builds
+the historical archive described above, instead of only ever holding the most recent
+pull.
 
 Usage:
     python data/pull_underdog.py
@@ -19,11 +29,13 @@ Usage:
 """
 import argparse
 import os
+from datetime import datetime, timezone
 
 import pandas as pd
 import requests
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
+HISTORY_DIR = os.path.join(RAW_DIR, "underdog_history")
 PICKEM_URL = "https://api.underdogfantasy.com/beta/v5/over_under_lines"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -95,14 +107,23 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(RAW_DIR, exist_ok=True)
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+
+    pulled_at = datetime.now(timezone.utc)
 
     data = fetch_pickem_data()
     df = process(data)
     df = validate(df, args.sport or None)
+    df["pulled_at"] = pulled_at.isoformat()
 
     out_path = os.path.join(RAW_DIR, "underdog_props.csv")
     df.to_csv(out_path, index=False)
-    print(f"Saved -> {out_path}")
+    print(f"Saved latest -> {out_path}")
+
+    snapshot_name = f"underdog_props_{pulled_at.strftime('%Y%m%dT%H%M%SZ')}.csv"
+    snapshot_path = os.path.join(HISTORY_DIR, snapshot_name)
+    df.to_csv(snapshot_path, index=False)
+    print(f"Saved snapshot -> {snapshot_path}")
 
 
 if __name__ == "__main__":

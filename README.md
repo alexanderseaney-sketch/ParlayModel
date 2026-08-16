@@ -52,23 +52,35 @@ Done:
       pooled across all 5 holdout seasons (10,343 predictions): **≥0.4 confidence
       threshold hits 77.9% accuracy on ~40% of games.** Real tradeoff: fewer qualifying
       bets, not more bets at a higher rate — that's the actual point of a confidence filter.
+- [x] **Underdog line pull confirmed working from home** (was blocked from the work
+      sandbox) — `pull_underdog.py` now saves timestamped snapshots to
+      `data/raw/underdog_history/` in addition to the latest-pull file, and is
+      scheduled to run daily so the archive actually accumulates. See log for the real
+      preseason schema finding (season-long lines dominate right now; no `receptions`
+      single-game line live yet).
+- [x] **New: SB Nation team-news puller** (`data/pull_sbnation_news.py`) — ESPN's news
+      API turned out to be blocked by ESPN's own Akamai bot-protection (403, confirmed
+      via curl — a different failure mode than the sandbox network restriction, and not
+      something to route around). Built a replacement pulling all 32 teams' SB Nation
+      blogs directly via their public Atom feeds, verified live against
+      sbnation.com/nfl's own team-site directory rather than guessed. Also scheduled
+      daily, accumulating into `data/raw/sbnation_news.csv` deduped by article link.
 
 See the Progress Log below for full detail on every round of testing.
 
 Not done yet:
-- [ ] **TOP PRIORITY (needs home network): build a real historical Underdog line
-      archive** (test `pull_underdog.py`, then run it regularly and save snapshots over
-      time) — every player-prop accuracy number so far is against a proxy line (player's
+- [ ] **TOP PRIORITY: keep building the real historical Underdog line archive** —
+      `pull_underdog.py` is confirmed working from home and now scheduled to run daily,
+      appending timestamped snapshots to `data/raw/underdog_history/`. Archive just
+      started (2026-08-15) — needs weeks of accumulated snapshots, ideally through the
+      regular season, before it's enough to replace the proxy-line backtesting approach.
+      Every player-prop accuracy number so far is still against a proxy line (player's
       own rolling average), not real Underdog lines. That's the number that actually
       tells us if this is profitable.
 - [ ] Wire rushing, passing, and receptions models into `current_predictions.py` and
       the dashboard (only receiving yards is wired in so far)
 - [ ] Wire the rushing-yards model into `current_predictions.py` and the dashboard
       (only receiving yards is wired in so far)
-- [ ] **Test `data/pull_espn_news.py` for real** (needs home network) — built but
-      completely unverified, see log
-- [ ] **Test `data/pull_underdog.py` for real** (needs home network) — built but
-      completely unverified, see log
 - [ ] Deploy the dashboard to Streamlit Community Cloud (code is ready, just needs the
       GitHub login handoff — see Dashboard section below)
 - [ ] Minor: some player-prop model training runs throw sklearn convergence warnings
@@ -91,6 +103,44 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+**2026-08-15 — [home]**
+- Did: First session in a fresh home environment — set up git identity, GitHub CLI auth
+  (`gh`), Python 3.12, and the venv/requirements from scratch (none of it existed yet
+  here). Cloned the real repo from GitHub rather than trusting the zip export Alex had
+  on hand, which turned out to be significantly stale (missing the receptions/rushing/
+  passing prop models and several feature modules already on `main`).
+
+  Then picked up the TOP PRIORITY item: **`pull_underdog.py` works from this
+  environment** — confirmed unreachable from the work sandbox (`host_not_allowed`), but
+  a live pull here returned 1,024 real NFL prop-option rows. Real schema finding: as of
+  today (preseason, 2026-08-15) most live lines are season-long totals
+  (`season_receiving_yards`, `season_pass_tds`, etc.); per-game lines do exist already
+  for preseason games (`receiving_yds`, `rushing_yds`, `passing_yds`, `passing_tds`,
+  `passing_ints`, `sacks`) but **no single-game `receptions` line was live yet** — worth
+  rechecking once the regular season starts, since the receptions model is currently the
+  strongest of the four props. Modified the script to append timestamped snapshots to
+  `data/raw/underdog_history/` (previously it only overwrote one file, which can't build
+  an archive) and set up a daily 9am scheduled task to run it automatically.
+
+  Also tested `pull_espn_news.py` per the other open "needs home network" item — **it's
+  blocked, but not by the sandbox**: ESPN's own Akamai edge returns a real 403 Access
+  Denied to this environment too (confirmed via curl, not a code bug). Left it broken
+  rather than trying to route around a WAF. Built `data/pull_sbnation_news.py` as a
+  replacement per Alex's request — pulls all 32 teams' SB Nation blogs via their public
+  Atom feeds (Vox Media Chorus platform, `/rss/index.xml` on every team site, verified
+  live against sbnation.com/nfl's own nav rather than guessed). All 32 teams returned
+  10 articles cleanly on a full test run. Also added to the daily schedule.
+- Blocked: nothing — both new/fixed pullers are real, live-tested pulls, not simulated.
+- Next: **the archive needs time to accumulate**, not more code — let the daily schedule
+  run for a while (ideally through into the regular season, when per-game receptions
+  lines should appear) before trying to replace the proxy-line backtesting with real
+  Underdog history. In the meantime, the SB Nation news feed is live and could inform
+  the "own_injury_severity" / context features already in the individual-context model
+  with more current, team-specific detail than the box-score-derived injury counts
+  currently used. Ranked below the line archive but worth a look. Also still open: wire
+  rushing/passing/receptions models into the dashboard, and the Streamlit Cloud deploy —
+  neither touched this session.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
