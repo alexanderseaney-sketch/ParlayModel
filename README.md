@@ -126,6 +126,14 @@ Done:
       informative result: the player-level rolling features already reset/adapt every
       season, so the model doesn't need to be retrained to reflect "what this season
       looks like." Not deployed. See log for the full comparison and why this happens.
+- [x] **Tested three more genuinely new angles — player consistency/volatility, QB
+      continuity, explicit interaction terms — deliberately in a different category
+      than the (repeatedly null) context/defense-side features.** Clean sweep of
+      nulls again, including a surprising one: QB continuity was completely flat
+      despite 12.8% of rows having a real QB change, real football logic notwithstanding.
+      **This is now the 7th consecutive round of testing without a real win** across
+      dozens of feature/architecture combinations. See log for the honest synthesis of
+      what this pattern actually means going forward.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -508,6 +516,48 @@ before starting work to see what the other side left you.*
   specifically in isolation with a larger decay sweep, since it's the only prop that
   showed any positive direction at all — low priority given the effect size found so
   far. Same open items as every entry above otherwise.
+
+  **Later same day — three more angles, per Alex wanting to keep pushing for
+  accuracy**: deliberately picked a different CATEGORY than the repeatedly-null
+  context/defense-side features, since that pattern is now well-established. New
+  script: `models/train_consistency_qb_continuity_interactions.py`.
+  1. **Player consistency/volatility** (rolling std + coefficient of variation of each
+     prop's own primary stat) — nothing tested before now described how PREDICTABLE
+     a player's production is, only its level/trend. Null-to-negative across all 4
+     props; rushing was the clearest loser (-0.5 to -0.7pt).
+  2. **QB continuity** (receiving/receptions): built a real team-week starting-QB
+     lookup from `weekly_stats.csv` and flagged when this week's starter differs from
+     last week's — a genuine football mechanism (route/timing chemistry) never
+     tested. Completely flat on both props, despite 1,575 of 12,266 rows (12.8%)
+     genuinely having a QB change. Surprising given the football logic, but a clean,
+     real null, not a bug — worth taking at face value rather than assuming the
+     feature must be wrong.
+  3. **Explicit interaction terms for passing** (LogReg-specific, since unlike
+     XGBoost's tree splits it can't learn interactions on its own): implied-total x
+     volume, aggressiveness x opponent defense, wind x air-yards. All three worse than
+     base, none close to the bar.
+
+  **Honest synthesis, stated plainly rather than just moving on to the next idea**:
+  this is the **7th consecutive round** without a real win, across dozens of
+  feature/architecture combinations spanning every category tried — opponent/defense
+  context (6/6 null), player-side momentum and trend, model retraining cadence
+  (2 variants), and now player-side volatility, real-world continuity, and explicit
+  interactions. That's not bad luck on which ideas got picked; it's a genuinely
+  strong, consistent signal that this modeling approach — rolling box-score/NGS
+  features, binary classification against a proxy line — has reached its practical
+  ceiling for this data source. A model that reliably beats a player's OWN rolling
+  average doesn't necessarily mean it beats a sportsbook's actual line, which already
+  prices in most of what these features capture.
+- Next: recommending a real pivot in where effort goes, not just another feature
+  round. The two levers that are structurally different (not just another additive
+  feature on the same target) are: (a) the Underdog line archive, which changes the
+  TARGET itself from a proxy to a real market line — the only thing left that could
+  reveal genuine edge rather than re-measuring the same ceiling a different way, and
+  (b) an actual architecture change (e.g. predicting the real value via regression
+  instead of binary over/under, or a genuinely different target formulation) —
+  bigger, riskier, not yet scoped. Continuing to search for incremental features on
+  the current architecture has clearly diminishing returns at this point; said so
+  directly rather than proposing a plausible-sounding 8th round.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
