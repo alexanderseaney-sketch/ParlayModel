@@ -1,123 +1,96 @@
 """
-Pulls current NFL news from ESPN's unofficial public API (no key required):
-league-wide news plus per-team news, covering injuries, signings/trades, suspensions,
-and general storylines that can affect gameplay but won't show up in box-score data.
+Pulls current NFL news from ESPN's public RSS feed.
 
-NOTE: this uses ESPN's undocumented endpoints. They're widely used and free, but ESPN
-can change or remove them without notice — that's why every pull is validated and logged
-loudly on failure rather than failing silently.
+Previously used ESPN's undocumented JSON API (site.api.espn.com), which let us break
+news out per-team. That endpoint now hard-blocks every request behind an Akamai edge
+"Access Denied" -- confirmed from both a local dev machine and the deployed Streamlit
+Cloud app, with headers ranging from a bare User-Agent to a full browser-mimicking set
+(Accept/Accept-Language/Referer/Origin), all identically blocked. That's ESPN's bot
+mitigation working as intended on an unofficial endpoint, not something to route
+around -- so this switched to their public RSS feed instead, a real, documented,
+publicly-served route rather than a workaround of the block.
+
+Trade-off: RSS is league-wide only, no per-team breakdown -- ESPN's old team-specific
+and injury-specific RSS routes (e.g. .../rss/nfl/team/_/name/dal) turned out to be dead
+too, silently serving the same generic fallback feed instead of 404ing, so they're
+skipped rather than pulled as if real. Per-team granularity is still covered by
+pull_sbnation_news.py's 32-team pull; this is a second, differently-sourced signal on
+top of that, same relationship pull_nbcsports_news.py already has to SB Nation.
 
 Usage:
-    python data/pull_espn_news.py                  # league news + all 32 teams
-    python data/pull_espn_news.py --league-only     # skip per-team pulls (faster)
+    python data/pull_espn_news.py
 """
-import argparse
 import os
-import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import pandas as pd
 import requests
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
-BASE = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
+OUT_PATH = os.path.join(RAW_DIR, "espn_news.csv")
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ParlayModel/1.0)"}
 TIMEOUT = 15
+DC_NS = {"dc": "http://purl.org/dc/elements/1.1/"}
+
+FEEDS = {
+    "league": "https://www.espn.com/espn/rss/nfl/news",
+}
 
 
-def get_team_ids() -> dict:
-    """Returns {team_abbreviation: espn_team_id} for all 32 teams."""
-    resp = requests.get(f"{BASE}/teams", headers=HEADERS, timeout=TIMEOUT)
+def fetch_feed(name: str, url: str) -> list[dict]:
+    resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
     resp.raise_for_status()
-    data = resp.json()
-    teams = {}
-    for group in data["sports"][0]["leagues"][0]["teams"]:
-        t = group["team"]
-        teams[t["abbreviation"]] = t["id"]
-    return teams
+    root = ET.fromstring(resp.content)
 
-
-def _parse_news_response(data: dict, source: str) -> list[dict]:
     rows = []
-    for article in data.get("articles", []):
-        categories = article.get("categories", [])
-        athletes = [c.get("description") for c in categories if c.get("type") == "athlete"]
-        teams_tagged = [c.get("description") for c in categories if c.get("type") == "team"]
+    for item in root.find("channel").findall("item"):
+        creator_el = item.find("dc:creator", DC_NS)
         rows.append({
-            "source": source,
-            "headline": article.get("headline"),
-            "description": article.get("description"),
-            "published": article.get("published"),
-            "type": article.get("type"),
-            "athletes_tagged": "; ".join(a for a in athletes if a),
-            "teams_tagged": "; ".join(t for t in teams_tagged if t),
-            "link": (article.get("links", {}).get("web", {}) or {}).get("href"),
+            "source": name,
+            "headline": item.findtext("title"),
+            "description": item.findtext("description"),
+            "author": creator_el.text if creator_el is not None else None,
+            "published": item.findtext("pubDate"),
+            "link": item.findtext("link"),
         })
     return rows
 
 
-def pull_league_news(limit: int = 50) -> pd.DataFrame:
-    resp = requests.get(f"{BASE}/news", params={"limit": limit}, headers=HEADERS, timeout=TIMEOUT)
-    resp.raise_for_status()
-    rows = _parse_news_response(resp.json(), source="league")
-    df = pd.DataFrame(rows)
-    print(f"[league_news] {len(df)} articles.")
-    return df
-
-
-def pull_team_news(teams: dict, pause_seconds: float = 0.3) -> pd.DataFrame:
+def pull_all_feeds() -> pd.DataFrame:
     all_rows = []
-    for abbr, team_id in teams.items():
+    for name, url in FEEDS.items():
         try:
-            resp = requests.get(f"{BASE}/news", params={"team": team_id}, headers=HEADERS, timeout=TIMEOUT)
-            resp.raise_for_status()
-            rows = _parse_news_response(resp.json(), source=f"team:{abbr}")
+            rows = fetch_feed(name, url)
             all_rows.extend(rows)
-            print(f"[team_news] {abbr}: {len(rows)} articles.")
-        except requests.RequestException as e:
-            print(f"[team_news] {abbr}: FAILED ({e})")
-        time.sleep(pause_seconds)  # be polite to an unofficial/undocumented API
+            print(f"[{name}] {len(rows)} articles.")
+        except (requests.RequestException, ET.ParseError) as e:
+            print(f"[{name}] FAILED ({e})")
     return pd.DataFrame(all_rows)
 
 
-def validate_news(df: pd.DataFrame, name: str) -> None:
-    if df.empty:
-        print(f"[{name}] WARNING: 0 articles returned. Endpoint may have changed — check manually.")
-        return
-    n_missing_headline = df["headline"].isna().sum()
-    n_missing_date = df["published"].isna().sum()
-    print(f"[{name}] {len(df)} total rows.")
-    if n_missing_headline or n_missing_date:
-        print(f"[{name}] WARNINGS: {n_missing_headline} missing headline, {n_missing_date} missing published date")
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Pull current NFL news from ESPN")
-    parser.add_argument("--league-only", action="store_true", help="Skip per-team news pulls")
-    parser.add_argument("--limit", type=int, default=50, help="Max league-news articles to pull")
-    args = parser.parse_args()
-
     os.makedirs(RAW_DIR, exist_ok=True)
     pulled_at = datetime.now(timezone.utc).isoformat()
 
-    league_df = pull_league_news(args.limit)
-    validate_news(league_df, "league_news")
+    new_df = pull_all_feeds()
+    if new_df.empty:
+        print("WARNING: 0 articles pulled -- feed may have changed. Nothing written.")
+        return
+    new_df["pulled_at"] = pulled_at
 
-    if not args.league_only:
-        teams = get_team_ids()
-        print(f"[teams] found {len(teams)} teams.")
-        team_df = pull_team_news(teams)
-        validate_news(team_df, "team_news")
-        combined = pd.concat([league_df, team_df], ignore_index=True)
+    if os.path.exists(OUT_PATH):
+        existing = pd.read_csv(OUT_PATH)
+        combined = pd.concat([existing, new_df], ignore_index=True)
     else:
-        combined = league_df
+        combined = new_df
 
-    combined = combined.drop_duplicates(subset=["headline", "published"])
-    combined["pulled_at"] = pulled_at
+    before = len(combined)
+    combined = combined.drop_duplicates(subset=["link"], keep="first")
+    print(f"Deduped {before - len(combined)} already-seen articles ({len(new_df)} fetched this run).")
 
-    out_path = os.path.join(RAW_DIR, "espn_news.csv")
-    combined.to_csv(out_path, index=False)
-    print(f"\nSaved {len(combined)} unique articles -> {out_path}")
+    combined.to_csv(OUT_PATH, index=False)
+    print(f"Saved {len(combined)} total unique articles -> {OUT_PATH}")
 
 
 if __name__ == "__main__":

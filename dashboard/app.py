@@ -643,9 +643,9 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
     the source file, the column used to group by (team vs. feed), and which extra
     columns are meaningful to show in each card's caption differ. caption_cols is
     explicit per page rather than guessed generically: sbnation_news.csv's "source"
-    column is a raw blog URL (not meant for display), but espn_news.csv's "source" is
-    a real "league"/"team:XXX" label -- same column name, different meaning, so this
-    can't be inferred safely from column presence alone."""
+    column is a raw blog URL (not meant for display), while espn_news.csv's "source"
+    is a real feed-name label meant to be shown -- same column name, different
+    meaning, so this can't be inferred safely from column presence alone."""
     st.title(f"{icon} {title}")
     st.caption(caption)
     df = load_csv_if_exists(filename)
@@ -689,13 +689,16 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
 
 
 def page_espn_news():
-    _news_page("ESPN News Feed", "📰", "League + team news from ESPN's public API.",
-               "espn_news.csv", "source", "Source (league / team:XXX)", caption_cols=("published",))
+    _news_page("ESPN News Feed", "📰",
+               "League-wide news from ESPN's public RSS feed (their JSON API is blocked by "
+               "ESPN's own edge/bot protection, unrelated to per-team breakdowns — see "
+               "pull_espn_news.py for details).",
+               "espn_news.csv", "source", "Source", caption_cols=("author", "published"))
 
 
 def page_sbnation_news():
     _news_page("SB Nation Team News", "📰",
-               "Daily pull from all 32 teams' SB Nation blogs — replaces ESPN news, which is blocked from this environment.",
+               "Daily pull from all 32 teams' SB Nation blogs — per-team breakdown ESPN's feed doesn't provide.",
                "sbnation_news.csv", "team", "Team", caption_cols=("author", "published"))
 
 
