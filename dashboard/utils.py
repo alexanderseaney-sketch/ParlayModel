@@ -1,10 +1,11 @@
 """Shared helpers for the ParlayModel dashboard."""
+import email.utils
 import os
 import subprocess
 import sys
 import urllib.parse
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -323,19 +324,35 @@ def get_player_news(player_name: str, max_items: int = 8) -> list[dict]:
     except (requests.RequestException, ET.ParseError):
         return []
 
-    items = []
     channel = root.find("channel")
     if channel is None:
         return []
-    for item in channel.findall("item")[:max_items]:
+
+    # Google returns these in RELEVANCE order, not chronological -- pulling from the
+    # full result set (not just the first max_items) before sorting so a genuinely
+    # more recent article ranked lower on relevance isn't dropped before it gets the
+    # chance to sort to the top.
+    items = []
+    for item in channel.findall("item"):
         source_el = item.find("source")
+        pub_date_raw = item.findtext("pubDate")
+        try:
+            pub_dt = email.utils.parsedate_to_datetime(pub_date_raw) if pub_date_raw else None
+        except (TypeError, ValueError):
+            pub_dt = None
         items.append({
             "headline": item.findtext("title"),
             "link": item.findtext("link"),
-            "published": item.findtext("pubDate"),
+            "published": pub_date_raw,
             "source": source_el.text if source_el is not None else None,
+            "_pub_dt": pub_dt,
         })
-    return items
+
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    items.sort(key=lambda x: x["_pub_dt"] or epoch, reverse=True)
+    for it in items:
+        del it["_pub_dt"]
+    return items[:max_items]
 
 
 def run_pull_script(cmd: list[str]) -> tuple[bool, str]:
