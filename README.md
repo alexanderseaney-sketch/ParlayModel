@@ -118,6 +118,14 @@ Done:
       Wired into the dashboard as a browse page AND as a live 🚑 warning tag directly
       in the Parlay Builder next to matching props. Not fed into the trained models
       yet — no historical archive exists for it to validate against.
+- [x] **Tested whether models should actually retrain week-by-week as a season
+      unfolds** (recency-weighted samples, not just a static one-time fit), per
+      Alex's question about seasons having their own trends. Simulated real weekly
+      retraining through all of 2024, two decay rates, compared directly against the
+      static model on identical test rows. **Null-to-negative both times** — real,
+      informative result: the player-level rolling features already reset/adapt every
+      season, so the model doesn't need to be retrained to reflect "what this season
+      looks like." Not deployed. See log for the full comparison and why this happens.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -456,6 +464,50 @@ before starting work to see what the other side left you.*
   nflverse's pipeline than a stalled prior-season backfill might be. If 2025/2026
   weekly_stats keeps 404ing once the season is underway, that would be a real problem
   worth investigating harder; right now it's a known, gracefully-handled external gap.
+
+  **Later same day — does the model need to actually get smarter as a season
+  progresses, per Alex?** Real question worth taking seriously: every NFL season has
+  its own trends (scheme shifts, rule changes, rookie classes), and right now all four
+  models are trained once on historical seasons and never updated as the current
+  season unfolds — they're only ever *scored* fresh, not *retrained*. Two ways to
+  address that discussed with Alex: (a) add season-level trend features to the
+  existing static models, or (b) actually retrain week over week so the model's
+  learned parameters themselves evolve. Alex wants (b) — the model getting smarter
+  over time, not just fed a trend signal.
+
+  Built `models/backtest_recency_weighting.py` to test this for real before building
+  a production retraining pipeline around it: simulates real weekly retraining through
+  the entire 2024 season (train on 2019-2023 + all 2024 weeks before W, score week W
+  blind, repeat for every week) with samples weighted by recency (`0.75 **
+  (2024 - row_season)`, so 2024's own weeks always count most and count more as more
+  of them accumulate) — exactly how it would work if wired into the weekly pipeline.
+  Compared directly against the static model on the identical test rows.
+
+  **Result: null-to-negative, tested two ways.** Aggressive decay (0.75/season):
+  receiving -0.46pt, rushing -0.62pt, passing -0.92pt, receptions +0.05pt — worse or
+  flat across the board. Gentler decay (0.9/season), tested as a robustness check
+  rather than stopping at one arbitrary parameter choice: receiving -0.41pt, rushing
+  +0.12pt, passing +0.23pt, receptions +0.77pt. The receptions number looks like the
+  closest thing to a real signal, but at n=1,949 the standard error is ~1.0pt — a
+  0.77pt gain doesn't clear normal sampling noise. **Not deployed.**
+
+  Why this is a genuinely useful negative result, not just a null: it explains WHY
+  season-to-season trends (which are real, agreed with Alex on this) don't require
+  retraining to handle. The player-level rolling features already reset and rebuild
+  every season, so each player's OWN current-season form is already fully reflected
+  without the model itself needing to change. What the model actually *learns* — how
+  those features relate to outcomes — appears stable year over year. Diluting 5+
+  years of stable historical relationships with a small, noisy partial-season sample
+  mostly adds noise rather than teaching the model something new. This is consistent
+  with, not contradictory to, everything else found in the "new theories" round
+  earlier today — the current architecture already captures the adaptive part that
+  actually matters.
+- Next: not pursuing weekly retraining further given two independent null results.
+  If this gets revisited, the more promising next step isn't a different decay rate
+  (already tested two, both inconclusive) but testing recency weighting on receptions
+  specifically in isolation with a larger decay sweep, since it's the only prop that
+  showed any positive direction at all — low priority given the effect size found so
+  far. Same open items as every entry above otherwise.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
