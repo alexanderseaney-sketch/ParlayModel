@@ -87,6 +87,13 @@ Done:
       reported, receptions 72.3% vs. 72.6%) — real evidence the models generalize and
       aren't overfit to the original validation process, not just a re-read of old
       numbers. See log for full comparison table.
+- [x] **New theories round: ~20 more feature combinations tested (usage trend, plus
+      filling real gaps for receptions/rushing/passing) — clean sweep of honest nulls.**
+      Now 6/6 props where opponent/context-side features have failed to beat what's
+      deployed. Real signal this sends: feature-engineering-on-the-current-data-source
+      looks close to tapped out; the Underdog line archive (already top priority) is
+      the more promising remaining lever since it changes the target, not just the
+      features. See log for the full breakdown.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -219,6 +226,58 @@ before starting work to see what the other side left you.*
   reusable — worth rerunning against 2025 once nflverse publishes `weekly_stats` for
   it, which would be the first genuinely-new-season validation rather than a rerun
   against 2024.
+
+  **Later same day — new theories round, per Alex's request to keep testing and try to
+  improve the models**: before picking new ideas, actually checked what had and hadn't
+  been tried yet (grepped every `models/train_*.py` script rather than guessing) —
+  found real gaps instead of re-testing dead ends: `add_usage_trend` was built during
+  the individual-context round but never actually included in that round's tested
+  feature groups; the receptions model didn't exist yet when the game-context and
+  matchup-defense-splits rounds ran, so it never got either treatment despite being the
+  strongest model; team-scheme features (`pass_oe`, tempo, box counts) were only ever
+  tested on receiving, never rushing/passing/receptions. New script:
+  `models/train_momentum_and_receptions_gaps.py`, same rigorous pooled 5-season CV as
+  every other round, current production feature lists + tuned hyperparameters as the
+  base (so "beats base" means "beats what's actually deployed").
+
+  **Result: clean sweep of honest nulls, ~20 feature combinations tested:**
+  - Usage trend (role momentum): null-to-worse on all 4 props (rushing actually
+    dropped, -0.37pt) — the *level* of usage already in every model apparently
+    captures what matters; the *trend* doesn't add anything on top.
+  - Game-context (implied_total/home_away/weather/rest/snap_share) on receptions:
+    null across all 5, consistent with receiving (receptions' closest cousin) already
+    being null on the same features.
+  - Matchup-specific defense splits on receptions: null across all 4 + combined —
+    makes this 6/6 props-tested where defense-side granularity has failed to add
+    value beyond the simple `def_epa_allowed_rolling` already in every model.
+  - Team-scheme features on rushing/passing/receptions: null across the board. Closest
+    thing to a signal all round was `pass_oe` on rushing (70.5%→70.8% raw, a real
+    mechanistic hypothesis — a team's pass-rate-over-expected is almost definitionally
+    tied to how much it runs) but confidence-filtered accuracy barely moved with
+    *fewer* games clearing the 0.4 bar (83.0%→83.2% on 48.5%→47.7% of games) — same
+    "false economy" pattern already seen elsewhere in this project. Not kept.
+
+  **Honest bigger-picture read**: this is now roughly six separate rounds (QB-specific
+  stats, real PBP efficiency, scheme/tendency, game-context, matchup-specific defense
+  splits, and now usage-trend + the receptions/rushing/passing gap-filling above) where
+  opponent/context-side features have failed to add value beyond what's already
+  deployed. The current feature set — box scores + NGS tracking data + the player's own
+  opportunity signals (target share, efficiency, time to throw) — appears to have
+  captured most of the readily available signal for the *proxy-line* target
+  specifically. This loops back to why the Underdog line archive is still ranked #1:
+  it's not just "the number that tells us if this is profitable" (original framing) —
+  it's also the only realistic remaining lever for a genuinely different kind of gain,
+  since it changes the target itself (real market line) rather than adding another
+  feature trying to predict the same proxy target everything so far has already
+  squeezed hard.
+- Next: this doesn't mean stop iterating — it means the next real gains are more likely
+  to come from (a) the Underdog archive accumulating enough history to backtest against
+  real lines instead of the proxy, or (b) a genuinely different-in-kind data source like
+  the SB Nation news feed (not yet usable for backtesting — no historical archive exists
+  for past seasons — but worth exploring for *current* predictions once there's a way to
+  turn free text into a structured signal, e.g. detecting real injury/role-change
+  language ahead of the official injury report). Feature-engineering-on-the-same-data-
+  source appears close to tapped out for now.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
