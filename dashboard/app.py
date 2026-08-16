@@ -433,20 +433,29 @@ def page_parlay_builder():
                 with info_col:
                     st.markdown(f"**{leg['player']}**")
                     st.markdown(f"{_pretty_stat(leg['stat'])} — **{str(leg['choice']).upper()} {leg['line']}**")
-                leg["my_prob"] = prob_col.slider(
-                    "Win prob.", 0.0, 1.0, leg["my_prob"], 0.01, key=f"prob_{i}", label_visibility="collapsed",
-                )
-                fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
-                ud_mult = leg["underdog_multiplier"]
                 with prob_col:
+                    # Collapsed label + a caption above it instead -- smaller and less
+                    # visually heavy than Streamlit's default slider label, but (unlike
+                    # a fully hidden label) still says up front that this is YOUR
+                    # estimate feeding the fair-odds math, not the real betting odds --
+                    # a real user confusion this fixes: it looked like an editable
+                    # "odds" field with no clarifying label at all.
+                    st.caption("Your win % estimate")
+                    leg["my_prob"] = st.slider(
+                        "Your win % estimate", 0.0, 1.0, leg["my_prob"], 0.01,
+                        key=f"prob_{i}", label_visibility="collapsed",
+                    )
+                    fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
+                    ud_mult = leg["underdog_multiplier"]
                     if ud_mult:
-                        st.caption(f"UD: {ud_mult}x · fair: {fair_mult:.2f}x")
+                        st.caption(f"Underdog pays: {ud_mult}x (fixed)")
+                        st.caption(f"Your fair odds: {fair_mult:.2f}x")
                         if fair_mult < float(ud_mult):
                             st.badge("+EV", color="green")
                         else:
                             st.badge("-EV", color="red")
                     else:
-                        st.caption(f"fair: {fair_mult:.2f}x (UD odds unknown)")
+                        st.caption(f"Your fair odds: {fair_mult:.2f}x (Underdog odds unknown)")
                 if action_col.button("🗑️", key=f"rm_{i}", help="Remove this leg", width="stretch"):
                     st.session_state.slip.pop(i)
                     st.rerun()
