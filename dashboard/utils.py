@@ -43,13 +43,19 @@ EXPECTED_FILES = {
     "underdog_props.csv": "data/pull_underdog.py",
 }
 
+# sys.executable, not a hardcoded "python3"/"python" string -- a bare name is resolved
+# via PATH in the subprocess's environment, which is NOT guaranteed to be the same
+# interpreter running this app (and on Windows there's usually no "python3" at all,
+# only "python"/"py"). sys.executable is always the exact interpreter currently
+# running, so it's guaranteed to have every package in requirements.txt installed,
+# on both local dev and Streamlit Cloud's container.
 PULL_SCRIPTS = {
-    "nflverse (schedules + stats + NGS + injuries + snaps)": ["python3", "data/pull_nflverse.py", "--years", "2023", "2024", "--skip-pbp"],
-    "ESPN news": ["python3", "data/pull_espn_news.py"],
-    "SB Nation team news": ["python3", "data/pull_sbnation_news.py"],
-    "NBC Sports / PFT rumor mill": ["python3", "data/pull_nbcsports_news.py"],
-    "Footballguys depth charts": ["python3", "data/pull_footballguys_depth.py"],
-    "Underdog pick'em props": ["python3", "data/pull_underdog.py"],
+    "nflverse (schedules + stats + NGS + injuries + snaps)": [sys.executable, "data/pull_nflverse.py", "--years", "2023", "2024", "--skip-pbp"],
+    "ESPN news": [sys.executable, "data/pull_espn_news.py"],
+    "SB Nation team news": [sys.executable, "data/pull_sbnation_news.py"],
+    "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
+    "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],
+    "Underdog pick'em props": [sys.executable, "data/pull_underdog.py"],
 }
 
 
