@@ -65,6 +65,21 @@ Done:
       blogs directly via their public Atom feeds, verified live against
       sbnation.com/nfl's own team-site directory rather than guessed. Also scheduled
       daily, accumulating into `data/raw/sbnation_news.csv` deduped by article link.
+- [x] **All four prop models now wired into `current_predictions.py` and the
+      dashboard** — was receiving-yards-only. Rewrote it generically: rather than
+      re-declaring each model's feature list by hand, it trusts the `features` list
+      saved inside each model's own `.pkl` (inspected directly to confirm) and merges
+      only the shared context features (injury status, div/primetime flags, weather/
+      Vegas total, snap share) each specific model actually needs. Also fixed a real
+      latent bug this surfaced: the dashboard's Parlay Builder matched predictions to
+      Underdog props by **player name only** — harmless with one prop type, but wrong
+      with four (would've silently attached e.g. a rushing-yards prediction to that
+      same player's receiving-yards prop). Now matches on name **and** stat type.
+      Verified directly against live data: 78 of 1024 live Underdog prop-option rows
+      matched a model prediction, all correctly stat-scoped (Bijan Robinson only
+      matched on rushing_yds, not receiving_yds, etc). Also added an "SB Nation News"
+      dashboard page for the puller built earlier this session — it existed but was
+      never wired into the UI.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -77,10 +92,6 @@ Not done yet:
       Every player-prop accuracy number so far is still against a proxy line (player's
       own rolling average), not real Underdog lines. That's the number that actually
       tells us if this is profitable.
-- [ ] Wire rushing, passing, and receptions models into `current_predictions.py` and
-      the dashboard (only receiving yards is wired in so far)
-- [ ] Wire the rushing-yards model into `current_predictions.py` and the dashboard
-      (only receiving yards is wired in so far)
 - [ ] Deploy the dashboard to Streamlit Community Cloud (code is ready, just needs the
       GitHub login handoff — see Dashboard section below)
 - [ ] Minor: some player-prop model training runs throw sklearn convergence warnings
@@ -138,9 +149,37 @@ before starting work to see what the other side left you.*
   Underdog history. In the meantime, the SB Nation news feed is live and could inform
   the "own_injury_severity" / context features already in the individual-context model
   with more current, team-specific detail than the box-score-derived injury counts
-  currently used. Ranked below the line archive but worth a look. Also still open: wire
-  rushing/passing/receptions models into the dashboard, and the Streamlit Cloud deploy —
-  neither touched this session.
+  currently used. Ranked below the line archive but worth a look.
+
+  **Later same day**: wired all four prop models into `current_predictions.py` and the
+  dashboard (previously receiving-only). Also pulled real nflverse data into this
+  environment for the first time (2024-2025; **2025 `weekly_stats` isn't published at
+  nflverse's usual endpoint yet** — pulled 2024 only for that specific file, real
+  current limitation worth knowing about, not a bug here). While wiring predictions in,
+  inspected each saved model's own `.pkl` directly to get its exact `features` list and
+  `position_scope` rather than trusting training-script filenames, since several
+  historical training scripts in `models/` are stale/superseded and don't reflect
+  what's actually in production — the pickles themselves are the only reliable source
+  of truth for what each model expects. Found and fixed a real bug this surfaced: the
+  Parlay Builder matched predictions to Underdog props by player name only, which
+  would've silently cross-wired predictions once more than one prop type existed (e.g.
+  attaching a rushing prediction to a receiving prop for the same player) — now matches
+  on name + stat type, verified against live data (78/1024 real prop rows matched,
+  spot-checked correct-stat matching for several players). Also wired the SB Nation
+  puller into the dashboard as its own page — it was built and scheduled earlier today
+  but never actually surfaced in the UI. Tested the whole dashboard live in a browser
+  (Overview, Parlay Builder, SB Nation News pages) against real pulled data, not just
+  code review.
+- Next: Streamlit Cloud deploy is the last open item from the original list, untouched.
+  Also worth doing whenever picked back up: nflverse data in this environment only
+  covers 2024-2025 (2 seasons) — enough for current-form rolling stats but not enough
+  to retrain anything; pull the full 2019-2024 range here too if retraining work moves
+  to this environment. Two small pre-existing rough edges noticed but not touched (out
+  of scope for this session): `dashboard/utils.py` has an orphaned, uncallable
+  odds-to-probability helper (docstring + body with no `def` line, dead code, nothing
+  currently calls it); and the saved model pickles throw harmless
+  XGBoost/scikit-learn version-mismatch warnings on load (models were pickled with
+  slightly older library versions than what's installed here).
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting

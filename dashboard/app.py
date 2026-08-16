@@ -49,7 +49,7 @@ if not check_password():
 
 PAGE = st.sidebar.radio(
     "Navigate",
-    ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "Underdog Props", "Bet Log", "Run Data Pulls"],
+    ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "SB Nation News", "Underdog Props", "Bet Log", "Run Data Pulls"],
 )
 
 st.sidebar.markdown("---")
@@ -112,8 +112,8 @@ elif PAGE == "Parlay Builder":
     else:
         st.info(
             "No model predictions found yet — run `python3 models/current_predictions.py` "
-            "to generate them (only covers receiving yards, WR/TE, for now). Falling back "
-            "to manual probability entry until then."
+            "to generate them (covers receiving yards, rushing yards, passing yards, and "
+            "receptions). Falling back to manual probability entry until then."
         )
 
     if "slip" not in st.session_state:
@@ -157,9 +157,13 @@ elif PAGE == "Parlay Builder":
             if predictions is not None:
                 options_df = options_df.copy()
                 options_df["_match_key"] = options_df[name_col].apply(normalize_name)
+                # Match on player AND stat type -- name-only matching would attach e.g.
+                # a receiving-yards prediction to that same player's rushing-yards prop
+                # now that current_predictions.py covers four different prop types.
                 options_df = options_df.merge(
-                    predictions[["_match_key", "predicted_prob_over", "confidence"]],
-                    on="_match_key", how="left",
+                    predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence"]],
+                    left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
+                    how="left",
                 )
                 below_bar = options_df["confidence"] < min_confidence
                 if below_bar.any() and not search:
@@ -335,6 +339,44 @@ elif PAGE == "ESPN News":
                     st.write(row["description"])
                 if pd.notna(row.get("athletes_tagged")) and row.get("athletes_tagged"):
                     st.caption(f"Athletes: {row['athletes_tagged']}")
+                if pd.notna(row.get("link")):
+                    st.markdown(f"[Read more]({row['link']})")
+
+
+# ---------------------------------------------------------------- SB Nation News
+elif PAGE == "SB Nation News":
+    st.title("SB Nation Team News")
+    st.caption("Daily pull from all 32 teams' SB Nation blogs — replaces ESPN news, which is blocked from this environment.")
+    df = load_csv_if_exists("sbnation_news.csv")
+
+    if df is None:
+        st.warning("`sbnation_news.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            teams = sorted(df["team"].dropna().unique()) if "team" in df.columns else []
+            team_filter = st.multiselect("Team", teams)
+        with col2:
+            search = st.text_input("Search headlines/summary")
+
+        filtered = df.copy()
+        if team_filter:
+            filtered = filtered[filtered["team"].isin(team_filter)]
+        if search:
+            mask = (
+                filtered["headline"].astype(str).str.contains(search, case=False, na=False)
+                | filtered["summary"].astype(str).str.contains(search, case=False, na=False)
+            )
+            filtered = filtered[mask]
+
+        filtered = filtered.sort_values("published", ascending=False)
+        st.caption(f"{len(filtered):,} of {len(df):,} articles")
+        for _, row in filtered.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**{row.get('headline', '(no headline)')}**")
+                st.caption(f"{row.get('team', '')} · {row.get('author', '')} · {row.get('published', '')}")
+                if pd.notna(row.get("summary")):
+                    st.write(row["summary"])
                 if pd.notna(row.get("link")):
                     st.markdown(f"[Read more]({row['link']})")
 
