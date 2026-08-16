@@ -309,7 +309,15 @@ def page_parlay_builder():
         stat_col = find_column(df, ["stat_name", "stat"])
         line_col = find_column(df, ["stat_value", "line", "value"])
         choice_col = find_column(df, ["choice"])
-        mult_col = find_column(df, ["payout_multiplier", "multiplier", "odds", "american_price"])
+        # decimal_price first, not payout_multiplier -- a real bug found 2026-08-16:
+        # payout_multiplier is Underdog's own internal boost ratio (hovers around
+        # 1.00, e.g. 1.06/0.86 for a boosted/reduced leg), not the actual payout.
+        # decimal_price is the real "multiply your stake by this" number (1.90x,
+        # 2.08x, etc.) and is what the rest of this codebase already treats as the
+        # real price (see generate_weekly_bet_slip.py). Priority-list matching had
+        # been silently preferring the wrong one since payout_multiplier happens to
+        # exist in the pulled data and was listed first.
+        mult_col = find_column(df, ["decimal_price", "payout_multiplier", "multiplier", "odds", "american_price"])
 
         if not name_col or not stat_col:
             st.error(
@@ -344,57 +352,61 @@ def page_parlay_builder():
                     "re-check this once `pull_underdog.py` has run against live data."
                 )
 
-            for idx, row in options_df.iterrows():
+            # One card per (player, stat, line) -- Underdog's own data has separate
+            # rows per side (over/under), which used to mean two near-identical rows
+            # with no way to compare them. The whole point of pulling live prices is
+            # to show what the model thinks EACH side is worth, so both sides render
+            # together: their real (possibly asymmetric -- confirmed 2026-08-16 some
+            # props price over/under differently, e.g. 2.08x/1.75x) decimal_price
+            # multiplier and the model's predicted hit probability for that specific
+            # side, side by side.
+            group_cols = [name_col, stat_col, line_col]
+            for (player_name, stat_name, line_value), group in options_df.groupby(group_cols, dropna=False, sort=False):
+                over_rows = group[group[choice_col].astype(str).str.lower() == "over"]
+                under_rows = group[group[choice_col].astype(str).str.lower() == "under"]
+                over_row = over_rows.iloc[0] if not over_rows.empty else None
+                under_row = under_rows.iloc[0] if not under_rows.empty else None
+                any_row = over_row if over_row is not None else under_row
+
                 # Two real bugs fixed here 2026-08-15 (found while building the
                 # weekly bet-slip generator, see README):
                 # 1. predicted_prob_over was used directly regardless of which side
                 #    (over/under) this specific row actually is -- a confident UNDER
                 #    prediction was shown as if it endorsed the OVER row it happened
-                #    to be attached to. Now flipped (1 - p) when this row's choice is
-                #    "under".
+                #    to be attached to. Now computed separately for each side below.
                 # 2. predicted_prob_over answers "beats OUR proxy line", not "beats
                 #    Underdog's posted line" -- only valid when those two numbers are
                 #    close (see MAX_LINE_DIVERGENCE in utils.py). Now gated.
-                raw_prob_over = row.get("predicted_prob_over") if predictions is not None else None
-                choice_lower = str(row.get(choice_col, "")).lower()
-                if pd.notna(raw_prob_over) and choice_lower in ("over", "under"):
-                    model_prob = raw_prob_over if choice_lower == "over" else 1 - raw_prob_over
-                else:
-                    model_prob = None
-
-                proxy_line, line_value = row.get("proxy_line"), row.get(line_col)
+                raw_prob_over = any_row.get("predicted_prob_over") if predictions is not None else None
+                proxy_line = any_row.get("proxy_line")
                 line_ok = True
-                if model_prob is not None and pd.notna(proxy_line) and pd.notna(line_value) and proxy_line:
+                if pd.notna(raw_prob_over) and pd.notna(proxy_line) and pd.notna(line_value) and proxy_line:
                     line_ok = abs(float(line_value) - float(proxy_line)) / abs(float(proxy_line)) <= MAX_LINE_DIVERGENCE
+                has_model = pd.notna(raw_prob_over) and line_ok
 
-                has_model = model_prob is not None and line_ok
-                player_name = row[name_col]
                 fbg_status = depth_status.get(normalize_name(player_name)) if depth_status is not None else None
 
                 with st.container(border=True):
-                    photo_col, info_col, action_col = st.columns([1, 4, 1])
+                    photo_col, info_col = st.columns([1, 5])
                     with photo_col:
                         _leg_photo(player_name, photo_map)
                     with info_col:
-                        team = row.get("recent_team") if has_model else None
-                        position = row.get("position") if has_model else None
+                        team = any_row.get("recent_team") if has_model else None
+                        position = any_row.get("position") if has_model else None
                         meta = " · ".join(str(b) for b in [team, position] if pd.notna(b) and b)
                         st.markdown(f"**{player_name}**" + (f"  ·  {meta}" if meta else ""))
-                        st.markdown(f"{_pretty_stat(row.get(stat_col))} — **{str(row.get(choice_col, '')).upper()} {row.get(line_col, '')}**")
+                        st.markdown(f"{_pretty_stat(stat_name)} — **{line_value}**")
                         badges = st.columns(3)
                         b_i = 0
                         if has_model:
-                            with badges[b_i]:
-                                _confidence_badge(model_prob, row["confidence"])
-                            b_i += 1
-                            stats_season = row.get("stats_as_of_season")
+                            stats_season = any_row.get("stats_as_of_season")
                             if pd.notna(stats_season):
-                                stats_week = int(row["stats_as_of_week"])
+                                stats_week = int(any_row["stats_as_of_week"])
                                 if stats_season < freshest_season:
                                     with badges[b_i]:
                                         st.badge(f"stale: {int(stats_season)} wk{stats_week}", icon="⚠️", color="red")
                                     b_i += 1
-                        elif model_prob is not None and not line_ok:
+                        elif pd.notna(raw_prob_over) and not line_ok:
                             with badges[b_i]:
                                 st.badge(f"line mismatch (proxy {proxy_line:.1f})", icon="⚠️", color="red",
                                          help=f"Our proxy line ({proxy_line:.1f}) is too far from Underdog's real line ({line_value}) to trust this prediction for this specific bet.")
@@ -403,22 +415,39 @@ def page_parlay_builder():
                             with badges[b_i]:
                                 st.badge(fbg_status, icon="🚑", color="red", help="Footballguys depth chart status, pulled today")
                             b_i += 1
-                    with action_col:
-                        if st.button("➕ Add", key=f"add_{idx}", width="stretch"):
-                            position_prop = None
-                            if has_model and pd.notna(row.get("position")) and pd.notna(row.get("prop_type")):
-                                position_prop = f"{row['position']} {row['prop_type']}"
-                            st.session_state.slip.append({
-                                "player": row[name_col],
-                                "stat": row.get(stat_col),
-                                "choice": row.get(choice_col, ""),
-                                "line": row.get(line_col),
-                                "underdog_multiplier": row.get(mult_col) if mult_col else None,
-                                "my_prob": float(model_prob) if has_model else 0.55,
-                                "team": row.get("recent_team") if has_model else None,
-                                "position_prop": position_prop,
-                            })
-                            st.rerun()
+
+                    side_specs = [
+                        ("OVER", "over", over_row, raw_prob_over if pd.notna(raw_prob_over) else None),
+                        ("UNDER", "under", under_row, 1 - raw_prob_over if pd.notna(raw_prob_over) else None),
+                    ]
+                    side_cols = st.columns(2)
+                    for side_col, (label, choice, side_row, side_prob) in zip(side_cols, side_specs):
+                        with side_col:
+                            if side_row is None:
+                                st.caption(f"{label} not offered")
+                                continue
+                            st.markdown(f"**{label}**")
+                            if has_model and side_prob is not None:
+                                _confidence_badge(side_prob, any_row["confidence"])
+                            else:
+                                st.caption("No model prediction")
+                            price = side_row.get(mult_col) if mult_col else None
+                            st.caption(f"Pays {float(price):.2f}x" if pd.notna(price) else "Price unknown")
+                            if st.button(f"➕ Add {label}", key=f"add_{player_name}_{stat_name}_{line_value}_{choice}", width="stretch"):
+                                position_prop = None
+                                if has_model and pd.notna(any_row.get("position")) and pd.notna(any_row.get("prop_type")):
+                                    position_prop = f"{any_row['position']} {any_row['prop_type']}"
+                                st.session_state.slip.append({
+                                    "player": player_name,
+                                    "stat": stat_name,
+                                    "choice": choice,
+                                    "line": line_value,
+                                    "underdog_multiplier": float(price) if pd.notna(price) else None,
+                                    "my_prob": float(side_prob) if (has_model and side_prob is not None) else 0.55,
+                                    "team": any_row.get("recent_team") if has_model else None,
+                                    "position_prop": position_prop,
+                                })
+                                st.rerun()
 
     with tab_slip:
         if not st.session_state.slip:
