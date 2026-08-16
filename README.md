@@ -109,6 +109,15 @@ Done:
       output. Also fixed `pull_nflverse.py` to merge instead of overwrite (root cause
       of an earlier near-miss this session), which is what makes it safe to now run
       automatically every day alongside predictions regeneration. See log for detail.
+- [x] **Added a real depth-chart/injury source**: `data/pull_footballguys_depth.py` —
+      all 32 teams, offense/defense/special-teams, structured per-player status tags
+      (Q/PUP/IR/SUS/NFI/O). Checked @rclfootball first (Alex's tip) but it's Instagram/
+      Threads with no public feed and login-gated content — real dead end, not
+      pursued. Evaluated 6 dedicated depth-chart sites instead; most were paywalled or
+      had dead links, Footballguys was the one free + comprehensive + fresh option.
+      Wired into the dashboard as a browse page AND as a live 🚑 warning tag directly
+      in the Parlay Builder next to matching props. Not fed into the trained models
+      yet — no historical archive exists for it to validate against.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -377,6 +386,52 @@ before starting work to see what the other side left you.*
   confirm the daily task's nflverse step actually succeeds against a partial in-progress
   season (untested — behavior of `nfl_data_py` for "season requested but only some
   weeks have been played yet" is inferred, not confirmed against real data yet).
+
+  **Later same day — found a real depth-chart/roster-move source, per Alex asking
+  about @rclfootball on social media**: checked it out rather than assuming — it's
+  Instagram/Threads (not Twitter/X), 63K followers. Real technical dead end though:
+  neither platform exposes a public feed for third-party accounts, actual post content
+  is login-gated (confirmed via curl — raw HTML has only aggregate follower/post
+  counts, no actual posts), and getting real content out would mean either logging
+  into an account (can't handle credentials) or scraping tools that violate Meta's ToS
+  more seriously than anything else in this project so far. Didn't build anything
+  against it, said so plainly, and asked whether to check dedicated depth-chart sites
+  instead — Alex said yes.
+
+  Evaluated 6 candidates for real before picking one: Ourlads (no clean data found in
+  initial pass), Pro Football Network (free, fresh, offense-only, no status tags),
+  RotoWire (great per-player status tags but **paywalled** — "reserved for
+  subscribers" on all but ~6 teams alphabetically), FantasyPros (Premium/Subscribe/
+  Sign-In gated), Lineups.com (**dead link** — /nfl/depth-charts redirects to their
+  homepage), and **Footballguys** (free, all 32 teams, offense + defense + special
+  teams, explicit same-day "last updated" stamp, and — the actual point — structured
+  per-player status tags: Q/PUP/IR/SUS/NFI/O/CEL/EX). Real cross-source disagreement
+  found and noted rather than glossed over: PFN and Footballguys disagreed on the
+  Falcons' QB1 (Penix vs. Tagovailoa) — exact depth-chart *order* should be trusted
+  loosely regardless of source; the status tags are the reliable part.
+
+  New script: `data/pull_footballguys_depth.py`. Confirmed fully server-rendered
+  (all 32 teams present in one plain HTTP GET, verified by counting team-name and
+  category-class occurrences in the raw response) — no browser automation needed.
+  Added `beautifulsoup4` to requirements.txt for real structured HTML parsing (CSS
+  classes like `depth-chart-cat-off`, `pos-label`, `player starter`) rather than
+  fragile regex, since the nested position/player markup genuinely warranted it — this
+  is the first scraper in the project that needed more than `requests` + a basic
+  parser. First real pull: 2,626 player-position rows across all 32 teams, 342 with an
+  active status tag.
+
+  Wired into the dashboard two ways: a new "Depth Charts" browse page, and — the part
+  that actually matters — a live cross-reference in the Parlay Builder itself. Every
+  prop now shows a 🚑 warning tag when Footballguys currently has a status flag for
+  that player (verified live in a browser: e.g. "Kenyon Sadiq — season_receiving_yards
+  over 454.5 🚑 Q (Footballguys, today)"). Deliberately NOT fed into the trained models
+  as a feature — no historical archive exists for this source (same limitation as
+  SB Nation news), so there's nothing to validate it against yet. It's a live display
+  signal for now, same tier as the news feeds, not a backtested input.
+- Next: same open items as above. If depth-chart-as-a-feature ever gets tested
+  properly, it would need weeks of accumulated snapshots first (mirroring the Underdog
+  line archive's own bootstrap problem) — pulling it daily, which is now wired up,
+  is what would eventually make that possible.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting

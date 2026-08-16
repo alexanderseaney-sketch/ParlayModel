@@ -3,6 +3,7 @@ numpy
 scikit-learn
 xgboost
 requests
+beautifulsoup4
 python-dotenv
 nfl_data_py
 matplotlib

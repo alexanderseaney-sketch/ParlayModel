@@ -49,7 +49,7 @@ if not check_password():
 
 PAGE = st.sidebar.radio(
     "Navigate",
-    ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "SB Nation News", "NBC/PFT Rumor Mill", "Underdog Props", "Bet Log", "Run Data Pulls"],
+    ["Overview", "Parlay Builder", "NFL Stats", "Depth Charts", "ESPN News", "SB Nation News", "NBC/PFT Rumor Mill", "Underdog Props", "Bet Log", "Run Data Pulls"],
 )
 
 st.sidebar.markdown("---")
@@ -118,6 +118,21 @@ elif PAGE == "Parlay Builder":
             "to generate them (covers receiving yards, rushing yards, passing yards, and "
             "receptions). Falling back to manual probability entry until then."
         )
+
+    # Live depth-chart status (Q/PUP/IR/SUS/NFI/O), refreshed daily -- separate from
+    # the trained models (no historical archive exists to validate it as a feature
+    # yet, see README), but genuinely useful as a live warning next to a prediction
+    # since it updates same-day, unlike the official injury report it supplements.
+    depth = load_csv_if_exists("footballguys_depth.csv")
+    if depth is not None:
+        depth_status = (
+            depth[depth["status"].notna()]
+            .assign(_match_key=lambda d: d["player_name"].apply(normalize_name))
+            .drop_duplicates(subset="_match_key")
+            .set_index("_match_key")["status"]
+        )
+    else:
+        depth_status = None
 
     if "slip" not in st.session_state:
         st.session_state.slip = []
@@ -190,6 +205,11 @@ elif PAGE == "Parlay Builder":
                             label += f"  ⚠️ form as of {int(stats_season)} wk{stats_week} (stale — no games since)"
                         else:
                             label += f"  · form as of {int(stats_season)} wk{stats_week}"
+
+                if depth_status is not None:
+                    fbg_status = depth_status.get(normalize_name(row[name_col]))
+                    if fbg_status:
+                        label += f"  🚑 {fbg_status} (Footballguys, today)"
 
                 c1, c2 = st.columns([4, 1])
                 c1.write(label)
@@ -314,6 +334,45 @@ elif PAGE == "NFL Stats":
 
         st.caption(f"{len(filtered):,} of {len(df):,} rows")
         st.dataframe(filtered, width='stretch', height=500)
+
+
+# ---------------------------------------------------------------- Depth Charts
+elif PAGE == "Depth Charts":
+    st.title("Depth Charts (Footballguys)")
+    st.caption(
+        "All 32 teams, offense + defense + special teams, with structured per-player "
+        "status tags (Q/PUP/IR/SUS/NFI/O) -- freer and faster-updating than the "
+        "official injury report, which is often incomplete this early in a season."
+    )
+    df = load_csv_if_exists("footballguys_depth.csv")
+
+    if df is None:
+        st.warning("`footballguys_depth.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            teams = sorted(df["team_abbr"].dropna().unique())
+            team_filter = st.multiselect("Team", teams)
+        with col2:
+            categories = sorted(df["category"].dropna().unique())
+            category_filter = st.multiselect("Category", categories, default=["offense"])
+        with col3:
+            only_flagged = st.checkbox("Only players with a status tag", value=False)
+
+        filtered = df.copy()
+        if team_filter:
+            filtered = filtered[filtered["team_abbr"].isin(team_filter)]
+        if category_filter:
+            filtered = filtered[filtered["category"].isin(category_filter)]
+        if only_flagged:
+            filtered = filtered[filtered["status"].notna()]
+
+        st.caption(f"{len(filtered):,} of {len(df):,} rows")
+        st.dataframe(
+            filtered[["team_abbr", "position", "depth_rank", "is_starter", "player_name", "status"]]
+            .sort_values(["team_abbr", "position", "depth_rank"]),
+            width='stretch', height=500, hide_index=True,
+        )
 
 
 # ---------------------------------------------------------------- ESPN News

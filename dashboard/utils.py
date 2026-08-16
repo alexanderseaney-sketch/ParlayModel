@@ -25,6 +25,7 @@ EXPECTED_FILES = {
     "espn_news.csv": "data/pull_espn_news.py",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",
+    "footballguys_depth.csv": "data/pull_footballguys_depth.py",
     "underdog_props.csv": "data/pull_underdog.py",
 }
 
@@ -33,6 +34,7 @@ PULL_SCRIPTS = {
     "ESPN news": ["python3", "data/pull_espn_news.py"],
     "SB Nation team news": ["python3", "data/pull_sbnation_news.py"],
     "NBC Sports / PFT rumor mill": ["python3", "data/pull_nbcsports_news.py"],
+    "Footballguys depth charts": ["python3", "data/pull_footballguys_depth.py"],
     "Underdog pick'em props": ["python3", "data/pull_underdog.py"],
 }
 
