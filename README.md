@@ -151,6 +151,24 @@ Done:
       real mathematical error in how legs get COMBINED, which is literally what
       "predicting parlays" (Alex's actual ask) means. See log for the math and how it
       was verified.
+- [x] **Found and fixed two real, serious bugs while building a weekly bet-slip
+      generator** (Alex wanted suggested bets + sizing; Alex places every bet
+      themselves, this project never executes real-money transactions). Bug 1: matched
+      predictions to props by player+stat only, without checking which side (over/
+      under) the model actually favored -- a confident UNDER call was being shown/used
+      as if it endorsed the OVER row. Bug 2, more serious: `predicted_prob_over`
+      answers "beats OUR proxy line" (the player's own rolling average), not "beats
+      Underdog's actual posted line" -- those are only the same question when the two
+      numbers are close, and they often aren't (one real example found: a 4.1 proxy
+      compared against a real 65.5 line). Because a big mismatch produces an
+      artificially huge-looking "edge," ranking by edge without catching this actively
+      SURFACED the worst mismatches as the "best opportunities" -- the exact opposite
+      of what should happen. Both bugs existed in the dashboard's Parlay Builder too
+      (built earlier this session), not just the new script -- fixed in both places,
+      with `MAX_LINE_DIVERGENCE` centralized in `dashboard/utils.py` so the two don't
+      drift. Verified against live data: ~74% of matched props are naturally within
+      20% of each other, so this excludes genuinely incomparable cases, not most of
+      the board. See log for the full before/after numbers.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -639,6 +657,72 @@ before starting work to see what the other side left you.*
   approximation, if slips with 3+ same-team legs turn out to be common; (c) a real
   click-through UI verification once the automated browser cooperates, or a manual
   check by Alex.
+
+  **Later same day — Alex wants weekly bet suggestions, sized, that Alex places
+  themselves**: confirmed directly, this project never executes real-money
+  transactions or handles Alex's account, even with per-bet approval offered --
+  that's a hard boundary regardless of authorization, not a permission level to
+  unlock. What's genuinely useful and in-scope: generate the actual suggestion, sized,
+  each week.
+
+  Built `models/generate_weekly_bet_slip.py`: ranks real live Underdog opportunities
+  (straight legs + 2-leg correlated parlays, reusing this session's own correlation
+  math) by Kelly-criterion edge at REAL prices, splits a fixed weekly budget across
+  the top few proportionally. First real run found "7 +EV opportunities" -- which led
+  straight into the two-bug discovery below, so those first numbers were wrong and
+  were retracted before being presented as usable.
+
+  **Bug 1**: matched props to predictions by player+stat only, hardcoded to the
+  "over" side. A player the model confidently favored UNDER was being scored as if
+  the model liked the OVER at only that player's low probability -- backwards.
+  Fixed: resolve `my_side`/`my_prob` from whichever side `predicted_prob_over`
+  actually favors (>=0.5 -> over, else under -> 1-p), then match against THAT side's
+  real price specifically. Correlation phi values (measured for "over" outcomes)
+  needed a sign flip for legs whose favored side is "under" -- a standard identity,
+  corr(A, 1-B) = -corr(A,B) -- applied once per under-side leg in the pair.
+
+  **Bug 2, more serious, caught by manually checking the actual numbers rather than
+  trusting a clean-looking output**: `predicted_prob_over` answers "beats OUR proxy
+  line" (the player's own rolling average used throughout this whole project), not
+  "beats Underdog's actual posted line." Checked a specific "opportunity" the script
+  had ranked #1 (Jameson Williams, 91.6% model confidence) and found the proxy line
+  was 4.1 receiving yards while Underdog's real live line was 65.5 -- completely
+  different questions being silently treated as the same one. Worse: because a big
+  line mismatch mechanically produces a huge-looking "probability x price - 1" edge,
+  ranking purely by edge was systematically surfacing the WORST mismatches as the
+  "best opportunities" -- confirmed by checking the full board: 28 of 39 matched
+  props (72%) are naturally within 20% of each other and would have been fine, but
+  the ranking logic kept picking from the other 26% specifically.
+
+  Fixed with `MAX_LINE_DIVERGENCE = 0.20`, now centralized in `dashboard/utils.py`
+  rather than duplicated, gating out any match where Underdog's line and our proxy
+  line diverge by more than 20% -- with the exclusion count printed so this can't
+  silently narrow the board again without being visible. Re-ran clean: 3 real
+  opportunities survive (Jameson Williams under 65.5 at 9% line divergence, Alec
+  Pierce under 56.5 at 11%, Romeo Doubs under 38.5 at 17%), all genuinely priced
+  the model likes at REAL Underdog prices, not proxy-line artifacts.
+
+  **Same two bugs existed in the dashboard's Parlay Builder** (built earlier this
+  session) -- it does the identical player+stat matching. Fixed there too rather
+  than leaving a tool the project points Alex toward silently broken: the per-row
+  loop now resolves `model_prob` from the row's actual choice (over/under) and gates
+  display/use on the same `MAX_LINE_DIVERGENCE` check, showing a clear "⚠️ model line
+  too far from this line to trust" instead of a misleading confidence tag when it
+  fails. Verified: script output cross-checked against a direct live-data query
+  (confirmed Jameson Williams has two real rows in predictions -- receptions
+  proxy=4.1 and receiving_yards proxy=71.8 -- ruling out a name-collision bug before
+  concluding the real fix was correct), dashboard confirmed loading clean with no
+  console errors and consistent confidence-filter counts (688/1483, matching the
+  pre-fix baseline, as expected since the fix changes WHICH matches are trustworthy,
+  not the underlying prediction counts).
+- Next: the weekly bet-slip generator is real and usable now, but only tested against
+  one live snapshot (this week, preseason) -- worth watching over a few real weeks to
+  see if the +EV opportunities it finds hold up, especially once the regular season
+  starts and Underdog's lines get sharper (preseason lines may simply be less
+  efficient, a different explanation for real-looking edge than genuine model skill).
+  Not wired into the daily schedule yet -- deliberately left as an on-demand tool
+  Alex runs when actually planning a week's bets, rather than another automated
+  output to keep track of.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting

@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from utils import (
-    EXPECTED_FILES, PULL_SCRIPTS,
+    EXPECTED_FILES, PULL_SCRIPTS, MAX_LINE_DIVERGENCE,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name,
     correlation_adjusted_parlay_probability,
@@ -181,7 +181,8 @@ elif PAGE == "Parlay Builder":
                 # now that current_predictions.py covers four different prop types.
                 options_df = options_df.merge(
                     predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence",
-                                  "stats_as_of_season", "stats_as_of_week", "recent_team", "position", "prop_type"]],
+                                  "stats_as_of_season", "stats_as_of_week", "recent_team", "position",
+                                  "prop_type", "proxy_line"]],
                     left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
                     how="left",
                 )
@@ -191,8 +192,29 @@ elif PAGE == "Parlay Builder":
                 options_df = options_df[~below_bar | options_df["confidence"].isna() | (search != "")]
 
             for idx, row in options_df.iterrows():
-                model_prob = row.get("predicted_prob_over") if predictions is not None else None
-                has_model = pd.notna(model_prob) if model_prob is not None else False
+                # Two real bugs fixed here 2026-08-15 (found while building the
+                # weekly bet-slip generator, see README):
+                # 1. predicted_prob_over was used directly regardless of which side
+                #    (over/under) this specific row actually is -- a confident UNDER
+                #    prediction was shown as if it endorsed the OVER row it happened
+                #    to be attached to. Now flipped (1 - p) when this row's choice is
+                #    "under".
+                # 2. predicted_prob_over answers "beats OUR proxy line", not "beats
+                #    Underdog's posted line" -- only valid when those two numbers are
+                #    close (see MAX_LINE_DIVERGENCE in utils.py). Now gated.
+                raw_prob_over = row.get("predicted_prob_over") if predictions is not None else None
+                choice_lower = str(row.get(choice_col, "")).lower()
+                if pd.notna(raw_prob_over) and choice_lower in ("over", "under"):
+                    model_prob = raw_prob_over if choice_lower == "over" else 1 - raw_prob_over
+                else:
+                    model_prob = None
+
+                proxy_line, line_value = row.get("proxy_line"), row.get(line_col)
+                line_ok = True
+                if model_prob is not None and pd.notna(proxy_line) and pd.notna(line_value) and proxy_line:
+                    line_ok = abs(float(line_value) - float(proxy_line)) / abs(float(proxy_line)) <= MAX_LINE_DIVERGENCE
+
+                has_model = model_prob is not None and line_ok
 
                 label = f"{row[name_col]} — {row.get(stat_col, '?')} {row.get(choice_col, '')} {row.get(line_col, '')}"
                 if has_model:
@@ -206,6 +228,8 @@ elif PAGE == "Parlay Builder":
                             label += f"  ⚠️ form as of {int(stats_season)} wk{stats_week} (stale — no games since)"
                         else:
                             label += f"  · form as of {int(stats_season)} wk{stats_week}"
+                elif model_prob is not None and not line_ok:
+                    label += f"  ⚠️ model line ({proxy_line:.1f}) too far from this line ({line_value}) to trust"
 
                 if depth_status is not None:
                     fbg_status = depth_status.get(normalize_name(row[name_col]))

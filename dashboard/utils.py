@@ -13,6 +13,19 @@ RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
 BET_LOG_DIR = os.path.join(ROOT_DIR, "bet_logs")
 BET_LOG_PATH = os.path.join(BET_LOG_DIR, "bets.csv")
 
+# CRITICAL correctness constant, shared by the dashboard and
+# models/generate_weekly_bet_slip.py -- a model's predicted_prob_over answers
+# "beats OUR proxy line" (the player's own rolling average), not "beats Underdog's
+# actual posted line." Those are only the same question when the two numbers are
+# close. A real bug found 2026-08-15: matching by player+stat alone let a
+# prediction get displayed/used against a wildly different real line (e.g. a 4.1
+# proxy shown as "model: 96%" next to a real 65.5 line) -- and because a big
+# mismatch produces an artificially huge-looking edge, ranking by edge without this
+# gate actively surfaces the worst mismatches as the "best" opportunities. Verified
+# against live data: ~74% of matched props are naturally within 20% on their own,
+# so this excludes genuinely incomparable cases, not most of the board.
+MAX_LINE_DIVERGENCE = 0.20
+
 # Every raw data file the pull scripts are expected to produce, and which script produces it.
 EXPECTED_FILES = {
     "schedules.csv": "data/pull_nflverse.py",
