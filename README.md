@@ -100,6 +100,15 @@ Done:
       feasibility for real (ESPN still blocked, PFT's domain moved after a site
       consolidation, one candidate feed turned out stale despite returning HTTP 200)
       before building. Wired into the dashboard and the daily schedule.
+- [x] **Fixed two real gaps ahead of the regular season**: predictions used to silently
+      go stale with no way to tell (a player with no current-season games fell back to
+      last season's finale, treated as if current) and matched game context (injury/
+      weather/div-game) to the wrong game (whatever the rolling stats were dated to,
+      not the actual upcoming game). Both fixed — `current_predictions.py` now looks up
+      each player's real next scheduled game and makes both dates explicit in the
+      output. Also fixed `pull_nflverse.py` to merge instead of overwrite (root cause
+      of an earlier near-miss this session), which is what makes it safe to now run
+      automatically every day alongside predictions regeneration. See log for detail.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -314,6 +323,60 @@ before starting work to see what the other side left you.*
   the feeds themselves, which are already the freshest ones available from this
   publisher. Same open items as every other entry above: Streamlit Cloud deploy,
   Underdog archive accumulating.
+
+  **Later same day — getting ready for the real season, per Alex**: it's preseason
+  (real games barely mean anything predictively), so rather than chase live preseason
+  props, went looking for what would actually break once the regular season starts.
+  Found two real gaps by reading `current_predictions.py` critically instead of
+  assuming it was season-ready just because it worked today:
+
+  1. **No visibility into stale data.** Rolling stats need 3+ prior games *within a
+     season* (by design, avoids noisy small samples) — which means weeks 1-3 of every
+     new season have zero qualifying current-season rows for anyone. The code used to
+     silently fall back to a player's last game of the *previous* season and treat it
+     as current, with no way to tell from the output that it had done this.
+  2. **Context wired to the wrong game.** Injury status, div/primetime flag, weather,
+     and Vegas implied total were matched to whatever game a player's rolling stats
+     happened to be dated to — correct once a season is underway, wrong for the exact
+     situation above, and also just conceptually backwards for a "current prediction"
+     (a bettor cares about *this week's* matchup context, not last week's).
+
+  Fixed both: `current_predictions.py` now looks up each player's team's actual next
+  *unplayed* game from `schedules.csv` (`home_score` still null) and merges injury/
+  game-flags/game-context against THAT game specifically, not wherever the rolling
+  stats happened to end. Output now makes the two dates explicit instead of collapsing
+  them into one ambiguous `season`/`week` — `stats_as_of_season/week` (where the
+  rolling stats come from) vs. `next_season/week/opponent` (the actual game being
+  predicted). Confirmed the 2026 schedule is already published at the nflverse source
+  (272 games, real Vegas lines already set, Week 1 starts 2026-09-09) and pulled it in.
+  Real validation, not just code review: reran predictions and found genuine cases the
+  fix was built for — e.g. a player whose last qualifying game was **2020 week 16**
+  now surfaces that honestly instead of pretending it's current. Wired the same
+  distinction into the dashboard's Parlay Builder (⚠️ tag on any prediction older than
+  the freshest available data) and verified it renders correctly in a browser.
+  Known remaining limitation, stated plainly rather than solved: this assumes a player
+  is still on the team from their last recorded game — a trade or signing between then
+  and now wouldn't be caught (no roster/depth-chart pull exists in this project).
+
+  **Also fixed the root cause of today's earlier near-miss**: `pull_nflverse.py`'s
+  `save()` used to overwrite each file outright rather than merging — fine for one-off
+  historical backfills, actively dangerous for the weekly-during-season refresh this
+  project now needs, which would otherwise wipe prior weeks every single run. Now
+  merges into any existing file by the same key columns `validate()` already checks
+  (new rows win on key collisions -- e.g. a corrected stat), tested for real by
+  re-pulling 2026 schedules alone and confirming 2019-2025 stayed intact (2232 rows
+  before and after). This makes the existing daily scheduled task safe to extend with
+  a real nflverse refresh + automatic `current_predictions.py` regeneration, which it
+  now does (recent seasons only, `--skip-pbp` for speed) — the dashboard's predictions
+  will now actually stay current through the season without a manual re-run, which
+  they would NOT have before this fix.
+- Next: this was about correctness/plumbing, not new modeling ideas — the actual
+  predictive-power work (feature testing, the Underdog archive) is paused until real
+  regular-season data exists to test against, which is the right call given how
+  unpredictable preseason is. Worth a final live check once Week 1 actually happens:
+  confirm the daily task's nflverse step actually succeeds against a partial in-progress
+  season (untested — behavior of `nfl_data_py` for "season requested but only some
+  weeks have been played yet" is inferred, not confirmed against real data yet).
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting

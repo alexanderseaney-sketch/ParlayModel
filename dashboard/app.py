@@ -109,6 +109,9 @@ elif PAGE == "Parlay Builder":
 
     if predictions is not None:
         predictions["_match_key"] = predictions["player_display_name"].apply(normalize_name)
+        # "Freshest available" rather than a hardcoded season -- stays correct as new
+        # data gets pulled without needing to update this each year.
+        freshest_season = predictions["stats_as_of_season"].max()
     else:
         st.info(
             "No model predictions found yet — run `python3 models/current_predictions.py` "
@@ -161,7 +164,8 @@ elif PAGE == "Parlay Builder":
                 # a receiving-yards prediction to that same player's rushing-yards prop
                 # now that current_predictions.py covers four different prop types.
                 options_df = options_df.merge(
-                    predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence"]],
+                    predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence",
+                                  "stats_as_of_season", "stats_as_of_week"]],
                     left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
                     how="left",
                 )
@@ -179,6 +183,13 @@ elif PAGE == "Parlay Builder":
                     conf = row["confidence"]
                     tag = "🟢" if conf >= 0.4 else ("🟡" if conf >= 0.2 else "⚪")
                     label += f"  {tag} model: {model_prob*100:.0f}% (confidence {conf:.2f})"
+                    stats_season = row.get("stats_as_of_season")
+                    if pd.notna(stats_season):
+                        stats_week = int(row["stats_as_of_week"])
+                        if stats_season < freshest_season:
+                            label += f"  ⚠️ form as of {int(stats_season)} wk{stats_week} (stale — no games since)"
+                        else:
+                            label += f"  · form as of {int(stats_season)} wk{stats_week}"
 
                 c1, c2 = st.columns([4, 1])
                 c1.write(label)
