@@ -14,7 +14,7 @@ import streamlit as st
 from utils import (
     EXPECTED_FILES, PULL_SCRIPTS, MAX_LINE_DIVERGENCE, BET_LOG_PATH,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
-    find_column, load_current_predictions, normalize_name,
+    find_column, load_current_predictions, normalize_name, get_player_detail,
     correlation_adjusted_parlay_probability,
 )
 
@@ -574,42 +574,165 @@ def page_nfl_stats():
         st.dataframe(filtered, width='stretch', height=500)
 
 
+STATUS_LABELS = {
+    "Q": ("Questionable", "orange"),
+    "O": ("Out", "red"),
+    "IR": ("Injured Reserve", "red"),
+    "PUP": ("PUP", "gray"),
+    "SUS": ("Suspended", "violet"),
+    "NFI": ("Non-Football Injury", "gray"),
+}
+
+# Canonical left-to-right order within each position group -- deliberately a superset
+# of any one team's actual scheme (e.g. a 4-3 team has LDT/RDT, a 3-4 team has NT
+# instead) so both render correctly: a team only shows the codes it actually has data
+# for, in this order, rather than every team being forced into one scheme's slots.
+OFFENSE_GROUPS = [
+    ("Backfield", ["QB", "RB", "FB"]),
+    ("Receivers", ["WR", "TE"]),
+    ("Offensive Line", ["LT", "LG", "C", "RG", "RT"]),
+]
+DEFENSE_GROUPS = [
+    ("Line", ["LDE", "LDT", "NT", "RDT", "RDE"]),
+    ("Linebackers", ["LOLB", "LILB", "MLB", "RILB", "ROLB", "WLB", "SLB"]),
+    ("Secondary", ["LCB", "RCB", "SCB", "FS", "SS"]),
+]
+SPECIAL_TEAMS_GROUPS = [
+    ("Specialists", ["PK", "P", "LS", "H"]),
+    ("Return Game", ["KR", "PR"]),
+]
+POSITION_GROUPS = {"offense": OFFENSE_GROUPS, "defense": DEFENSE_GROUPS, "special_teams": SPECIAL_TEAMS_GROUPS}
+
+
+def _status_badge(status):
+    if not isinstance(status, str) or not status.strip():
+        return
+    label, color = STATUS_LABELS.get(status, (status, "gray"))
+    st.badge(label, color=color)
+
+
+@st.dialog("Player", width="large")
+def _player_detail_dialog(row: dict):
+    st.subheader(row["player_name"])
+    st.caption(" · ".join(str(b) for b in [row.get("team_name"), row["position"], f"Depth #{row['depth_rank']}"] if b))
+    _status_badge(row.get("status"))
+
+    detail = get_player_detail(row["player_name"])
+    if not detail:
+        st.caption("No model/stats/market data matched for this player yet.")
+        return
+
+    if "injury_report" in detail:
+        inj = detail["injury_report"]
+        with st.container(border=True):
+            st.markdown(f"**Latest injury report** — Week {int(inj['week'])}, {int(inj['season'])}")
+            status_val = inj.get("report_status")
+            st.write(status_val if isinstance(status_val, str) and status_val.strip() else "No designation")
+            primary = inj.get("report_primary_injury")
+            if isinstance(primary, str) and primary.strip():
+                st.caption(primary)
+
+    if "predictions" in detail:
+        with st.container(border=True):
+            st.markdown("**Model predictions** (vs. our own proxy line, not necessarily today's market line)")
+            for _, p in detail["predictions"].iterrows():
+                side = "over" if p["predicted_prob_over"] >= 0.5 else "under"
+                prob = p["predicted_prob_over"] if side == "over" else 1 - p["predicted_prob_over"]
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    st.write(f"{p['stat_name']} {side} {p['proxy_line']}")
+                with c2:
+                    _confidence_badge(prob, p["confidence"])
+
+    if "props" in detail:
+        with st.container(border=True):
+            st.markdown("**Current Underdog lines**")
+            cols = [c for c in ["stat_name", "choice", "stat_value", "american_price"] if c in detail["props"].columns]
+            st.dataframe(detail["props"][cols].sort_values("stat_name"), hide_index=True, width="stretch")
+
+    if "recent_games" in detail:
+        with st.container(border=True):
+            st.markdown("**Recent games**")
+            games = detail["recent_games"]
+            stat_cols = ["passing_yards", "rushing_yards", "receptions", "receiving_yards",
+                         "passing_tds", "rushing_tds", "receiving_tds", "fantasy_points_ppr"]
+            cols = ["season", "week", "opponent_team"] + [c for c in stat_cols if c in games.columns and games[c].fillna(0).ne(0).any()]
+            st.dataframe(games[cols], hide_index=True, width="stretch")
+
+
+def _position_slot(team_df: pd.DataFrame, position: str):
+    """One position's card: depth-ordered clickable players, top 4 visible, any
+    deeper backups tucked into an expander so a 13-deep WR room doesn't dominate
+    the page the way it would in a flat table."""
+    players = team_df[team_df["position"] == position].sort_values("depth_rank")
+    if players.empty:
+        return
+
+    with st.container(border=True):
+        st.markdown(f"**{position}**")
+        for i, (_, p) in enumerate(players.iterrows()):
+            if i == 4:
+                remaining = players.iloc[4:]
+                with st.expander(f"+{len(remaining)} more"):
+                    for _, p2 in remaining.iterrows():
+                        _player_button(p2)
+                break
+            _player_button(p)
+
+
+def _player_button(p: pd.Series):
+    label = f"{p['depth_rank']}. {p['player_name']}"
+    if isinstance(p.get("status"), str) and p["status"].strip():
+        label += f"  ({p['status']})"
+    # team_abbr+position+depth_rank, not footballguys_player_id -- the same real player
+    # often appears twice in the source data (e.g. a WR who's also the punt returner
+    # shows up under both WR and PR), which makes their player_id a legitimate
+    # duplicate here even though each occurrence needs its own widget key.
+    key = f"depth_player_{p['team_abbr']}_{p['position']}_{p['depth_rank']}"
+    if st.button(label, key=key,
+                 type="primary" if p["depth_rank"] == 1 else "secondary", width="stretch"):
+        _player_detail_dialog(p.to_dict())
+
+
 def page_depth_charts():
-    st.title("🏈 Depth Charts (Footballguys)")
+    st.title("🏈 Team Depth Charts")
     st.caption(
-        "All 32 teams, offense + defense + special teams, with structured per-player "
-        "status tags (Q/PUP/IR/SUS/NFI/O) -- freer and faster-updating than the "
-        "official injury report, which is often incomplete this early in a season."
+        "Offense, defense, and special teams by team, in depth order. Click a player "
+        "for their injury status, model predictions, current Underdog lines, and "
+        "recent games. Source: Footballguys, with structured status tags "
+        "(Q/PUP/IR/SUS/NFI/O) that update faster than the official injury report."
     )
     df = load_csv_if_exists("footballguys_depth.csv")
 
     if df is None:
         st.warning("`footballguys_depth.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
-    else:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            teams = sorted(df["team_abbr"].dropna().unique())
-            team_filter = st.multiselect("Team", teams)
-        with col2:
-            categories = sorted(df["category"].dropna().unique())
-            category_filter = st.multiselect("Category", categories, default=["offense"])
-        with col3:
-            only_flagged = st.checkbox("Only players with a status tag", value=False)
+        return
 
-        filtered = df.copy()
-        if team_filter:
-            filtered = filtered[filtered["team_abbr"].isin(team_filter)]
-        if category_filter:
-            filtered = filtered[filtered["category"].isin(category_filter)]
-        if only_flagged:
-            filtered = filtered[filtered["status"].notna()]
+    team_names = df.drop_duplicates("team_abbr").set_index("team_name")["team_abbr"].sort_index()
+    chosen_team_name = st.selectbox("Team", team_names.index)
+    team_abbr = team_names[chosen_team_name]
+    team_df = df[df["team_abbr"] == team_abbr]
 
-        st.caption(f"{len(filtered):,} of {len(df):,} rows")
-        st.dataframe(
-            filtered[["team_abbr", "position", "depth_rank", "is_starter", "player_name", "status"]]
-            .sort_values(["team_abbr", "position", "depth_rank"]),
-            width='stretch', height=500, hide_index=True,
-        )
+    tabs = st.tabs(["Offense", "Defense", "Special Teams"])
+    for tab, category in zip(tabs, ["offense", "defense", "special_teams"]):
+        with tab:
+            cat_df = team_df[team_df["category"] == category]
+            if cat_df.empty:
+                st.caption("No data pulled for this unit.")
+                continue
+            present_positions = set(cat_df["position"].unique())
+            groups = POSITION_GROUPS[category]
+            covered = {p for _, ps in groups for p in ps}
+            uncovered = sorted(present_positions - covered)
+            for group_name, canonical_positions in groups + [("Other", uncovered)]:
+                positions_here = [p for p in canonical_positions if p in present_positions]
+                if not positions_here:
+                    continue
+                st.markdown(f"##### {group_name}")
+                cols = st.columns(len(positions_here))
+                for col, position in zip(cols, positions_here):
+                    with col:
+                        _position_slot(cat_df, position)
 
 
 def page_underdog_props():

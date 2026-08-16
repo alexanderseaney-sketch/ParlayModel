@@ -207,6 +207,59 @@ def correlation_adjusted_parlay_probability(legs: list[dict]) -> dict:
 
     return {"naive_prob": naive_prob, "adjusted_prob": adjusted_prob, "adjustments": adjustments}
 
+
+def get_player_detail(player_name: str) -> dict:
+    """Gathers everything we know about a player across every other data source,
+    matched by normalize_name() -- the same loose-matching convention already used
+    to join predictions to Underdog props in generate_weekly_bet_slip.py. This is a
+    best-effort "here's what we have" lookup, not a required join: any source that
+    hasn't been pulled yet, or has no match for this player, is simply absent from
+    the returned dict rather than raising.
+
+    Returns a dict that may contain any of:
+      "injury_report"  -- most recent nflverse injury-report row (a Series)
+      "recent_games"   -- last 5 rows of weekly_stats.csv, oldest first (a DataFrame)
+      "predictions"    -- all current_player_predictions.csv rows for this player
+      "props"          -- all underdog_props.csv rows for this player
+    """
+    key = normalize_name(player_name)
+    result: dict = {}
+
+    injuries = load_csv_if_exists("injuries.csv")
+    if injuries is not None and "full_name" in injuries.columns:
+        injuries = injuries.copy()
+        injuries["_match_key"] = injuries["full_name"].apply(normalize_name)
+        matches = injuries[injuries["_match_key"] == key]
+        if not matches.empty:
+            result["injury_report"] = matches.sort_values(["season", "week"]).iloc[-1]
+
+    weekly = load_csv_if_exists("weekly_stats.csv")
+    if weekly is not None and "player_display_name" in weekly.columns:
+        weekly = weekly.copy()
+        weekly["_match_key"] = weekly["player_display_name"].apply(normalize_name)
+        matches = weekly[weekly["_match_key"] == key].sort_values(["season", "week"])
+        if not matches.empty:
+            result["recent_games"] = matches.tail(5)
+
+    predictions = load_current_predictions()
+    if predictions is not None and "player_display_name" in predictions.columns:
+        predictions = predictions.copy()
+        predictions["_match_key"] = predictions["player_display_name"].apply(normalize_name)
+        matches = predictions[predictions["_match_key"] == key]
+        if not matches.empty:
+            result["predictions"] = matches
+
+    props = load_csv_if_exists("underdog_props.csv")
+    if props is not None and "full_name" in props.columns:
+        props = props.copy()
+        props["_match_key"] = props["full_name"].apply(normalize_name)
+        matches = props[props["_match_key"] == key]
+        if not matches.empty:
+            result["props"] = matches
+
+    return result
+
+
 def run_pull_script(cmd: list[str]) -> tuple[bool, str]:
     """Runs a data-pull script and returns (success, combined_output)."""
     try:
