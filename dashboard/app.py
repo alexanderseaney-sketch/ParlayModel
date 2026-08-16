@@ -49,7 +49,7 @@ if not check_password():
 
 PAGE = st.sidebar.radio(
     "Navigate",
-    ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "SB Nation News", "Underdog Props", "Bet Log", "Run Data Pulls"],
+    ["Overview", "Parlay Builder", "NFL Stats", "ESPN News", "SB Nation News", "NBC/PFT Rumor Mill", "Underdog Props", "Bet Log", "Run Data Pulls"],
 )
 
 st.sidebar.markdown("---")
@@ -375,6 +375,50 @@ elif PAGE == "SB Nation News":
             with st.container(border=True):
                 st.markdown(f"**{row.get('headline', '(no headline)')}**")
                 st.caption(f"{row.get('team', '')} · {row.get('author', '')} · {row.get('published', '')}")
+                if pd.notna(row.get("summary")):
+                    st.write(row["summary"])
+                if pd.notna(row.get("link")):
+                    st.markdown(f"[Read more]({row['link']})")
+
+
+# ---------------------------------------------------------------- NBC/PFT Rumor Mill
+elif PAGE == "NBC/PFT Rumor Mill":
+    st.title("NBC Sports / ProFootballTalk Rumor Mill")
+    st.caption(
+        "Short, atomic insider-sourced roster/injury items (Mike Florio, Charean "
+        "Williams, etc.) -- different in kind from SB Nation's longer team recaps, "
+        "closer to \"ahead of the official injury report.\" Only ~4 items per feed per "
+        "pull, so this accumulates over time rather than being a deep archive."
+    )
+    df = load_csv_if_exists("nbcsports_news.csv")
+
+    if df is None:
+        st.warning("`nbcsports_news.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            feeds = sorted(df["feed"].dropna().unique()) if "feed" in df.columns else []
+            feed_filter = st.multiselect("Feed", feeds)
+        with col2:
+            search = st.text_input("Search headlines/summary")
+
+        filtered = df.copy()
+        if feed_filter:
+            filtered = filtered[filtered["feed"].isin(feed_filter)]
+        if search:
+            mask = (
+                filtered["headline"].astype(str).str.contains(search, case=False, na=False)
+                | filtered["summary"].astype(str).str.contains(search, case=False, na=False)
+            )
+            filtered = filtered[mask]
+
+        filtered = filtered.sort_values("published", ascending=False)
+        st.caption(f"{len(filtered):,} of {len(df):,} items")
+        for _, row in filtered.iterrows():
+            with st.container(border=True):
+                st.markdown(f"**{row.get('headline', '(no headline)')}**")
+                parts = [str(row[c]) for c in ("feed", "author", "published") if pd.notna(row.get(c))]
+                st.caption(" · ".join(parts))
                 if pd.notna(row.get("summary")):
                     st.write(row["summary"])
                 if pd.notna(row.get("link")):

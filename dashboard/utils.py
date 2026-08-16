@@ -24,6 +24,7 @@ EXPECTED_FILES = {
     "snap_counts.csv": "data/pull_nflverse.py",
     "espn_news.csv": "data/pull_espn_news.py",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
+    "nbcsports_news.csv": "data/pull_nbcsports_news.py",
     "underdog_props.csv": "data/pull_underdog.py",
 }
 
@@ -31,6 +32,7 @@ PULL_SCRIPTS = {
     "nflverse (schedules + stats + NGS + injuries + snaps)": ["python3", "data/pull_nflverse.py", "--years", "2023", "2024", "--skip-pbp"],
     "ESPN news": ["python3", "data/pull_espn_news.py"],
     "SB Nation team news": ["python3", "data/pull_sbnation_news.py"],
+    "NBC Sports / PFT rumor mill": ["python3", "data/pull_nbcsports_news.py"],
     "Underdog pick'em props": ["python3", "data/pull_underdog.py"],
 }
 

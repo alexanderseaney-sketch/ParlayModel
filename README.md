@@ -94,6 +94,12 @@ Done:
       looks close to tapped out; the Underdog line archive (already top priority) is
       the more promising remaining lever since it changes the target, not just the
       features. See log for the full breakdown.
+- [x] **Added a second news source**: `data/pull_nbcsports_news.py` (NBC Sports/PFT
+      rumor mill) — fast, atomic insider roster/injury blurbs, complementing SB
+      Nation's longer-form team recaps rather than replacing them. Checked technical
+      feasibility for real (ESPN still blocked, PFT's domain moved after a site
+      consolidation, one candidate feed turned out stale despite returning HTTP 200)
+      before building. Wired into the dashboard and the daily schedule.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -278,6 +284,36 @@ before starting work to see what the other side left you.*
   turn free text into a structured signal, e.g. detecting real injury/role-change
   language ahead of the official injury report). Feature-engineering-on-the-same-data-
   source appears close to tapped out for now.
+
+  **Later same day — second news source, per Alex asking whether a different one would
+  serve better**: SB Nation is longer-form team analysis; the specific thing we said we
+  wanted (injury/role signal ahead of the official report) is better served by a fast,
+  atomic insider-rumor source. Checked technical feasibility for real before building
+  anything (same discipline as every other data source this project uses) rather than
+  assuming: ESPN's news API stays blocked (confirmed again); Pro Football Talk's old
+  domain (`profootballtalk.nbcsports.com`) now redirects to `nbcsports.com/nfl/
+  profootballtalk` after an NBC site consolidation; `rotoworld.com` similarly redirects
+  to `nbcsports.com/fantasy`; `nbcsportsedge.com` doesn't resolve at all. No RSS link
+  tag on the new PFT page itself, but found two real working feeds by testing URL
+  patterns directly: `nbcsports.com/nfl.rss` (genuinely live, same-day items) and
+  `nbcsports.com/nfl/profootballtalk.rss` (real but ~1 day behind). A third candidate,
+  `.../profootballtalk/rumor-mill.rss`, returned HTTP 200 but with items 3+ weeks stale
+  — deliberately excluded rather than pulling dead data just because the endpoint
+  responds.
+
+  New script: `data/pull_nbcsports_news.py`, pulling both live feeds, deduped by link
+  into `data/raw/nbcsports_news.csv` (same accumulation pattern as the SB Nation
+  puller). Wired into the dashboard as its own page ("NBC/PFT Rumor Mill") and added to
+  the daily scheduled task alongside Underdog + SB Nation. Real limitation worth
+  stating plainly: each feed only holds ~4 items, so this is NOT a deep archive like SB
+  Nation's ~10-per-team pull — running it daily will miss items on busy news days. It's
+  additive (different in kind: short atomic insider blurbs vs. long-form team recaps),
+  not a replacement for SB Nation.
+- Next: if the sparse-item-count gap turns out to matter in practice, the fix is
+  tightening this specific puller's schedule (e.g. hourly) rather than anything about
+  the feeds themselves, which are already the freshest ones available from this
+  publisher. Same open items as every other entry above: Streamlit Cloud deploy,
+  Underdog archive accumulating.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
