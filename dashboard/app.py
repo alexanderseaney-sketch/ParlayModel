@@ -15,7 +15,8 @@ from utils import (
     EXPECTED_FILES, PULL_SCRIPTS, MAX_LINE_DIVERGENCE, BET_LOG_PATH,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
-    load_player_photos, correlation_adjusted_parlay_probability,
+    load_player_photos, load_player_jersey_numbers, get_player_news,
+    correlation_adjusted_parlay_probability,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -616,6 +617,11 @@ _CARD_CSS = """
             margin: 4px auto; font-weight: 700; font-size: 20px; }
 .pm-pos-pill { text-align: center; font-size: 11px; font-weight: 600; opacity: 0.65;
             text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.pm-dialog-photo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+            display: block; border: 2px solid rgba(128,128,128,0.35); }
+.pm-dialog-photo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: #6b7280;
+            color: white; display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 28px; }
 </style>
 """
 
@@ -629,14 +635,25 @@ def _status_badge(status):
 
 @st.dialog("Player", width="large")
 def _player_detail_dialog(row: dict):
-    st.subheader(row["player_name"])
-    st.caption(" · ".join(str(b) for b in [row.get("team_name"), row["position"], f"Depth #{row['depth_rank']}"] if b))
-    _status_badge(row.get("status"))
+    name_key = normalize_name(row["player_name"])
+    photo_url = load_player_photos().get(name_key)
+    jersey = load_player_jersey_numbers().get(name_key)
+
+    header_cols = st.columns([1, 3])
+    with header_cols[0]:
+        if isinstance(photo_url, str) and photo_url:
+            st.markdown(f'<img src="{photo_url}" class="pm-dialog-photo">', unsafe_allow_html=True)
+        else:
+            initials = "".join(p[0] for p in row["player_name"].split()[:2] if p).upper()
+            st.markdown(f'<div class="pm-dialog-photo-placeholder">{initials}</div>', unsafe_allow_html=True)
+    with header_cols[1]:
+        st.subheader(row["player_name"])
+        meta_bits = [row.get("team_name"), f"#{int(jersey)}" if jersey else None,
+                     row["position"], f"Depth #{row['depth_rank']}"]
+        st.caption(" · ".join(str(b) for b in meta_bits if b))
+        _status_badge(row.get("status"))
 
     detail = get_player_detail(row["player_name"])
-    if not detail:
-        st.caption("No model/stats/market data matched for this player yet.")
-        return
 
     if "injury_report" in detail:
         inj = detail["injury_report"]
@@ -674,6 +691,35 @@ def _player_detail_dialog(row: dict):
                          "passing_tds", "rushing_tds", "receiving_tds", "fantasy_points_ppr"]
             cols = ["season", "week", "opponent_team"] + [c for c in stat_cols if c in games.columns and games[c].fillna(0).ne(0).any()]
             st.dataframe(games[cols], hide_index=True, width="stretch")
+
+    if "snap_trend" in detail:
+        with st.container(border=True):
+            st.markdown("**Snap share, recent games**")
+            snaps = detail["snap_trend"]
+            pct_cols = [c for c in ["offense_pct", "defense_pct", "st_pct"]
+                        if c in snaps.columns and snaps[c].fillna(0).ne(0).any()]
+            cols = [c for c in ["season", "week", "opponent"] if c in snaps.columns] + pct_cols
+            st.dataframe(snaps[cols], hide_index=True, width="stretch")
+
+    if not detail:
+        st.caption("No model/stats/market data matched for this player yet.")
+
+    with st.container(border=True):
+        st.markdown("**Recent news**")
+        news_key = f"news_{row['team_abbr']}_{row['position']}_{row['depth_rank']}"
+        if st.button("📰 Pull recent news", key=f"pull_{news_key}"):
+            with st.spinner("Searching Google News..."):
+                st.session_state[news_key] = get_player_news(row["player_name"])
+        if news_key in st.session_state:
+            news_items = st.session_state[news_key]
+            if not news_items:
+                st.caption("No recent news found.")
+            for n in news_items:
+                headline = n.get("headline") or "(untitled)"
+                st.markdown(f"[{headline}]({n['link']})" if n.get("link") else headline)
+                meta = " · ".join(str(b) for b in [n.get("source"), n.get("published")] if b)
+                if meta:
+                    st.caption(meta)
 
 
 def _card_button(p: pd.Series, is_starter_card: bool):

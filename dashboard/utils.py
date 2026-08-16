@@ -2,10 +2,13 @@
 import os
 import subprocess
 import sys
+import urllib.parse
+import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -257,6 +260,14 @@ def get_player_detail(player_name: str) -> dict:
         if not matches.empty:
             result["props"] = matches
 
+    snaps = load_csv_if_exists("snap_counts.csv")
+    if snaps is not None and "player" in snaps.columns:
+        snaps = snaps.copy()
+        snaps["_match_key"] = snaps["player"].apply(normalize_name)
+        matches = snaps[snaps["_match_key"] == key].sort_values(["season", "week"])
+        if not matches.empty:
+            result["snap_trend"] = matches.tail(5)
+
     return result
 
 
@@ -276,6 +287,55 @@ def load_player_photos() -> dict[str, str]:
         for name, url in zip(deduped["full_name"], deduped["image_url"])
         if isinstance(url, str) and url
     }
+
+
+def load_player_jersey_numbers() -> dict[str, str]:
+    """normalize_name() -> jersey number, same source/coverage caveats as
+    load_player_photos() (both come from underdog_props.csv)."""
+    props = load_csv_if_exists("underdog_props.csv")
+    if props is None or "full_name" not in props.columns or "jersey_number" not in props.columns:
+        return {}
+    deduped = props.drop_duplicates("full_name")
+    return {
+        normalize_name(name): num
+        for name, num in zip(deduped["full_name"], deduped["jersey_number"])
+        if pd.notna(num)
+    }
+
+
+def get_player_news(player_name: str, max_items: int = 8) -> list[dict]:
+    """Live, on-demand news search via Google News' public RSS search (no key, no
+    login -- explicitly offered by Google for "rendering Google News results within
+    a personal feed reader for personal, non-commercial use," which is exactly this).
+    Deliberately NOT one of the bulk scheduled pulls (espn/sbnation/nbcsports_news.csv)
+    -- those are team/league-wide feeds that only catch a player if they're a big
+    enough story to appear in a general feed. This is a real-time, player-specific
+    search instead, triggered by the user clicking "Pull recent news" on that one
+    player's card, so it works for any player regardless of today's bulk pulls.
+    Quoting the name + "NFL" biases results toward football coverage and away from
+    unrelated people who share the name."""
+    query = urllib.parse.quote(f'"{player_name}" NFL')
+    url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; ParlayModel/1.0)"}, timeout=15)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+    except (requests.RequestException, ET.ParseError):
+        return []
+
+    items = []
+    channel = root.find("channel")
+    if channel is None:
+        return []
+    for item in channel.findall("item")[:max_items]:
+        source_el = item.find("source")
+        items.append({
+            "headline": item.findtext("title"),
+            "link": item.findtext("link"),
+            "published": item.findtext("pubDate"),
+            "source": source_el.text if source_el is not None else None,
+        })
+    return items
 
 
 def run_pull_script(cmd: list[str]) -> tuple[bool, str]:
