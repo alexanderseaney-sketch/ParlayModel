@@ -80,6 +80,13 @@ Done:
       matched on rushing_yds, not receiving_yds, etc). Also added an "SB Nation News"
       dashboard page for the puller built earlier this session — it existed but was
       never wired into the UI.
+- [x] **Independently re-validated all four prop models with a real walk-forward
+      backtest**: retrained each one from scratch using ONLY 2019-2023 data, then
+      scored all of 2024 blind (`models/backtest_holdout_2024.py`). Landed within 1-3
+      points of every previously reported number (e.g. receiving 66.9% vs. 67.1%
+      reported, receptions 72.3% vs. 72.6%) — real evidence the models generalize and
+      aren't overfit to the original validation process, not just a re-read of old
+      numbers. See log for full comparison table.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -171,15 +178,47 @@ before starting work to see what the other side left you.*
   (Overview, Parlay Builder, SB Nation News pages) against real pulled data, not just
   code review.
 - Next: Streamlit Cloud deploy is the last open item from the original list, untouched.
-  Also worth doing whenever picked back up: nflverse data in this environment only
-  covers 2024-2025 (2 seasons) — enough for current-form rolling stats but not enough
-  to retrain anything; pull the full 2019-2024 range here too if retraining work moves
-  to this environment. Two small pre-existing rough edges noticed but not touched (out
-  of scope for this session): `dashboard/utils.py` has an orphaned, uncallable
-  odds-to-probability helper (docstring + body with no `def` line, dead code, nothing
-  currently calls it); and the saved model pickles throw harmless
-  XGBoost/scikit-learn version-mismatch warnings on load (models were pickled with
-  slightly older library versions than what's installed here).
+  Two small pre-existing rough edges noticed but not touched (out of scope for this
+  session): `dashboard/utils.py` has an orphaned, uncallable odds-to-probability helper
+  (docstring + body with no `def` line, dead code, nothing currently calls it); and the
+  saved model pickles throw harmless XGBoost/scikit-learn version-mismatch warnings on
+  load (models were pickled with slightly older library versions than what's installed
+  here).
+
+  **Later same day — real out-of-time validation, per Alex's request**: pulled the full
+  2019-2023 range too (previously only had 2024-2025 here), specifically to genuinely
+  retrain each prop model using ONLY seasons before 2024, then score all of 2024 blind
+  — a real walk-forward test, not a re-read of previously reported numbers. New script:
+  `models/backtest_holdout_2024.py`. Used the exact same feature lists and
+  hyperparameters as production (introspected from each `.pkl`: XGBoost n_estimators=
+  200/max_depth=3/lr=0.05/subsample=0.8/colsample_bytree=0.8 for receiving/rushing/
+  receptions; LogisticRegression max_iter=3000 for passing), so this is a faithful
+  re-creation of the original leave-one-season-out methodology, independently rerun.
+
+  **Result: it holds up.** Fresh 2024-blind accuracy landed within 1-3 points of every
+  previously reported number:
+
+  | Prop | Fresh 2024-blind | @0.4 confidence | Previously reported |
+  |---|---|---|---|
+  | Receiving yards | 66.9% | 79.4% (817/2081 games) | 67.1% / 80.3% |
+  | Rushing yards | 69.9% | 81.9% (414/865 games) | 70.6% / 83% |
+  | Passing yards | 61.7% | 76.7% (86/465 games) | 61.7% / 79.7% |
+  | Receptions | 72.3% | 82.6% (1099/2081 games) | 72.6% / 84% |
+
+  This is real evidence the models aren't overfit to the original CV process — a
+  completely independent retrain, on real held-out data, in a different environment,
+  reproduces the claimed edge. Small note: passing's 0.4-confidence bucket is only 86
+  games, the noisiest of the four given the smaller QB dataset — directionally
+  consistent but hold that one number more loosely than the others.
+  (Data note: pulling 2019-2023 required overwriting `schedules.csv`/`pbp.csv`
+  mid-session since `pull_nflverse.py` overwrites per-file rather than appending —
+  recovered by backing up the untouched files first and re-pulling/merging 2024-2025
+  back in. All raw data in this environment now spans 2019-2025, with the known 2025
+  `weekly_stats` gap still in place.)
+- Next: same open items as above (Streamlit Cloud deploy). The backtest script is
+  reusable — worth rerunning against 2025 once nflverse publishes `weekly_stats` for
+  it, which would be the first genuinely-new-season validation rather than a rerun
+  against 2024.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
