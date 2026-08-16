@@ -26,6 +26,63 @@ from generate_weekly_bet_slip import (  # noqa: E402
 
 st.set_page_config(page_title="ParlayModel", page_icon="🏈", layout="wide")
 
+# Applied on every page (including the password gate itself) rather than per-page --
+# a consistent look shouldn't depend on which page happened to inject it first.
+# Selectors below were verified against the actual rendered DOM (Streamlit 1.61.1),
+# not guessed from memory -- data-testid/class names are internal and do shift
+# between versions. div[data-testid="stVerticalBlock"] in particular is intentionally
+# broad: Streamlit only applies a visible border/radius to it when a container was
+# actually created with border=True, so styling every instance is a safe no-op on
+# the many plain (unbordered) ones used just for layout.
+_GLOBAL_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+    --pm-radius: 8px;
+    --pm-border: rgba(230, 237, 243, 0.12);
+    --pm-surface: #161B22;
+    --pm-text: #E6EDF3;
+}
+
+h1, h2, h3 {
+    font-family: 'Space Grotesk', sans-serif !important;
+    letter-spacing: -0.01em;
+}
+
+.block-container {
+    padding-top: 2.5rem !important;
+}
+
+div[data-testid="stVerticalBlock"] {
+    border-radius: var(--pm-radius) !important;
+    border-color: var(--pm-border) !important;
+}
+
+div[data-testid^="stBaseButton-"] {
+    border-radius: var(--pm-radius) !important;
+}
+
+section[data-testid="stSidebar"] {
+    border-right: 1px solid var(--pm-border);
+}
+
+.pm-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+            display: block; margin: 4px auto; border: 2px solid var(--pm-border); }
+.pm-photo-placeholder { width: 64px; height: 64px; border-radius: 50%; background: var(--pm-surface);
+            color: var(--pm-text); display: flex; align-items: center; justify-content: center;
+            margin: 4px auto; font-weight: 600; font-size: 20px; border: 2px solid var(--pm-border); }
+.pm-pos-pill { text-align: center; font-size: 11px; font-weight: 600; opacity: 0.55;
+            text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.pm-dialog-photo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+            display: block; border: 2px solid var(--pm-border); }
+.pm-dialog-photo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: var(--pm-surface);
+            color: var(--pm-text); display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 28px; border: 2px solid var(--pm-border); }
+</style>
+"""
+st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+
 
 def check_password() -> bool:
     """Simple password gate for hosted deployment. Locally (no secrets.toml file at
@@ -137,14 +194,12 @@ def page_weekly_bet_slip():
     for i, c in enumerate(result["allocated"]):
         edge = c["model_prob"] * c["decimal_odds"] - 1
         with st.container(border=True):
-            head, action = st.columns([5, 1])
+            head, badge_col, action = st.columns([5, 1, 1])
             with head:
                 st.markdown(f"**${c['suggested_stake']:.2f}** — {c['description']}")
-                b1, b2, b3 = st.columns(3)
-                b1.badge(f"{c['type']}", color="violet")
-                b2.badge(f"model {c['model_prob']*100:.1f}%", color="blue")
-                b3.badge(f"edge {edge*100:+.1f}%", color="green" if edge > 0 else "red")
-                st.caption(f"real price: {c['decimal_odds']:.2f}x")
+                st.caption(f"{c['type']} · model {c['model_prob']*100:.1f}% · price {c['decimal_odds']:.2f}x")
+            with badge_col:
+                st.badge(f"{edge*100:+.1f}% edge", color="green" if edge > 0 else "red")
             with action:
                 if st.button("➕ Add to slip", key=f"wbs_add_{i}", width="stretch"):
                     _add_leg_details_to_slip(c["leg_details"])
@@ -608,24 +663,6 @@ SPECIAL_TEAMS_GROUPS = [
 ]
 POSITION_GROUPS = {"defense": DEFENSE_GROUPS, "special_teams": SPECIAL_TEAMS_GROUPS}
 
-_CARD_CSS = """
-<style>
-.pm-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
-            display: block; margin: 4px auto; border: 2px solid rgba(128,128,128,0.35); }
-.pm-photo-placeholder { width: 64px; height: 64px; border-radius: 50%; background: #6b7280;
-            color: white; display: flex; align-items: center; justify-content: center;
-            margin: 4px auto; font-weight: 700; font-size: 20px; }
-.pm-pos-pill { text-align: center; font-size: 11px; font-weight: 600; opacity: 0.65;
-            text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-.pm-dialog-photo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
-            display: block; border: 2px solid rgba(128,128,128,0.35); }
-.pm-dialog-photo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: #6b7280;
-            color: white; display: flex; align-items: center; justify-content: center;
-            font-weight: 700; font-size: 28px; }
-</style>
-"""
-
-
 def _status_badge(status):
     if not isinstance(status, str) or not status.strip():
         return
@@ -852,7 +889,6 @@ def page_depth_charts():
         st.warning("`footballguys_depth.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
         return
 
-    st.markdown(_CARD_CSS, unsafe_allow_html=True)
     photo_map = load_player_photos()
 
     team_names = df.drop_duplicates("team_abbr").set_index("team_name")["team_abbr"].sort_index()
