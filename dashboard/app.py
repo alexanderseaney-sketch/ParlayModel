@@ -942,6 +942,27 @@ def page_run_pulls():
     st.title("🔄 Run Data Pulls")
     st.caption("Runs the actual pull scripts. Output streams below once finished (can take a minute).")
 
+    if st.button("▶️ Run All", type="primary", width="stretch"):
+        n = len(PULL_SCRIPTS)
+        progress = st.progress(0.0, text="Starting...")
+        results = []
+        for i, (label, cmd) in enumerate(PULL_SCRIPTS.items()):
+            progress.progress(i / n, text=f"Running {label}... ({i + 1}/{n})")
+            success, output = run_pull_script(cmd)
+            results.append((label, success, output))
+        progress.progress(1.0, text="Done.")
+
+        n_ok = sum(1 for _, success, _ in results if success)
+        if n_ok == n:
+            st.success(f"All {n} pulls completed.")
+        else:
+            st.warning(f"{n_ok} of {n} pulls completed; {n - n_ok} had errors.")
+        for label, success, output in results:
+            with st.expander(f"{'✅' if success else '❌'} {label}"):
+                st.code(output or "(no output)")
+
+    st.divider()
+
     for label, cmd in PULL_SCRIPTS.items():
         if st.button(f"Run: {label}"):
             with st.spinner(f"Running {label}..."):
