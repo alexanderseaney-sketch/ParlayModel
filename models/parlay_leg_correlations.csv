@@ -1,0 +1,9 @@
+position_prop_a,position_prop_b,n,phi
+TE receiving_yards,TE receptions,6112,0.3447
+QB passing_yards,WR receiving_yards,8392,0.2306
+QB passing_yards,WR receptions,8392,0.174
+QB passing_yards,TE receiving_yards,3612,0.1737
+WR receiving_yards,WR receptions,28552,0.172
+QB passing_yards,TE receptions,3612,0.1341
+QB passing_yards,RB rushing_yards,4934,-0.0813
+RB rushing_yards,RB rushing_yards,2633,0.058

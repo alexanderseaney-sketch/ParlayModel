@@ -12,7 +12,8 @@ import streamlit as st
 from utils import (
     EXPECTED_FILES, PULL_SCRIPTS,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
-    find_column, parlay_combined_multiplier, load_current_predictions, normalize_name,
+    find_column, load_current_predictions, normalize_name,
+    correlation_adjusted_parlay_probability,
 )
 
 st.set_page_config(page_title="ParlayModel Dashboard", layout="wide")
@@ -180,7 +181,7 @@ elif PAGE == "Parlay Builder":
                 # now that current_predictions.py covers four different prop types.
                 options_df = options_df.merge(
                     predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence",
-                                  "stats_as_of_season", "stats_as_of_week"]],
+                                  "stats_as_of_season", "stats_as_of_week", "recent_team", "position", "prop_type"]],
                     left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
                     how="left",
                 )
@@ -214,6 +215,9 @@ elif PAGE == "Parlay Builder":
                 c1, c2 = st.columns([4, 1])
                 c1.write(label)
                 if c2.button("Add", key=f"add_{idx}"):
+                    position_prop = None
+                    if has_model and pd.notna(row.get("position")) and pd.notna(row.get("prop_type")):
+                        position_prop = f"{row['position']} {row['prop_type']}"
                     st.session_state.slip.append({
                         "player": row[name_col],
                         "stat": row.get(stat_col),
@@ -221,6 +225,8 @@ elif PAGE == "Parlay Builder":
                         "line": row.get(line_col),
                         "underdog_multiplier": row.get(mult_col) if mult_col else None,
                         "my_prob": float(model_prob) if has_model else 0.55,
+                        "team": row.get("recent_team") if has_model else None,
+                        "position_prop": position_prop,
                     })
                     st.rerun()
 
@@ -257,18 +263,37 @@ elif PAGE == "Parlay Builder":
 
         st.markdown("---")
 
-        probs = [leg["my_prob"] for leg in st.session_state.slip]
-        combined_prob = 1.0
-        for p in probs:
-            combined_prob *= p
-        combined_fair_mult = parlay_combined_multiplier(probs)
+        legs_for_corr = [
+            {"team": leg.get("team"), "position_prop": leg.get("position_prop"), "prob": leg["my_prob"]}
+            for leg in st.session_state.slip
+        ]
+        corr_result = correlation_adjusted_parlay_probability(legs_for_corr)
+        naive_prob = corr_result["naive_prob"]
+        adjusted_prob = corr_result["adjusted_prob"]
+        adjustments = corr_result["adjustments"]
+        combined_fair_mult = 1 / adjusted_prob if adjusted_prob > 0 else float("inf")
 
-        weak_legs = [leg for leg in st.session_state.slip if leg["underdog_multiplier"] and combined_fair_mult and 1 / leg["my_prob"] >= float(leg["underdog_multiplier"])]
+        weak_legs = [leg for leg in st.session_state.slip if leg["underdog_multiplier"] and 1 / leg["my_prob"] >= float(leg["underdog_multiplier"])]
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Combined true probability", f"{combined_prob * 100:.1f}%")
-        col2.metric("Your fair combined payout", f"{combined_fair_mult:.2f}x")
-        col3.metric("Legs without individual edge", len(weak_legs))
+        if adjustments:
+            st.info(
+                f"⚠️ **{len(adjustments)} correlated leg pair(s) detected** (same team, same "
+                "game) -- the naive independence math below is wrong for this slip. Using "
+                "real measured correlations instead (see models/analyze_parlay_correlations.py):"
+            )
+            for pos_prop_a, pos_prop_b, phi in adjustments:
+                direction = "raises" if phi > 0 else "lowers"
+                st.caption(f"　　{pos_prop_a} + {pos_prop_b}: phi={phi:+.3f} — {direction} the true combined hit rate vs. treating them as independent")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Naive (independent) probability", f"{naive_prob * 100:.1f}%")
+            col2.metric("Correlation-adjusted probability", f"{adjusted_prob * 100:.1f}%",
+                        delta=f"{(adjusted_prob - naive_prob) * 100:+.1f}pt")
+            col3.metric("Legs without individual edge", len(weak_legs))
+        else:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Combined true probability", f"{adjusted_prob * 100:.1f}%")
+            col2.metric("Your fair combined payout", f"{combined_fair_mult:.2f}x")
+            col3.metric("Legs without individual edge", len(weak_legs))
 
         if weak_legs:
             st.warning(
@@ -279,7 +304,7 @@ elif PAGE == "Parlay Builder":
             st.success("Every leg shows positive edge individually, based on the probabilities above.")
 
         stake = st.number_input("Stake ($)", min_value=0.0, value=10.0, step=1.0)
-        st.write(f"Potential payout at your fair odds: **${stake * combined_fair_mult:.2f}**")
+        st.write(f"Potential payout at your fair (correlation-adjusted) odds: **${stake * combined_fair_mult:.2f}**")
 
         st.markdown("---")
         st.caption(

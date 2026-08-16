@@ -4,6 +4,7 @@ import subprocess
 import sys
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -121,12 +122,71 @@ def find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
-def parlay_combined_multiplier(individual_probs: list[float]) -> float:
-    """Fair (no-vig) combined payout multiplier for independent legs, from true probabilities."""
-    combined_prob = 1.0
-    for p in individual_probs:
-        combined_prob *= p
-    return 1 / combined_prob if combined_prob > 0 else float("inf")
+LEG_CORRELATIONS_PATH = os.path.join(ROOT_DIR, "models", "parlay_leg_correlations.csv")
+
+
+def load_leg_correlations() -> dict[frozenset, float]:
+    """Real, empirically-measured correlations between same-team same-game prop pairs
+    (models/analyze_parlay_correlations.py, 2019-2024 data) -- e.g. QB passing yards
+    and RB rushing yards on the same team are measurably NEGATIVELY correlated (pass-
+    heavy and run-heavy game scripts trade off), while QB passing yards and WR
+    receiving yards are measurably POSITIVELY correlated. Only pairs with |phi| >= 0.05
+    are in this file -- weaker measured correlations were judged noise, not signal, at
+    these sample sizes (see the analysis script for the full breakdown including nulls)."""
+    if not os.path.exists(LEG_CORRELATIONS_PATH):
+        return {}
+    df = pd.read_csv(LEG_CORRELATIONS_PATH)
+    return {
+        frozenset([row["position_prop_a"], row["position_prop_b"]]): row["phi"]
+        for _, row in df.iterrows()
+    }
+
+
+def correlation_adjusted_parlay_probability(legs: list[dict]) -> dict:
+    """legs: list of {"team": str, "position_prop": str, "prob": float}. Only legs with
+    both team and position_prop set participate in correlation lookups; others just
+    contribute their probability to the naive product untouched.
+
+    Naive combined probability assumes every leg is independent (current default
+    everywhere else in this file). This applies a real, measured correction for each
+    same-team pair that has a known correlation, using the phi-coefficient identity
+    P(A and B) = p_A*p_B + phi*sqrt(p_A(1-p_A)*p_B(1-p_B)), clamped to the Frechet-
+    Hoeffding bounds a joint probability can never violate regardless of phi
+    (P(A and B) can never exceed min(p_A, p_B) or be negative). For 3+ mutually-
+    correlated legs this multiplies independent pairwise corrections together rather
+    than solving a full joint distribution -- an approximation, not exact, but far
+    more honest than assuming zero correlation everywhere.
+
+    Returns {"naive_prob", "adjusted_prob", "adjustments": [(leg_a, leg_b, phi), ...]}."""
+    correlations = load_leg_correlations()
+
+    naive_prob = 1.0
+    for leg in legs:
+        naive_prob *= leg["prob"]
+
+    adjusted_prob = naive_prob
+    adjustments = []
+    for i in range(len(legs)):
+        for j in range(i + 1, len(legs)):
+            a, b = legs[i], legs[j]
+            if not a.get("team") or not b.get("team") or a["team"] != b["team"]:
+                continue
+            if a.get("position_prop") is None or b.get("position_prop") is None:
+                continue
+            key = frozenset([a["position_prop"], b["position_prop"]])
+            phi = correlations.get(key)
+            if phi is None:
+                continue
+
+            p_a, p_b = a["prob"], b["prob"]
+            joint = p_a * p_b + phi * np.sqrt(max(p_a * (1 - p_a) * p_b * (1 - p_b), 0))
+            joint = min(max(joint, max(0.0, p_a + p_b - 1)), min(p_a, p_b))
+
+            correction = joint / (p_a * p_b) if p_a * p_b > 0 else 1.0
+            adjusted_prob *= correction
+            adjustments.append((a["position_prop"], b["position_prop"], phi))
+
+    return {"naive_prob": naive_prob, "adjusted_prob": adjusted_prob, "adjustments": adjustments}
 
 def run_pull_script(cmd: list[str]) -> tuple[bool, str]:
     """Runs a data-pull script and returns (success, combined_output)."""

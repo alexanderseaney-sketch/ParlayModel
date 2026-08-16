@@ -134,6 +134,23 @@ Done:
       **This is now the 7th consecutive round of testing without a real win** across
       dozens of feature/architecture combinations. See log for the honest synthesis of
       what this pattern actually means going forward.
+- [x] **Found a real, previously-unexamined gap: the Parlay Builder's combined-
+      probability math has always silently assumed every leg is independent** (naive
+      `p1 * p2 * ... * pn`). Measured REAL correlation using 2019-2024 data
+      (`models/analyze_parlay_correlations.py`) instead of guessing. Found genuine,
+      large effects for several same-team pairings — most notably QB passing yards
+      correlates POSITIVELY with WR/TE receiving props (phi up to +0.23) and
+      NEGATIVELY with RB rushing yards (phi -0.08, pass-heavy vs. run-heavy game
+      script trading off) — while most other same-team pairings really are close to
+      independent, confirming the old math was fine there. Built a correlation-aware
+      combined-probability calculator and wired it into the Parlay Builder: it now
+      shows both the naive and the corrected probability whenever a slip contains a
+      known-correlated same-team pair, with the specific measured phi shown for
+      transparency. This is a different kind of improvement than the 7 null rounds
+      above — not another feature trying to nudge single-leg accuracy, but fixing a
+      real mathematical error in how legs get COMBINED, which is literally what
+      "predicting parlays" (Alex's actual ask) means. See log for the math and how it
+      was verified.
 
 See the Progress Log below for full detail on every round of testing.
 
@@ -558,6 +575,70 @@ before starting work to see what the other side left you.*
   bigger, riskier, not yet scoped. Continuing to search for incremental features on
   the current architecture has clearly diminishing returns at this point; said so
   directly rather than proposing a plausible-sounding 8th round.
+
+  **Later same day — Alex asked me to do whatever I thought would make the model
+  better at predicting PARLAYS specifically**, not single props. Took that literally:
+  the 7 rounds above were all about single-leg accuracy, but nothing in this project
+  had ever examined how legs get COMBINED. Checked `dashboard/utils.py`'s
+  `parlay_combined_multiplier` and the slip math in `app.py` — confirmed both just
+  multiply individual probabilities together, a textbook independence assumption,
+  never questioned or tested.
+
+  Built `models/analyze_parlay_correlations.py`: for every 2019-2024 game, gathers
+  each rostered skill player's real over_proxy_line outcome across all 4 props, then
+  for same-team same-game pairs, compares the actual joint hit rate to what pure
+  independence predicts (phi coefficient, -1 to +1). Real, substantial findings —
+  genuinely different in kind from the null rounds:
+
+  | Pairing (same team) | phi | What it means |
+  |---|---|---|
+  | TE receiving yds + TE receptions (same player) | +0.345 | Same player's own two stats -- highly redundant, not two independent bets |
+  | QB passing yds + WR receiving yds | +0.231 | Good passing games lift the WR corps together |
+  | QB passing yds + WR receptions | +0.174 | Same mechanism, receptions |
+  | QB passing yds + TE receiving yds | +0.174 | Same mechanism, TE |
+  | WR receiving yds + WR receptions (same player) | +0.172 | Same-player redundancy again |
+  | QB passing yds + TE receptions | +0.134 | Weaker TE version |
+  | **QB passing yds + RB rushing yds** | **-0.081** | **Real negative** -- pass-heavy and run-heavy game scripts trade off |
+  | RB rushing yds + RB rushing yds (different RBs) | +0.058 | Mild positive -- "team ran a lot today" outweighs committee competition |
+
+  Everything else tested (RB rushing vs. WR receiving, TE vs. WR, etc. on the same
+  team) came back genuinely close to independent (|phi| < 0.02) — confirming the old
+  math was actually fine for those pairings specifically, not wrong everywhere.
+
+  Saved the real (|phi| >= 0.05) pairings to `models/parlay_leg_correlations.csv` and
+  built `correlation_adjusted_parlay_probability()` in `dashboard/utils.py`: uses the
+  phi-coefficient identity P(A∩B) = p_A·p_B + phi·√(p_A(1-p_A)·p_B(1-p_B)), clamped to
+  the Frechet-Hoeffding bounds a joint probability can never violate. For 3+ legs this
+  multiplies independent pairwise corrections together (an approximation, not an exact
+  joint distribution, stated as such in the code) rather than leaving correlated legs
+  silently mispriced. Wired into the Parlay Builder: any slip containing a known-
+  correlated same-team pair now shows both the naive and corrected combined
+  probability, with the specific phi displayed. Removed the now-fully-superseded
+  `parlay_combined_multiplier` (confirmed unused anywhere else first).
+
+  Verified the math directly with 3 real sanity checks before trusting it: (1) a real
+  live pairing -- Joe Burrow (CIN QB passing_yds, p=47.3%) + Ja'Marr Chase (CIN WR
+  receiving_yds, p=32.4%) -- naive combined 15.32% correctly becomes 20.71% adjusted
+  (positive correlation raises the true joint probability, correctly lowering the fair
+  multiplier from 6.53x to 4.83x); (2) a different-team pair produces zero adjustment,
+  confirming the team-matching gate works; (3) a same-team QB+RB pair (known negative
+  phi) correctly comes out LOWER after adjustment, not higher. All three behaved
+  exactly as the underlying math predicts.
+
+  Honest caveat on verification: couldn't get the actual "Add to slip" button click to
+  register through the automated browser this round (a recurring tooling friction all
+  session, e.g. the search box earlier) despite the page loading with zero console
+  errors and the button code being structurally identical to the already-working
+  pre-existing pattern. Trusted the direct mathematical verification above over a
+  UI click-path that the tooling wouldn't cooperate with, rather than either skipping
+  verification or blocking on a browser automation issue unrelated to the actual code.
+- Next: this is the more promising lever going forward, not another single-prop
+  feature round. Worth extending: (a) opponent-team pairs, not just same-team (does a
+  shootout lift props on BOTH teams?), untested so far; (b) an actual full joint
+  distribution for 3+ mutually-correlated legs instead of the pairwise-multiplication
+  approximation, if slips with 3+ same-team legs turn out to be common; (c) a real
+  click-through UI verification once the automated browser cooperates, or a manual
+  check by Alex.
 
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
