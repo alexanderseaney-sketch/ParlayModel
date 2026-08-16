@@ -129,6 +129,32 @@ def _confidence_badge(model_prob: float, conf: float):
         st.badge(f"{pct} confident", icon="⚪", color="gray")
 
 
+def _pretty_stat(stat_name) -> str:
+    """receiving_yds -> Receiving Yds -- a readable label instead of a raw column
+    name, used anywhere a prop's stat type is shown to a human rather than matched
+    against other data."""
+    if not isinstance(stat_name, str) or not stat_name:
+        return "?"
+    return stat_name.replace("_", " ").title()
+
+
+def _leg_photo(player_name: str, photo_map: dict):
+    """The player photo (or initials placeholder) used on every leg/bet card --
+    Weekly Bet Slip, Parlay Builder, Bet Log -- reusing the exact same .pm-photo /
+    .pm-photo-placeholder visual language already established on the Depth Charts
+    formation cards rather than inventing a second style."""
+    if not isinstance(player_name, str) or not player_name.strip():
+        st.markdown('<div class="pm-photo-placeholder">?</div>', unsafe_allow_html=True)
+        return
+    key = normalize_name(player_name)
+    photo_url = photo_map.get(key)
+    if isinstance(photo_url, str) and photo_url:
+        st.markdown(f'<img src="{photo_url}" class="pm-photo">', unsafe_allow_html=True)
+    else:
+        initials = "".join(p[0] for p in player_name.split()[:2] if p).upper()
+        st.markdown(f'<div class="pm-photo-placeholder">{initials}</div>', unsafe_allow_html=True)
+
+
 def _add_leg_details_to_slip(leg_details: list[dict]) -> None:
     """Shared by the Weekly Bet Slip 'Add to Parlay Builder' buttons and anything
     else that wants to push a suggestion into the slip -- one leg or a whole
@@ -260,6 +286,7 @@ def page_parlay_builder():
     else:
         depth_status = None
 
+    photo_map = load_player_photos()
     tab_slip, tab_add = st.tabs([f"📋 Current slip ({len(st.session_state.slip)})", "➕ Add legs"])
 
     with tab_add:
@@ -341,13 +368,20 @@ def page_parlay_builder():
                     line_ok = abs(float(line_value) - float(proxy_line)) / abs(float(proxy_line)) <= MAX_LINE_DIVERGENCE
 
                 has_model = model_prob is not None and line_ok
-                fbg_status = depth_status.get(normalize_name(row[name_col])) if depth_status is not None else None
+                player_name = row[name_col]
+                fbg_status = depth_status.get(normalize_name(player_name)) if depth_status is not None else None
 
                 with st.container(border=True):
-                    left, right = st.columns([4, 1])
-                    with left:
-                        st.markdown(f"**{row[name_col]}** — {row.get(stat_col, '?')} {row.get(choice_col, '')} {row.get(line_col, '')}")
-                        badges = st.columns(4)
+                    photo_col, info_col, action_col = st.columns([1, 4, 1])
+                    with photo_col:
+                        _leg_photo(player_name, photo_map)
+                    with info_col:
+                        team = row.get("recent_team") if has_model else None
+                        position = row.get("position") if has_model else None
+                        meta = " · ".join(str(b) for b in [team, position] if pd.notna(b) and b)
+                        st.markdown(f"**{player_name}**" + (f"  ·  {meta}" if meta else ""))
+                        st.markdown(f"{_pretty_stat(row.get(stat_col))} — **{str(row.get(choice_col, '')).upper()} {row.get(line_col, '')}**")
+                        badges = st.columns(3)
                         b_i = 0
                         if has_model:
                             with badges[b_i]:
@@ -369,7 +403,7 @@ def page_parlay_builder():
                             with badges[b_i]:
                                 st.badge(fbg_status, icon="🚑", color="red", help="Footballguys depth chart status, pulled today")
                             b_i += 1
-                    with right:
+                    with action_col:
                         if st.button("➕ Add", key=f"add_{idx}", width="stretch"):
                             position_prop = None
                             if has_model and pd.notna(row.get("position")) and pd.notna(row.get("prop_type")):
@@ -393,14 +427,18 @@ def page_parlay_builder():
 
         for i, leg in enumerate(st.session_state.slip):
             with st.container(border=True):
-                c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
-                c1.markdown(f"**{leg['player']}**  \n{leg['stat']} {leg['choice']} {leg['line']}")
-                leg["my_prob"] = c2.slider(
+                photo_col, info_col, prob_col, action_col = st.columns([1, 3, 2, 1])
+                with photo_col:
+                    _leg_photo(leg["player"], photo_map)
+                with info_col:
+                    st.markdown(f"**{leg['player']}**")
+                    st.markdown(f"{_pretty_stat(leg['stat'])} — **{str(leg['choice']).upper()} {leg['line']}**")
+                leg["my_prob"] = prob_col.slider(
                     "Win prob.", 0.0, 1.0, leg["my_prob"], 0.01, key=f"prob_{i}", label_visibility="collapsed",
                 )
                 fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
                 ud_mult = leg["underdog_multiplier"]
-                with c3:
+                with prob_col:
                     if ud_mult:
                         st.caption(f"UD: {ud_mult}x · fair: {fair_mult:.2f}x")
                         if fair_mult < float(ud_mult):
@@ -409,7 +447,7 @@ def page_parlay_builder():
                             st.badge("-EV", color="red")
                     else:
                         st.caption(f"fair: {fair_mult:.2f}x (UD odds unknown)")
-                if c4.button("🗑️", key=f"rm_{i}", help="Remove this leg", width="stretch"):
+                if action_col.button("🗑️", key=f"rm_{i}", help="Remove this leg", width="stretch"):
                     st.session_state.slip.pop(i)
                     st.rerun()
 
@@ -538,14 +576,43 @@ def page_bet_log():
     c3.metric("Lost", n_lost)
     c4.metric("Total staked", f"${staked:,.2f}")
 
+    RESULT_OPTIONS = ["pending", "won", "lost", "push"]
+    RESULT_COLOR = {"won": "green", "lost": "red", "push": "gray", "pending": "orange"}
+
+    photo_map = load_player_photos()
     editable = bets.sort_values("date", ascending=False).reset_index(drop=True)
-    st.caption("Update results directly in the table below (double-click a Result cell).")
-    edited = st.data_editor(
-        editable, width="stretch", height=400, hide_index=True, key="bet_log_editor",
-        column_config={"result": st.column_config.SelectboxColumn(options=["pending", "won", "lost", "push"])},
-    )
-    if not edited.equals(editable):
-        edited.to_csv(BET_LOG_PATH, index=False)
+    changed = False
+
+    for i, bet in editable.iterrows():
+        with st.container(border=True):
+            photo_col, info_col, result_col = st.columns([1, 4, 2])
+            with photo_col:
+                _leg_photo(bet.get("player"), photo_map)
+            with info_col:
+                st.markdown(f"**{bet.get('player') or '?'}**")
+                st.markdown(f"{_pretty_stat(bet.get('stat'))} — **{str(bet.get('choice', '')).upper()} {bet.get('line', '')}**")
+                stake_val = pd.to_numeric(bet.get("stake"), errors="coerce")
+                meta_bits = [
+                    bet.get("date"),
+                    f"${stake_val:.2f}" if pd.notna(stake_val) else None,
+                    bet.get("multiplier_or_odds"),
+                ]
+                st.caption(" · ".join(str(b) for b in meta_bits if pd.notna(b) and str(b).strip()))
+                if isinstance(bet.get("notes"), str) and bet["notes"].strip():
+                    st.caption(f"📝 {bet['notes']}")
+            with result_col:
+                current_result = bet.get("result") if bet.get("result") in RESULT_OPTIONS else "pending"
+                st.badge(current_result.upper(), color=RESULT_COLOR[current_result])
+                new_result = st.selectbox(
+                    "Result", RESULT_OPTIONS, index=RESULT_OPTIONS.index(current_result),
+                    key=f"bet_result_{i}", label_visibility="collapsed",
+                )
+                if new_result != current_result:
+                    editable.at[i, "result"] = new_result
+                    changed = True
+
+    if changed:
+        editable.to_csv(BET_LOG_PATH, index=False)
         st.rerun()
 
 
