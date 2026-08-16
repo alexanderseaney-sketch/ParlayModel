@@ -433,6 +433,30 @@ before starting work to see what the other side left you.*
   line archive's own bootstrap problem) — pulling it daily, which is now wired up,
   is what would eventually make that possible.
 
+  **Later same day — verified the daily scheduled task for real, per Alex's request**:
+  rather than trust a 6-step chain that had grown across the whole session without
+  ever being watched end-to-end, ran every step manually in order and read each
+  result. All 6 completed successfully. One real, confirmed finding along the way —
+  upgrading what was previously flagged as "inferred, not confirmed" to actually
+  verified: **nflverse's `player_stats` (weekly_stats) release for 2025 doesn't exist
+  yet**, not a bug here. Checked directly against nflverse's GitHub release API rather
+  than assuming: the 2024 release has ~85 file-format variants (csv/parquet/rds/qs ×
+  several stat groupings); 2025 has **zero** — genuinely unpublished at the source,
+  despite the season having ended back in February. Same root cause affects injuries
+  and snap_counts (also 404). NGS (Next Gen Stats) is on a different pipeline and DID
+  succeed for 2025. Confirmed the existing per-pull try/except in `pull_nflverse.py`
+  already handles this correctly (continues past the failure, reports it, doesn't
+  crash the rest of the chain) — this was designed-for but untested until now. Steps
+  2-6 (Underdog, SB Nation, NBC/PFT, Footballguys, predictions regen) all ran clean;
+  predictions came out byte-identical to before, correctly, since no underlying stats
+  actually changed.
+- Next: the daily task is confirmed working end-to-end as designed. The nflverse gap
+  is out of this project's control — worth re-checking once actual 2026 regular-season
+  games start being played, since that's a different, more actively-maintained part of
+  nflverse's pipeline than a stalled prior-season backfill might be. If 2025/2026
+  weekly_stats keeps 404ing once the season is underway, that would be a real problem
+  worth investigating harder; right now it's a known, gracefully-handled external gap.
+
 **2026-08-14 — [work]**
 - Did: Three more genuinely new angles tested, per Alex's request to keep exhausting
   ideas per prop type.
