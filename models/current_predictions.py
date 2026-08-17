@@ -121,6 +121,18 @@ PROP_CONFIGS = {
         "proxy_col": "receiving_yards_rolling",
         "context": ["game_flags"],
     },
+    # Same real Underdog stat ("rushing_yds") as "rushing_yards" above, but a
+    # separate model for QBs -- same reasoning as receiving_yards_rb: real
+    # rushing_yds props are heavily QB-driven (mobile quarterbacks), and
+    # ngs_rushing.csv has zero QB rows either, so this uses non-NGS features
+    # only (see train_rushing_yards_qb_props.py).
+    "rushing_yards_qb": {
+        "stat_name": "rushing_yds",
+        "model_path": "player_prop_rushing_yards_qb_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "rushing_yards_rolling",
+        "context": [],
+    },
     "passing_yards": {
         "stat_name": "passing_yds",
         "model_path": "player_prop_passing_yards_model.pkl",
@@ -313,7 +325,7 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type in ("receiving_yards", "receiving_yards_rb"):
         from player_prop_features import build_receiving_yards_dataset
         return build_receiving_yards_dataset(min_week=min_week)
-    if prop_type == "rushing_yards":
+    if prop_type in ("rushing_yards", "rushing_yards_qb"):
         from player_prop_rushing_features import build_rushing_yards_dataset
         return build_rushing_yards_dataset(min_week=min_week)
     if prop_type == "passing_yards":

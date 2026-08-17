@@ -23,6 +23,10 @@ HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
 
 def main():
     df = build_rushing_yards_dataset(min_week=4)
+    # Explicit RB filter -- build_rushing_yards_dataset() now includes QB too (for the
+    # separate QB model, see train_rushing_yards_qb_props.py), so this can't rely on
+    # the base dataset being RB-only anymore the way it used to.
+    df = df[df["position"] == "RB"].copy()
     df = df.dropna(subset=["rushing_yards_rolling"])
     print(f"Dataset: {len(df)} RB player-games (2019-2024, week 4+)\n")
 

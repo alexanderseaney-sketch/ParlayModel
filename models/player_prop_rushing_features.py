@@ -1,10 +1,19 @@
 """
-Player-prop feature engineering for rushing yards (RB-focused). Same no-leakage
-discipline as the receiving-yards model: every feature is a strictly-prior rolling
-average (shift(1).expanding()).
+Player-prop feature engineering for rushing yards. Same no-leakage discipline as
+the receiving-yards model: every feature is a strictly-prior rolling average
+(shift(1).expanding()).
 
 Same honest limitation as the receiving model: backtested against the player's own
 trailing average as a proxy line, since no historical Underdog line archive exists yet.
+
+Includes QB in the base filter (not just RB) for the same reason receiving_yards
+includes RB: real Underdog rushing_yds props are heavily QB-driven (mobile
+quarterbacks), and excluding them by position was a real coverage bug, not a
+data limitation -- confirmed via a live-props audit (2026-08-17), ~20 of 22
+unmatched rushing_yds legs were QBs with full NFL history. Same NGS gap as
+receiving_yards/RB, though: ngs_rushing.csv has zero QB rows, so the production
+QB model (train_rushing_yards_qb_props.py) uses non-NGS features only, same
+pattern as train_receiving_yards_rb_props.py.
 """
 import os
 
@@ -20,7 +29,7 @@ def build_rushing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     ngs_rushing = pd.read_csv(os.path.join(RAW_DIR, "ngs_rushing.csv"))
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
-    rb = weekly[weekly["position"] == "RB"].copy()
+    rb = weekly[weekly["position"].isin(["RB", "QB"])].copy()
     rb = rb[rb["carries"] >= MIN_CARRIES_TO_QUALIFY]
 
     keep_cols = ["player_id", "player_display_name", "position", "recent_team", "season", "week",
