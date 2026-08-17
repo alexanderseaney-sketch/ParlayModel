@@ -425,7 +425,18 @@ def page_parlay_builder():
                         team = depth_team.get(normalize_name(player_name)) if depth_team is not None else None
                         position = any_row.get("position") if has_model else None
                         meta = " · ".join(str(b) for b in [team, position] if pd.notna(b) and b)
-                        st.markdown(f"**{player_name}**" + (f"  ·  {meta}" if meta else ""))
+                        # Same player-profile dialog as Depth Charts, not a second
+                        # one -- name_col/stat_col/line_col already make this key
+                        # unique per card the same way the Add buttons below are keyed.
+                        if st.button(player_name, key=f"pname_{player_name}_{stat_name}_{line_value}", type="tertiary"):
+                            _player_detail_dialog({
+                                "player_name": player_name,
+                                "team_abbr": team,
+                                "position": position,
+                                "status": fbg_status,
+                            })
+                        if meta:
+                            st.caption(meta)
                         st.markdown(f"{_pretty_stat(stat_name)} — **{line_value}**")
                         badges = st.columns(3)
                         b_i = 0
@@ -813,7 +824,12 @@ def _status_badge(status):
 
 @st.dialog("Player", width="large")
 def _player_detail_dialog(row: dict):
-    name_key = normalize_name(row["player_name"])
+    """row only strictly needs "player_name" -- everything else is optional so this
+    same dialog works from both Depth Charts (full depth-chart context: position,
+    depth_rank, team_name, status) and Parlay Builder (a prop leg, which has no
+    depth-chart slot at all -- just whatever team/position happen to be known)."""
+    player_name = row["player_name"]
+    name_key = normalize_name(player_name)
     photo_url = load_player_photos().get(name_key)
     jersey = load_player_jersey_numbers().get(name_key)
 
@@ -822,16 +838,21 @@ def _player_detail_dialog(row: dict):
         if isinstance(photo_url, str) and photo_url:
             st.markdown(f'<img src="{photo_url}" class="pm-dialog-photo">', unsafe_allow_html=True)
         else:
-            initials = "".join(p[0] for p in row["player_name"].split()[:2] if p).upper()
+            initials = "".join(p[0] for p in player_name.split()[:2] if p).upper()
             st.markdown(f'<div class="pm-dialog-photo-placeholder">{initials}</div>', unsafe_allow_html=True)
     with header_cols[1]:
-        st.subheader(row["player_name"])
-        meta_bits = [row.get("team_name"), f"#{int(jersey)}" if jersey else None,
-                     row["position"], f"Depth #{row['depth_rank']}"]
+        st.subheader(player_name)
+        depth_rank = row.get("depth_rank")
+        meta_bits = [
+            row.get("team_name") or row.get("team_abbr"),
+            f"#{int(jersey)}" if jersey else None,
+            row.get("position"),
+            f"Depth #{int(depth_rank)}" if depth_rank is not None else None,
+        ]
         st.caption(" · ".join(str(b) for b in meta_bits if b))
         _status_badge(row.get("status"))
 
-    detail = get_player_detail(row["player_name"])
+    detail = get_player_detail(player_name)
 
     if "injury_report" in detail:
         inj = detail["injury_report"]
@@ -884,10 +905,14 @@ def _player_detail_dialog(row: dict):
 
     with st.container(border=True):
         st.markdown("**Recent news**")
-        news_key = f"news_{row['team_abbr']}_{row['position']}_{row['depth_rank']}"
+        # name_key alone is enough to be unique per player; position/depth_rank are
+        # appended when present (Depth Charts) purely so the same real player showing
+        # up at two depth-chart slots (e.g. a WR who's also the punt returner) gets
+        # separate cached results per slot, matching how their card buttons are keyed.
+        news_key = f"news_{name_key}_{row.get('position', '')}_{depth_rank if depth_rank is not None else ''}"
         if st.button("📰 Pull recent news", key=f"pull_{news_key}"):
             with st.spinner("Searching Google News..."):
-                st.session_state[news_key] = get_player_news(row["player_name"])
+                st.session_state[news_key] = get_player_news(player_name)
         if news_key in st.session_state:
             news_items = st.session_state[news_key]
             if not news_items:
