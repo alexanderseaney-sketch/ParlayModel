@@ -1,9 +1,9 @@
 """
 Computes each active player's CURRENT rolling features (as of the most recent
-available data) and scores them with all four trained prop ensembles — receiving
-yards, rushing yards, passing yards, receptions — this is what the dashboard's Parlay
-Builder loads to show real model confidence next to each prop, instead of the old
-manual slider. Previously this only covered receiving yards.
+available data) and scores them with all trained prop ensembles — receiving
+yards, rushing yards, passing yards, receptions, rush+rec TDs — this is what the
+dashboard's Parlay Builder loads to show real model confidence next to each prop,
+instead of the old manual slider. Previously this only covered receiving yards.
 
 Each model's exact feature list lives inside its own .pkl (saved at training time), so
 this file trusts that as the source of truth rather than re-declaring feature lists by
@@ -122,6 +122,13 @@ PROP_CONFIGS = {
         "proxy_col": "receptions_rolling",
         "context": ["game_flags"],
     },
+    "rush_rec_tds": {
+        "stat_name": "rush_rec_tds",
+        "model_path": "player_prop_rush_rec_tds_model.pkl",
+        "positions": ["RB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
 }
 
 
@@ -138,6 +145,9 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type == "receptions":
         from player_prop_receptions_features import build_receptions_dataset
         return build_receptions_dataset(min_week=min_week)
+    if prop_type == "rush_rec_tds":
+        from player_prop_rush_rec_tds_features import build_rush_rec_tds_dataset
+        return build_rush_rec_tds_dataset(min_week=min_week)
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
