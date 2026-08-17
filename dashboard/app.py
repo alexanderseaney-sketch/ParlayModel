@@ -138,6 +138,23 @@ def _pretty_stat(stat_name) -> str:
     return stat_name.replace("_", " ").title()
 
 
+def _team_next_week_lookup(schedules: pd.DataFrame) -> dict:
+    """team abbreviation -> that team's next unplayed game's week number. Computed
+    independently of model predictions (same idea as models/current_predictions.py's
+    _next_game_lookup, duplicated in miniature here) so a week filter can cover EVERY
+    prop card, not just the ones that happened to match a trained model -- Underdog
+    posts plenty of props for players/stat types nothing here predicts yet, and those
+    shouldn't just disappear from a week filter."""
+    home = schedules[["season", "week", "home_team", "away_team", "home_score"]].rename(
+        columns={"home_team": "team", "away_team": "opponent"})
+    away = schedules[["season", "week", "home_team", "away_team", "home_score"]].rename(
+        columns={"away_team": "team", "home_team": "opponent"})
+    all_games = pd.concat([home, away], ignore_index=True)
+    unplayed = all_games[all_games["home_score"].isna()].sort_values(["team", "season", "week"])
+    next_game = unplayed.groupby("team").head(1)
+    return next_game.set_index("team")["week"].to_dict()
+
+
 def _leg_photo(player_name: str, photo_map: dict):
     """The player photo (or initials placeholder) used on every leg/bet card --
     Weekly Bet Slip, Parlay Builder, Bet Log -- reusing the exact same .pm-photo /
@@ -299,6 +316,9 @@ def page_parlay_builder():
         depth_status = None
         depth_team = None
 
+    schedules_df = load_csv_if_exists("schedules.csv")
+    team_next_week = _team_next_week_lookup(schedules_df) if schedules_df is not None else None
+
     photo_map = load_player_photos()
     tab_slip, tab_add = st.tabs([f"📋 Current slip ({len(st.session_state.slip)})", "➕ Add legs"])
 
@@ -348,8 +368,13 @@ def page_parlay_builder():
                 df["_team"] = df[name_col].apply(normalize_name).map(depth_team)
             else:
                 df["_team"] = None
+            # Week comes from each player's TEAM's next unplayed game (see
+            # _team_next_week_lookup) rather than predictions' own next_week --
+            # that column only exists for props that matched a trained model, and a
+            # week filter should cover every card, matched or not.
+            df["_week"] = df["_team"].map(team_next_week) if team_next_week is not None else None
 
-            search_col, type_col, team_col_ui = st.columns([2, 2, 1])
+            search_col, type_col, team_col_ui, week_col_ui = st.columns([2, 2, 1, 1])
             with search_col:
                 search = st.text_input("Search player", placeholder="Type a name and press Enter…")
             with type_col:
@@ -365,6 +390,13 @@ def page_parlay_builder():
                 else:
                     team_filter = []
                     st.caption("Team filter needs Footballguys depth chart data.")
+            with week_col_ui:
+                if team_next_week is not None:
+                    week_options = sorted(int(w) for w in df["_week"].dropna().unique())
+                    week_filter = st.multiselect("Week", options=week_options, placeholder="All weeks")
+                else:
+                    week_filter = []
+                    st.caption("Week filter needs schedules.csv.")
 
             # No .head(50) here anymore -- it used to truncate BEFORE the predictions
             # merge below, so the default (unfiltered) view was just whatever order
@@ -380,7 +412,9 @@ def page_parlay_builder():
                 options_df = options_df[options_df[stat_col].isin(prop_type_filter)]
             if team_filter:
                 options_df = options_df[options_df["_team"].isin(team_filter)]
-            narrowed = bool(search) or bool(prop_type_filter) or bool(team_filter)
+            if week_filter:
+                options_df = options_df[options_df["_week"].isin(week_filter)]
+            narrowed = bool(search) or bool(prop_type_filter) or bool(team_filter) or bool(week_filter)
 
             if predictions is not None:
                 options_df = options_df.copy()
