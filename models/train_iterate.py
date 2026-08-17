@@ -32,7 +32,7 @@ def run_iteration(name: str, features: list[str], train: pd.DataFrame, test: pd.
     X_test = test[features].fillna(0)
     y_test = test["home_win"]
 
-    model = LogisticRegression(max_iter=1000)
+    model = LogisticRegression(max_iter=3000)
     model.fit(X_train, y_train)
 
     pred_probs = model.predict_proba(X_test)[:, 1]

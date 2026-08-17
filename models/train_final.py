@@ -42,7 +42,7 @@ def cv_accuracy(df: pd.DataFrame, features: list[str]) -> list[float]:
         test = df[df["season"] == holdout]
         X_train, y_train = train[features].fillna(0), train["home_win"]
         X_test, y_test = test[features].fillna(0), test["home_win"]
-        model = LogisticRegression(max_iter=1000)
+        model = LogisticRegression(max_iter=3000)
         model.fit(X_train, y_train)
         preds = (model.predict_proba(X_test)[:, 1] > 0.5).astype(int)
         accs.append(accuracy_score(y_test, preds))
@@ -89,7 +89,7 @@ def main():
     models = []
     for i in range(N_BOOTSTRAP):
         idx = rng.choice(n, size=n, replace=True)
-        m = LogisticRegression(max_iter=1000)
+        m = LogisticRegression(max_iter=3000)
         m.fit(X_full.iloc[idx], y_full.iloc[idx])
         models.append(m)
 

@@ -37,7 +37,7 @@ def cv_pooled(df, features):
         test = df[df["season"] == holdout]
         X_train, y_train = train[features].fillna(0), train["over_proxy_line"]
         X_test, y_test = test[features].fillna(0), test["over_proxy_line"].values
-        model = LogisticRegression(max_iter=1000)
+        model = LogisticRegression(max_iter=3000)
         model.fit(X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1]
         preds = (probs > 0.5).astype(int)

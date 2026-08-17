@@ -37,7 +37,7 @@ def main():
     print(f"Elo alone on this exact test set: {elo_only_acc*100:.1f}%\n")
 
     configs = [
-        ("v4_logreg_epa+elo", LogisticRegression(max_iter=1000), with_elo),
+        ("v4_logreg_epa+elo", LogisticRegression(max_iter=3000), with_elo),
         ("v5_xgboost_epa_only", XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.05, eval_metric="logloss"), base_features),
         ("v6_xgboost_epa+elo", XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.05, eval_metric="logloss"), with_elo),
     ]

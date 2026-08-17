@@ -232,11 +232,12 @@ Not done yet:
       news, depth charts) doesn't auto-refresh from the local daily pipeline --
       click through "Run Data Pulls" on the deployed site itself before checking it
       if it's been a while.
-- [ ] Minor/cosmetic, low priority: some player-prop model training runs throw
-      sklearn convergence warnings (lbfgs hitting max_iter) -- doesn't change
-      results; an orphaned unused helper function exists in `dashboard/utils.py`;
-      saved model pickles throw harmless XGBoost/scikit-learn version-mismatch
-      warnings on load.
+- [ ] Minor/cosmetic, low priority: an unused helper function may exist in
+      `dashboard/utils.py` per an earlier note — a quick reference-count check today
+      didn't turn up a clearly orphaned one (every function has 2+ references), but
+      that's not the same as a careful manual read, so leaving this open rather than
+      claiming it's resolved; saved model pickles throw harmless XGBoost/scikit-learn
+      version-mismatch warnings on load.
 
 ## Progress Log
 
@@ -256,6 +257,25 @@ before starting work to see what the other side left you.*
 ---
 
 ---
+
+**2026-08-17 — [work]**
+- Did: Quick pass on the minor/cosmetic known-issues list. Bumped `max_iter` from 1000
+  to 3000 on every `LogisticRegression` call across the historical exploratory training
+  scripts (`train_cv.py`, `train_ensemble_agreement.py`, `train_final.py`,
+  `train_iterate.py`, `train_iterate_v2.py`, `train_pbp_test.py`,
+  `train_player_props_v2.py`, `train_player_props_v3.py`, `train_scheme_test.py`) to
+  reduce sklearn convergence warnings — low-risk, strictly-safer change (higher
+  max_iter never hurts, only helps convergence). Verified all edited files still
+  compile. Also checked the "orphaned unused helper function" note in `dashboard/
+  utils.py` — a quick reference-count check across both dashboard files found every
+  function has 2+ references, so nothing obviously orphaned turned up. **Being honest
+  that this is a quick automated check, not a careful manual read** — left the item
+  open in Status rather than claiming it's resolved on weak evidence.
+- Blocked: nothing.
+- Next: none of the currently-active production model training (the inline retraining
+  done in recent "Big round"-style commits) used the old scripts this touched, so this
+  is cleanup of historical/exploratory code, not something that changes any current
+  model's numbers.
 
 **2026-08-17 — [work]**
 - Did: Alex asked to make data freshness less manual — added a banner that checks on

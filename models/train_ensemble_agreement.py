@@ -56,7 +56,7 @@ def main():
         idx = rng.choice(n_train, size=n_train, replace=True)
         X_boot, y_boot = X_train_full.iloc[idx], y_train_full.iloc[idx]
 
-        model = LogisticRegression(max_iter=1000)
+        model = LogisticRegression(max_iter=3000)
         model.fit(X_boot, y_boot)
         all_preds[i] = model.predict_proba(X_test)[:, 1]
 

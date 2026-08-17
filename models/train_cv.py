@@ -47,7 +47,7 @@ def main():
         for features, acc_list in [(STATS_FEATURES, stats_accs), (FULL_FEATURES, combo_accs)]:
             X_train, y_train = train[features].fillna(0), train["home_win"]
             X_test, y_test = test[features].fillna(0), test["home_win"]
-            model = LogisticRegression(max_iter=1000)
+            model = LogisticRegression(max_iter=3000)
             model.fit(X_train, y_train)
             preds = (model.predict_proba(X_test)[:, 1] > 0.5).astype(int)
             acc_list.append(accuracy_score(y_test, preds))
