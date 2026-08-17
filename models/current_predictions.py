@@ -42,6 +42,7 @@ import pandas as pd
 
 from individual_context_features import build_player_injury_status, build_game_flags
 from game_context_features import build_game_context, add_snap_share
+from defensive_sacks_features import DEFENSIVE_POSITIONS
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "current_player_predictions.csv")
@@ -192,6 +193,16 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    # First defensive-player prop -- built from pbp.csv sack attribution, not
+    # weekly_stats.csv (offensive only). See defensive_sacks_features.py.
+    # season_sacks was tried and dropped there (AUC ~0.5, see that file's comment).
+    "sacks": {
+        "stat_name": "sacks",
+        "model_path": "player_prop_sacks_model.pkl",
+        "positions": DEFENSIVE_POSITIONS,
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
 }
 
 # prop_type key -> underlying stat column in season_prop_features.STAT_COLS
@@ -228,6 +239,9 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
         df = build_passing_yards_dataset(min_week=min_week)
         df["proxy_line"] = df[f"{stat_col}_rolling"]
         return df
+    if prop_type == "sacks":
+        from defensive_sacks_features import build_sacks_dataset
+        return build_sacks_dataset(min_week=min_week)
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 

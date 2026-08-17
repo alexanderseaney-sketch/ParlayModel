@@ -40,6 +40,7 @@ EXPECTED_FILES = {
     "ngs_receiving.csv": "data/pull_nflverse.py",
     "injuries.csv": "data/pull_nflverse.py",
     "snap_counts.csv": "data/pull_nflverse.py",
+    "players.csv": "data/pull_nflverse.py",
     "espn_news.csv": "data/pull_espn_news.py",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",

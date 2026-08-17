@@ -149,6 +149,19 @@ def pull_snap_counts(years):
     return df
 
 
+def pull_players():
+    """Full player ID/name/position crosswalk, not year-scoped -- this is the only
+    reliable name source for defensive players, who don't appear in weekly_stats.csv
+    (that pull is offensive box-score stats only). Needed to label the defenders found
+    in pbp.csv's sack/tackle credit columns and defense_players roster column."""
+    df = nfl.import_players()
+    key_cols = ["gsis_id"]
+    df = df.dropna(subset=key_cols)
+    validate(df, "players", key_cols=key_cols, warn_null_cols=["display_name", "position"])
+    save(df, "players.csv", key_cols)
+    return df
+
+
 def main():
     parser = argparse.ArgumentParser(description="Pull and validate nflverse data")
     parser.add_argument("--years", nargs="+", type=int, required=True)
@@ -164,6 +177,7 @@ def main():
         ("ngs", lambda: pull_ngs(args.years)),
         ("injuries", lambda: pull_injuries(args.years)),
         ("snap_counts", lambda: pull_snap_counts(args.years)),
+        ("players", lambda: pull_players()),
     ]
     if not args.skip_pbp:
         pulls.insert(1, ("pbp", lambda: pull_pbp(args.years)))
