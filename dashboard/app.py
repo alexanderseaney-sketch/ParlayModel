@@ -338,7 +338,34 @@ def page_parlay_builder():
                 f"Actual columns: {list(df.columns)}"
             )
         else:
-            search = st.text_input("Search player", placeholder="Type a name and press Enter…")
+            # Team comes from the live depth-chart pull (see depth_team above), not
+            # from underdog_props.csv itself -- that file has no plain team-abbrev
+            # column, only an internal team_id UUID. Computed here (not just at
+            # render time) so the team filter's own option list and the actual
+            # filtering both use the same source.
+            df = df.copy()
+            if depth_team is not None:
+                df["_team"] = df[name_col].apply(normalize_name).map(depth_team)
+            else:
+                df["_team"] = None
+
+            search_col, type_col, team_col_ui = st.columns([2, 2, 1])
+            with search_col:
+                search = st.text_input("Search player", placeholder="Type a name and press Enter…")
+            with type_col:
+                prop_type_options = sorted(df[stat_col].dropna().unique())
+                prop_type_filter = st.multiselect(
+                    "Parlay type", options=prop_type_options, format_func=_pretty_stat,
+                    placeholder="All types",
+                )
+            with team_col_ui:
+                if depth_team is not None:
+                    team_options = sorted(df["_team"].dropna().unique())
+                    team_filter = st.multiselect("Team", options=team_options, placeholder="All teams")
+                else:
+                    team_filter = []
+                    st.caption("Team filter needs Footballguys depth chart data.")
+
             # No .head(50) here anymore -- it used to truncate BEFORE the predictions
             # merge below, so the default (unfiltered) view was just whatever order
             # the raw CSV happens to be in. Underdog's pull is dominated by season-
@@ -349,6 +376,11 @@ def page_parlay_builder():
             # past the default cutoff). Truncation now happens after sorting further
             # down, once matched props are guaranteed to be at the front.
             options_df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)] if search else df
+            if prop_type_filter:
+                options_df = options_df[options_df[stat_col].isin(prop_type_filter)]
+            if team_filter:
+                options_df = options_df[options_df["_team"].isin(team_filter)]
+            narrowed = bool(search) or bool(prop_type_filter) or bool(team_filter)
 
             if predictions is not None:
                 options_df = options_df.copy()
@@ -364,12 +396,12 @@ def page_parlay_builder():
                     how="left",
                 )
                 below_bar = options_df["confidence"] < min_confidence
-                if below_bar.any() and not search:
+                if below_bar.any() and not narrowed:
                     st.caption(f"{below_bar.sum()} props below the confidence bar are hidden. Search or lower the bar to see them.")
-                options_df = options_df[~below_bar | options_df["confidence"].isna() | (search != "")]
+                options_df = options_df[~below_bar | options_df["confidence"].isna() | narrowed]
                 options_df = options_df.sort_values("confidence", ascending=False, na_position="last")
 
-            if not search:
+            if not narrowed:
                 options_df = options_df.head(50)
 
             if not mult_col:
