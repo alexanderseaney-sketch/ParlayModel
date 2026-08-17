@@ -213,6 +213,20 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    "period_1_rush_rec_tds": {
+        "stat_name": "period_1_rush_rec_tds",
+        "model_path": "player_prop_period_1_rush_rec_tds_model.pkl",
+        "positions": ["RB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_2_rush_rec_tds": {
+        "stat_name": "period_1_2_rush_rec_tds",
+        "model_path": "player_prop_period_1_2_rush_rec_tds_model.pkl",
+        "positions": ["RB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
 }
 
 # prop_type key -> underlying stat column in season_prop_features.STAT_COLS
@@ -255,6 +269,10 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type == "period_first_touchdown_scored":
         from first_td_scorer_features import build_first_td_scorer_dataset
         return build_first_td_scorer_dataset(min_week=min_week)
+    if prop_type in ("period_1_rush_rec_tds", "period_1_2_rush_rec_tds"):
+        from period_rush_rec_tds_features import build_period_rush_rec_tds_dataset
+        period = "q1" if prop_type == "period_1_rush_rec_tds" else "h1"
+        return build_period_rush_rec_tds_dataset(period, min_week=min_week)
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
