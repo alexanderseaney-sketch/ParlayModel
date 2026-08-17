@@ -207,11 +207,14 @@ Not done yet:
 - [ ] **Receptions single-game Underdog lines aren't posted yet** (preseason only has
       season-long totals) — receptions is the strongest of the four models but
       currently has nothing to bet against. Recheck once the regular season starts.
-- [ ] **2025 nflverse weekly_stats/injuries/snap_counts still isn't published** at the
-      source (confirmed via their GitHub release API, not just inferred) — external,
-      out of this project's control. Worth rechecking periodically, especially once
-      2026 games start feeding a more actively-maintained part of their pipeline than
-      a stalled prior-season backfill.
+- [ ] **2025 nflverse `weekly_stats` specifically still isn't published** at the source
+      (confirmed 2026-08-17 via direct file URL check — genuine 404, not our bug).
+      Schedules/injuries/snap_counts/NGS for 2025 ARE now live and pulled in as of
+      today — this is narrower than it looked over the weekend. Since every prop
+      model needs `weekly_stats` to build a player-week row, this one file is what's
+      actually keeping "current" predictions stuck at 2024. External, out of this
+      project's control — recheck periodically (`curl -I` the file URL is enough,
+      no need for a full pull) rather than assuming it'll never update.
 - [ ] **Depth-chart data (Footballguys) isn't fed into the trained models yet** — no
       historical archive exists to validate it as a feature against. The daily pull
       is already quietly building that archive; revisit once there's enough of it.
@@ -244,6 +247,34 @@ before starting work to see what the other side left you.*
 - Blocked: anything that couldn't be finished here + why (e.g. network restriction, need a decision)
 - Next: what the other environment (or next session) should pick up
 ```
+
+---
+
+**2026-08-17 — [work]**
+- Did: Alex reported only seeing 2024 data, asked to verify every pull is current.
+  Checked live (not trusting the weekend's note) whether nflverse has published 2025
+  season data yet. **Real, mixed finding — progress since the weekend, but one genuine
+  remaining gap**: schedules, injuries, snap counts, and all three NGS datasets (passing/
+  rushing/receiving) DO now have real 2025 data — pulled and merged in (6,068 injury
+  rows, 26,612 snap-count rows, 1,402 NGS-receiving rows, all real 2025 season data,
+  verified by season breakdown after the pull). **`weekly_stats` — the core data source
+  every prop model's targets/yards/attempts features come from — is still stuck at 2024
+  week 22 (Super Bowl)**. Confirmed this is a real source-side gap, not our bug: hit the
+  actual file URL directly (`player_stats_2025.parquet`) and got a genuine 404, while
+  the 2024 file resolves fine. nflverse simply hasn't published that specific file yet,
+  even though four other 2025 datasets are live.
+- **Practical impact**: since every prop model needs `weekly_stats` to build a player-
+  week row at all, "current" predictions can't advance past 2024 regardless of the other
+  four datasets being current — confirmed directly (receiving-yards feature dataset's
+  latest available row is still 2024 week 22).
+- Blocked: this specific gap isn't fixable in our code — it's waiting on nflverse to
+  publish. Worth periodic rechecking (a quick `curl -I` on the file URL is enough,
+  doesn't need a full pull) rather than assuming it'll never update.
+- Next: **couldn't verify from this sandbox whether the non-nflverse pullers (ESPN,
+  SB Nation, NBC Sports, Underdog, Footballguys) are actually current** — those need
+  the home network. Worth checking at home whether the "daily scheduled task" mentioned
+  in earlier log entries is actually running and keeping those fresh, not just that it
+  was built to run daily.
 
 ---
 
