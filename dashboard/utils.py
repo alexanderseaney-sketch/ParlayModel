@@ -426,3 +426,43 @@ def run_pull_script(cmd: list[str]) -> tuple[bool, str]:
         return False, "Timed out after 10 minutes."
     except Exception as e:
         return False, f"Failed to run: {e}"
+
+
+STALE_THRESHOLD_HOURS = 24
+
+
+def data_freshness_check() -> dict:
+    """Checks every EXPECTED_FILE (except pbp.csv, which is skipped by default and not
+    part of the core freshness story) for missing/stale/ok, based on file mtime.
+    Returns {'missing': [filename, ...], 'stale': [(filename, age_hours), ...],
+    'ok': [filename, ...]}. Used by the app to show a freshness banner instead of
+    silently rendering pages against empty or day(s)-old data -- this matters most
+    right after a fresh Streamlit Community Cloud deploy, where data/raw/ starts
+    completely empty since it's gitignored (deliberately -- it's regenerated data,
+    not source code) and never ships with the deployment itself."""
+    missing, stale, ok = [], [], []
+    for filename in EXPECTED_FILES:
+        if filename == "pbp.csv":
+            continue
+        status = file_status(filename)
+        if not status["exists"]:
+            missing.append(filename)
+        else:
+            age_hours = (datetime.now() - status["modified"]).total_seconds() / 3600
+            if age_hours > STALE_THRESHOLD_HOURS:
+                stale.append((filename, age_hours))
+            else:
+                ok.append(filename)
+    return {"missing": missing, "stale": stale, "ok": ok}
+
+
+def run_all_pulls() -> list[tuple[str, bool, str]]:
+    """Runs every pull script in PULL_SCRIPTS in sequence. Returns
+    [(label, success, output), ...] for each. Used by the freshness banner's
+    one-click refresh, and reusable from Run Data Pulls page too."""
+    results = []
+    for label, cmd in PULL_SCRIPTS.items():
+        success, output = run_pull_script(cmd)
+        results.append((label, success, output))
+    return results
+

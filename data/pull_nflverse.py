@@ -64,10 +64,15 @@ def save(df: pd.DataFrame, filename: str, key_cols: list[str]) -> None:
     it runs. New rows win on key collisions (e.g. a corrected stat or an updated injury
     report), old rows outside the new pull's range are preserved."""
     out_path = os.path.join(RAW_DIR, filename)
-    if os.path.exists(out_path):
-        existing = pd.read_csv(out_path, low_memory=False)
-        combined = pd.concat([df, existing], ignore_index=True)
-        df = combined.drop_duplicates(subset=key_cols, keep="first")
+    if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+        try:
+            existing = pd.read_csv(out_path, low_memory=False)
+            combined = pd.concat([df, existing], ignore_index=True)
+            df = combined.drop_duplicates(subset=key_cols, keep="first")
+        except Exception as e:
+            print(f"   WARNING: existing {filename} is corrupt/unreadable ({e}) — "
+                  f"treating as no prior data rather than failing this pull. "
+                  f"The new data below will fully replace it.")
     df.to_csv(out_path, index=False)
     print(f"   saved -> {out_path} ({len(df)} rows total)\n")
 

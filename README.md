@@ -258,6 +258,32 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-17 — [work]**
+- Did: Alex asked to make data freshness less manual — added a banner that checks on
+  every page load instead of silently rendering against empty/stale data. Two states:
+  (1) **completely empty** (fresh Streamlit Cloud deploy — `data/raw/` is gitignored on
+  purpose, so it never ships with a deployment) → blocking red banner with a one-click
+  "Pull all data now" button, `st.stop()`s the rest of the app rather than showing
+  broken pages against zero data; (2) **partially missing/stale** (>24h old) → a
+  dismissible-by-refreshing yellow banner naming what's stale, with a "Refresh" button,
+  app still usable underneath. Built on the existing `EXPECTED_FILES`/`file_status()`
+  helpers already in `utils.py` rather than duplicating that logic.
+  **Testing this surfaced a real, separate bug**: an empty/corrupt existing CSV (e.g.
+  from an interrupted pull, or in this case a leftover 0-byte file from testing) crashed
+  the ENTIRE pull for that file type — `save()`'s merge step called `pd.read_csv()` on
+  the existing file with no error handling, so "no columns to parse from file" took
+  down schedules specifically while every other file pulled fine. **Fixed**: corrupt/
+  empty existing files are now treated as "no prior data" (logged clearly) rather than
+  crashing that pull — the new data fully replaces it instead. Verified against the
+  exact failure (recreated the 0-byte file, confirmed the old code crashed and the
+  fixed code doesn't). Tested all three banner states with Streamlit's `AppTest`
+  (empty/blocking, partial/warning, fresh/no-banner) before pushing.
+- Blocked: nothing — real feature, real bug fix, both genuinely tested.
+- Next: the 24-hour staleness threshold is uniform across all file types right now —
+  worth reconsidering once the season starts, since Underdog odds arguably need a
+  tighter window (hours, not a full day) than slower-moving stats data. Not urgent
+  before Week 1.
+
+**2026-08-17 — [work]**
 - Did: Alex pushed back that they'd checked online and nflverse looked current —
   investigated further rather than just re-asserting the earlier finding, and found
   something real: **nflverse restructured player stats before the 2025 season**

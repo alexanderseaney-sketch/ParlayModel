@@ -16,7 +16,7 @@ from utils import (
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
-    correlation_adjusted_parlay_probability,
+    correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -112,6 +112,52 @@ def check_password() -> bool:
 
 if not check_password():
     st.stop()
+
+
+def show_freshness_banner():
+    """Checks data freshness on every load and surfaces it -- instead of silently
+    rendering pages against empty or day(s)-old data. Matters most right after a fresh
+    Streamlit Community Cloud deploy: data/raw/ is gitignored on purpose (it's
+    regenerated data, not source code), so it starts completely empty and never ships
+    with the deployment itself -- nothing in it until something actually runs a pull."""
+    freshness = data_freshness_check()
+    total = len(freshness["missing"]) + len(freshness["stale"]) + len(freshness["ok"])
+
+    if total > 0 and len(freshness["missing"]) == total:
+        st.error(
+            "No data has been pulled yet in this deployment — everything below will be "
+            "empty until you pull it. Takes a minute or two."
+        )
+        if st.button("🔄 Pull all data now", type="primary"):
+            with st.spinner("Pulling all data sources — this can take a couple minutes..."):
+                results = run_all_pulls()
+            failed = [label for label, success, _ in results if not success]
+            if failed:
+                st.warning(f"Some pulls had issues: {', '.join(failed)}. See Run Data Pulls for details.")
+            else:
+                st.success("All data pulled.")
+            st.cache_data.clear()
+            st.rerun()
+        st.stop()
+
+    elif freshness["missing"] or freshness["stale"]:
+        parts = []
+        if freshness["missing"]:
+            parts.append(f"{len(freshness['missing'])} source(s) never pulled")
+        if freshness["stale"]:
+            oldest = max(freshness["stale"], key=lambda x: x[1])
+            parts.append(f"{len(freshness['stale'])} source(s) stale (oldest: {oldest[0]}, {oldest[1]:.0f}h old)")
+        with st.container(border=True):
+            c1, c2 = st.columns([5, 1])
+            c1.warning(f"⚠️ Data freshness: {' · '.join(parts)}. Predictions/props may be out of date.")
+            if c2.button("🔄 Refresh"):
+                with st.spinner("Refreshing all data sources..."):
+                    run_all_pulls()
+                st.cache_data.clear()
+                st.rerun()
+
+
+show_freshness_banner()
 
 if "slip" not in st.session_state:
     st.session_state.slip = []
