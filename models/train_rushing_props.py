@@ -1,88 +1,110 @@
 """
-Trains and validates the rushing-yards RB prop model, same rigor as receiving yards:
-5-season pooled CV, plus the confidence-filtered accuracy that's the metric that
-actually matters for real use.
+Trains and validates the production rushing-yards model for RB.
+
+Reconstructed 2026-08-17 to match what's actually deployed in
+player_prop_rushing_yards_model.pkl (XGBoost + Vegas implied total/weather/
+snap-share/primetime context) -- see train_player_props.py's docstring for
+why this reconstruction was necessary (the original script had drifted out
+of sync with a since-lost promotion script). Confirmed against the deployed
+.pkl's own "features" list.
+
+Also the vehicle for the "5 more years of history" pass -- see
+train_player_props.py's docstring for the validated finding (equal-weighted
+full available history consistently beats the old 2019-2024 window by
++0.001 to +0.003 AUC). ngs_rushing.csv starts in 2016, same floor as
+receiving.
 """
+import os
 import pickle
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, roc_auc_score
+from xgboost import XGBClassifier
 
 from player_prop_rushing_features import build_rushing_yards_dataset
+from individual_context_features import build_game_flags
+from game_context_features import build_game_context, add_snap_share
+
+RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 FEATURES = [
     "rushing_yards_rolling", "rushing_yards_last3", "carries_rolling", "carries_last3",
     "targets_rolling", "receiving_yards_rolling",
     "rush_yards_over_expected_per_att_rolling", "percent_attempts_gte_eight_defenders_rolling",
     "efficiency_rolling", "def_epa_allowed_rolling",
+    "team_implied_total", "temp", "wind", "is_dome", "offense_pct_rolling", "is_primetime",
 ]
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
+
+
+def _build_dataset() -> pd.DataFrame:
+    df = build_rushing_yards_dataset(min_week=4)
+    # Explicit RB filter -- build_rushing_yards_dataset() now includes QB too (for the
+    # separate QB model, see train_rushing_yards_qb_props.py).
+    df = df[df["position"] == "RB"].copy()
+    df = df.dropna(subset=["rushing_yards_rolling"])
+
+    schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
+    flags = build_game_flags(schedules).rename(columns={"team": "recent_team"})
+    context = build_game_context(schedules).rename(columns={"team": "recent_team"})
+
+    df = df.merge(flags, on=["recent_team", "season", "week"], how="left")
+    df = df.merge(context, on=["recent_team", "season", "week"], how="left")
+    df = add_snap_share(df)
+    return df
 
 
 def main():
-    df = build_rushing_yards_dataset(min_week=4)
-    # Explicit RB filter -- build_rushing_yards_dataset() now includes QB too (for the
-    # separate QB model, see train_rushing_yards_qb_props.py), so this can't rely on
-    # the base dataset being RB-only anymore the way it used to.
-    df = df[df["position"] == "RB"].copy()
-    df = df.dropna(subset=["rushing_yards_rolling"])
-    print(f"Dataset: {len(df)} RB player-games (2019-2024, week 4+)\n")
+    df = _build_dataset()
+    df = df.dropna(subset=FEATURES)
+    print(f"Dataset: {len(df)} RB player-games ({df['season'].min()}-{df['season'].max()}, week 4+)\n")
 
-    all_probs, all_correct = [], []
-    print(f"{'Holdout':<10} {'Accuracy':>10} {'n_test':>8}")
-    print("-" * 32)
+    all_probs, all_y, all_correct = [], [], []
+    print(f"{'Holdout':<10} {'Accuracy':>10} {'AUC':>8} {'n_test':>8}")
+    print("-" * 40)
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
         test = df[df["season"] == holdout]
-        X_train, y_train = train[FEATURES].fillna(0), train["over_proxy_line"]
-        X_test, y_test = test[FEATURES].fillna(0), test["over_proxy_line"].values
+        X_train, y_train = train[FEATURES], train["over_proxy_line"]
+        X_test, y_test = test[FEATURES], test["over_proxy_line"].values
 
-        model = LogisticRegression(max_iter=2000)
+        model = XGBClassifier(**XGB_PARAMS)
         model.fit(X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1]
         preds = (probs > 0.5).astype(int)
         acc = accuracy_score(y_test, preds)
-        print(f"{holdout:<10} {acc*100:>9.1f}% {len(test):>8}")
+        auc = roc_auc_score(y_test, probs)
+        print(f"{holdout:<10} {acc*100:>9.1f}% {auc:>8.3f} {len(test):>8}")
 
         all_probs.extend(probs)
+        all_y.extend(y_test)
         all_correct.extend(preds == y_test)
 
-    all_probs, all_correct = np.array(all_probs), np.array(all_correct)
-    print("-" * 32)
-    print(f"{'Mean':<10} {all_correct.mean()*100:>9.1f}%\n")
-
-    print("Confidence-filtered accuracy (pooled across all 5 seasons):")
+    all_probs, all_y, all_correct = np.array(all_probs), np.array(all_y), np.array(all_correct)
+    print("-" * 40)
+    print(f"{'Pooled':<10} {all_correct.mean()*100:>9.1f}% {roc_auc_score(all_y, all_probs):>8.3f}")
     conf = np.abs(all_probs - 0.5) * 2
-    for thresh in [0.0, 0.2, 0.3, 0.4, 0.5]:
-        mask = conf >= thresh
+    for t in [0.2, 0.3, 0.4]:
+        mask = conf >= t
         if mask.sum() > 0:
-            print(f"  >={thresh}: {all_correct[mask].mean()*100:.1f}% accuracy ({mask.sum()} games, {mask.mean()*100:.1f}% of total)")
+            print(f"  >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} rows, {mask.mean()*100:.1f}%)")
 
-    # Fit on all data, print coefficients
-    X_all, y_all = df[FEATURES].fillna(0), df["over_proxy_line"]
-    final_model = LogisticRegression(max_iter=2000)
-    final_model.fit(X_all, y_all)
-    print("\nFeature coefficients (positive = pushes toward OVER):")
-    for feat, coef in sorted(zip(FEATURES, final_model.coef_[0]), key=lambda x: -abs(x[1])):
-        print(f"  {feat}: {coef:+.4f}")
-
-    # Save production ensemble
+    X_all, y_all = df[FEATURES], df["over_proxy_line"]
     rng = np.random.RandomState(42)
     n = len(X_all)
     models = []
     for i in range(100):
         idx = rng.choice(n, size=n, replace=True)
-        m = LogisticRegression(max_iter=2000)
+        m = XGBClassifier(**XGB_PARAMS)
         m.fit(X_all.iloc[idx], y_all.iloc[idx])
         models.append(m)
 
-    import os
     out_path = os.path.join(os.path.dirname(__file__), "player_prop_rushing_yards_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": ["RB"]}, f)
-    print(f"\nSaved production model -> {out_path}")
+    print(f"\nSaved -> {out_path}")
 
 
 if __name__ == "__main__":
