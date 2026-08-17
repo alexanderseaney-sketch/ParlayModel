@@ -208,13 +208,18 @@ Not done yet:
       season-long totals) — receptions is the strongest of the four models but
       currently has nothing to bet against. Recheck once the regular season starts.
 - [ ] **2025 nflverse `weekly_stats` specifically still isn't published** at the source
-      (confirmed 2026-08-17 via direct file URL check — genuine 404, not our bug).
-      Schedules/injuries/snap_counts/NGS for 2025 ARE now live and pulled in as of
-      today — this is narrower than it looked over the weekend. Since every prop
-      model needs `weekly_stats` to build a player-week row, this one file is what's
+      — now doubly confirmed 2026-08-17 (checked both the old per-year URL structure
+      AND nflverse's new unified-file structure directly; neither has 2025 data).
+      **Also fixed a real, separate problem while checking**: our puller was using the
+      old per-year URL structure, which nflverse deprecated before the 2025 season in
+      favor of one unified file — fixed to use the new URL, which doesn't unlock 2025
+      data (it doesn't exist yet either way) but moves us onto the actively-maintained
+      path so future seasons appear automatically once published. Schedules/injuries/
+      snap_counts/NGS for 2025 ARE genuinely live (unaffected by this). Since every
+      prop model needs `weekly_stats` to build a player-week row, this one file is what's
       actually keeping "current" predictions stuck at 2024. External, out of this
-      project's control — recheck periodically (`curl -I` the file URL is enough,
-      no need for a full pull) rather than assuming it'll never update.
+      project's control — recheck periodically (a direct parquet read checking just the
+      `season` column is enough, no full pull needed) rather than assuming it'll never update.
 - [ ] **Depth-chart data (Footballguys) isn't fed into the trained models yet** — no
       historical archive exists to validate it as a feature against. The daily pull
       is already quietly building that archive; revisit once there's enough of it.
@@ -249,6 +254,36 @@ before starting work to see what the other side left you.*
 ```
 
 ---
+
+---
+
+**2026-08-17 — [work]**
+- Did: Alex pushed back that they'd checked online and nflverse looked current —
+  investigated further rather than just re-asserting the earlier finding, and found
+  something real: **nflverse restructured player stats before the 2025 season**
+  (`nflreadr` release notes: `load_player_stats()` switched to `nflfastR::calculate_stats()`
+  output, moving from per-year files to ONE unified file with all seasons combined).
+  Our puller (via `nfl_data_py`) was still using the old, deprecated per-year URL
+  structure — a genuinely real problem, since that path isn't guaranteed to keep
+  receiving future seasons at all. **Fixed `pull_weekly_stats()` to hit the new
+  unified URL directly** (`.../releases/download/player_stats/player_stats.parquet`),
+  verified end-to-end (33,287 rows, correct per-season breakdown matching a direct
+  raw-file check). This moves us onto the actively-maintained path going forward.
+  **However — checked the new file's actual season coverage directly, and 2025 still
+  isn't there.** Confirmed via two independent, genuinely different checks now (old
+  per-year URL AND the new unified file) that weekly player stats data for the 2025
+  season simply hasn't been published yet, full stop — not a stale-URL problem, not
+  our bug. Alex's "nflverse looks current" observation was likely about a different
+  part of nflverse (schedules, rosters, general site) — those genuinely are current,
+  as confirmed in the previous log entry; weekly player stats specifically is the one
+  piece still lagging, and that's now double-confirmed rather than assumed.
+- Blocked: still can't unlock 2025 weekly_stats — it doesn't exist at the source under
+  either structure. This is now about as rigorously verified as it can be without just
+  waiting for nflverse to publish.
+- Next: the URL fix is real, permanent value regardless of the 2025 gap — worth keeping.
+  Recheck periodically whether the new unified file's season coverage has grown past
+  2024 (a quick direct parquet read of just the `season` column is a cheap check, no
+  need for a full pull).
 
 **2026-08-17 — [work]**
 - Did: Alex reported only seeing 2024 data, asked to verify every pull is current.

@@ -113,8 +113,23 @@ def _pull_per_year(fetch_one_year, years, label):
 
 
 def pull_weekly_stats(years):
-    """Weekly player-level box score stats."""
-    df = _pull_per_year(lambda y: nfl.import_weekly_data([y]), years, "weekly_stats")
+    """Weekly player-level box score stats.
+
+    Uses nflverse's NEW unified file (one file, all seasons combined) rather than the
+    old per-year URLs nfl_data_py's import_weekly_data() still uses under the hood.
+    nflverse restructured this before the 2025 season (nflreadr's load_player_stats()
+    switched to nflfastR::calculate_stats() output) — the old per-year endpoint is
+    deprecated and won't necessarily keep receiving new seasons going forward, even
+    though it still works for years it already has. Confirmed 2026-08-17: verified
+    directly against the new unified file too (not just the old one) that 2025 season
+    data genuinely isn't published yet at the source under EITHER structure — this
+    switch doesn't unlock 2025 data (it doesn't exist yet either way), it just moves
+    us onto the actively-maintained path so future seasons show up automatically.
+    """
+    url = "https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.parquet"
+    full_df = pd.read_parquet(url)
+    df = full_df[full_df["season"].isin([int(y) for y in years])].copy()
+
     key_cols = ["player_id", "season", "week"]
     validate(df, "weekly_stats", key_cols=key_cols)
     save(df, "weekly_stats.csv", key_cols)
