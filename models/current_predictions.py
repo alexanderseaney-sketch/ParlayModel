@@ -108,6 +108,18 @@ PROP_CONFIGS = {
         "proxy_col": "rushing_yards_rolling",
         "context": ["game_flags", "game_context", "snap_share"],
     },
+    # Same real Underdog stat ("receiving_yds") as the "receiving_yards" config above,
+    # but a separate model trained on RB-only, non-NGS features (nflverse's NGS
+    # receiving pull has zero RB rows -- see train_receiving_yards_rb_props.py).
+    # Safe to split like this: a player is only ever one position, so this and
+    # "receiving_yards" never produce a duplicate row for the same real player.
+    "receiving_yards_rb": {
+        "stat_name": "receiving_yds",
+        "model_path": "player_prop_receiving_yards_rb_model.pkl",
+        "positions": ["RB"],
+        "proxy_col": "receiving_yards_rolling",
+        "context": ["game_flags"],
+    },
     "passing_yards": {
         "stat_name": "passing_yds",
         "model_path": "player_prop_passing_yards_model.pkl",
@@ -175,7 +187,7 @@ SEASON_PROP_STAT_COLS = {
 
 
 def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
-    if prop_type == "receiving_yards":
+    if prop_type in ("receiving_yards", "receiving_yards_rb"):
         from player_prop_features import build_receiving_yards_dataset
         return build_receiving_yards_dataset(min_week=min_week)
     if prop_type == "rushing_yards":
