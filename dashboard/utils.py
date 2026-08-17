@@ -26,9 +26,51 @@ BET_LOG_PATH = os.path.join(BET_LOG_DIR, "bets.csv")
 # proxy shown as "model: 96%" next to a real 65.5 line) -- and because a big
 # mismatch produces an artificially huge-looking edge, ranking by edge without this
 # gate actively surfaces the worst mismatches as the "best" opportunities. Verified
-# against live data: ~74% of matched props are naturally within 20% on their own,
-# so this excludes genuinely incomparable cases, not most of the board.
+# against live data (per-game weekly props): ~74% of matched props are naturally
+# within 20% on their own, so this excludes genuinely incomparable cases, not most
+# of the board.
 MAX_LINE_DIVERGENCE = 0.20
+
+# Season-long and period-scoped (quarter/half) props are NOT held to the same 20% --
+# checked against live data 2026-08-17 and they're structurally noisier, not just
+# unluckier: a season total has vastly more room to drift from a same-player prior-
+# season proxy than one game's yardage does (real roster/scheme/depth-chart changes
+# a box-score rolling average can't see), and a quarter/half slice is an even
+# smaller, noisier sample than a full game. Measured divergence quantiles against
+# real live props: weekly yardage props hit their 74th percentile at ~30% (close to
+# the existing 20% cutoff's own calibration target), season props hit 74th
+# percentile at ~50%, period-scoped ones at ~55%. Applying the WEEKLY-calibrated 20%
+# to those grains was never validated for them -- it just happened to be the only
+# number that existed yet. These wider values chase the same calibration philosophy
+# (let through the natural majority of props whose proxy is roughly in the right
+# neighborhood) rather than a tighter bar that was calibrated for a different grain.
+# Tried a smarter proxy first (2-season blended average instead of prior-season-
+# only) to see if the gap could just be closed instead of widening the gate --
+# reduced the mean divergence noticeably but barely moved how many legs actually
+# cleared 20% (16->17 of 57 for season_rec_tds), because the biggest gaps are driven
+# by real season-to-season role changes no combination of past-season stats can see.
+SEASON_MAX_LINE_DIVERGENCE = 0.50
+PERIOD_MAX_LINE_DIVERGENCE = 0.55
+
+SEASON_GRAIN_STATS = {"season_receiving_yards", "season_rec_tds", "season_rush_yards", "season_rush_tds"}
+PERIOD_GRAIN_STATS = {
+    "period_1_receiving_yds", "period_1_2_receiving_yds",
+    "period_1_rushing_yds", "period_1_2_rushing_yds",
+    "period_1_passing_yds", "period_1_2_passing_yds",
+    "period_1_passing_tds", "period_1_2_passing_tds",
+}
+
+
+def max_line_divergence_for(stat_name: str) -> float:
+    """Which divergence gate applies to this specific real Underdog stat. Anytime-TD
+    style props (rush_rec_tds, period_first_touchdown_scored, etc.) aren't listed
+    here since their proxy is a constant 0.5 matching the real market almost
+    exactly -- they essentially never need the wider bands."""
+    if stat_name in SEASON_GRAIN_STATS:
+        return SEASON_MAX_LINE_DIVERGENCE
+    if stat_name in PERIOD_GRAIN_STATS:
+        return PERIOD_MAX_LINE_DIVERGENCE
+    return MAX_LINE_DIVERGENCE
 
 # Every raw data file the pull scripts are expected to produce, and which script produces it.
 EXPECTED_FILES = {

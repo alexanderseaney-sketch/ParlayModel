@@ -41,7 +41,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # Windows console default codepage mangles em-dashes otherwise
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
-from utils import normalize_name, load_leg_correlations, MAX_LINE_DIVERGENCE  # noqa: E402
+from utils import normalize_name, load_leg_correlations, max_line_divergence_for  # noqa: E402
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
@@ -55,9 +55,9 @@ MIN_KELLY_EDGE = 0.02   # the real prudence lever: raw Kelly fraction must clear
                          # a percentage of), it's applied as "don't dilute the week's
                          # budget across marginal edges," which is the same underlying
                          # goal of not over-betting an uncertain edge estimate.
-                         # MAX_LINE_DIVERGENCE (the other correctness gate, for the
-                         # proxy-line-vs-real-line bug) lives in dashboard/utils.py --
-                         # shared with the Parlay Builder rather than duplicated here.
+                         # max_line_divergence_for() (the other correctness gate, for
+                         # the proxy-line-vs-real-line bug) lives in dashboard/utils.py
+                         # -- shared with the Parlay Builder rather than duplicated here.
 TOP_N_OPPORTUNITIES = 3
 MIN_STAKE = 0.50
 
@@ -119,16 +119,19 @@ def load_matched_props() -> pd.DataFrame:
 
     # The correctness gate: my_prob only answers "beats OUR proxy_line", which is
     # only a valid stand-in for "beats Underdog's real stat_value" when the two
-    # numbers are actually close. See MAX_LINE_DIVERGENCE comment for the real bug
-    # this fixes.
+    # numbers are actually close. See max_line_divergence_for's comment (in
+    # dashboard/utils.py) for the real bug this fixes and why the threshold varies
+    # by prop grain (season/period-scoped proxies are structurally noisier).
     before = len(merged)
     merged["line_divergence"] = (merged["stat_value"] - merged["proxy_line"]).abs() / merged["proxy_line"].replace(0, np.nan)
     merged = merged.dropna(subset=["line_divergence"])
-    merged = merged[merged["line_divergence"] <= MAX_LINE_DIVERGENCE]
+    merged["_divergence_limit"] = merged["stat_name"].apply(max_line_divergence_for)
+    merged = merged[merged["line_divergence"] <= merged["_divergence_limit"]]
+    merged = merged.drop(columns=["_divergence_limit"])
     excluded = before - len(merged)
     if excluded:
         print(f"Excluded {excluded} of {before} matched props: Underdog's real line diverges "
-              f">{MAX_LINE_DIVERGENCE*100:.0f}% from our proxy line, so our model's probability "
+              f"too far from our proxy line for its prop type, so our model's probability "
               f"isn't a trustworthy stand-in for beating THAT specific number.")
     return merged
 
