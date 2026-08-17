@@ -283,8 +283,21 @@ def page_parlay_builder():
             .drop_duplicates(subset="_match_key")
             .set_index("_match_key")["status"]
         )
+        # Current team, from the same live pull -- NOT predictions' own recent_team,
+        # which comes from weekly_stats.csv and is only as fresh as that player's most
+        # recent GAME (currently frozen at 2024, see utils._default_pull_years -- real
+        # bug found 2026-08-16: a since-traded player still showed his old team,
+        # because the prediction was generated from his last known game stats, not
+        # his current roster spot). Footballguys' depth chart is pulled fresh and
+        # reflects actual current rosters regardless of how stale weekly_stats is.
+        depth_team = (
+            depth.assign(_match_key=lambda d: d["player_name"].apply(normalize_name))
+            .drop_duplicates(subset="_match_key")
+            .set_index("_match_key")["team_abbr"]
+        )
     else:
         depth_status = None
+        depth_team = None
 
     photo_map = load_player_photos()
     tab_slip, tab_add = st.tabs([f"📋 Current slip ({len(st.session_state.slip)})", "➕ Add legs"])
@@ -404,7 +417,12 @@ def page_parlay_builder():
                     with photo_col:
                         _leg_photo(player_name, photo_map)
                     with info_col:
-                        team = any_row.get("recent_team") if has_model else None
+                        # Current team from the live depth chart, not predictions'
+                        # own (currently 2024-frozen) recent_team -- see depth_team
+                        # comment above. Shown regardless of has_model now, since it's
+                        # an independent source: a player with no model match can
+                        # still show their real current team.
+                        team = depth_team.get(normalize_name(player_name)) if depth_team is not None else None
                         position = any_row.get("position") if has_model else None
                         meta = " · ".join(str(b) for b in [team, position] if pd.notna(b) and b)
                         st.markdown(f"**{player_name}**" + (f"  ·  {meta}" if meta else ""))
@@ -457,7 +475,12 @@ def page_parlay_builder():
                                     "line": line_value,
                                     "underdog_multiplier": float(price) if pd.notna(price) else None,
                                     "my_prob": float(side_prob) if (has_model and side_prob is not None) else 0.55,
-                                    "team": any_row.get("recent_team") if has_model else None,
+                                    # Live depth-chart team, not predictions' stale
+                                    # recent_team -- this feeds the slip's same-team
+                                    # correlation detection, so a wrong team here
+                                    # doesn't just mislabel a card, it can silently
+                                    # miss or misapply a real correlation adjustment.
+                                    "team": team,
                                     "position_prop": position_prop,
                                 })
                                 st.rerun()
