@@ -227,6 +227,65 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    # Remaining small period props -- variable real lines (not anytime-TD style),
+    # so proxy_col is the player's own period-scoped rolling average, same
+    # convention as the full-game yardage props. See period_yardage_features.py.
+    "period_1_receiving_yds": {
+        "stat_name": "period_1_receiving_yds",
+        "model_path": "player_prop_period_1_receiving_yds_model.pkl",
+        "positions": ["WR", "TE", "RB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_2_receiving_yds": {
+        "stat_name": "period_1_2_receiving_yds",
+        "model_path": "player_prop_period_1_2_receiving_yds_model.pkl",
+        "positions": ["WR", "TE", "RB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_rushing_yds": {
+        "stat_name": "period_1_rushing_yds",
+        "model_path": "player_prop_period_1_rushing_yds_model.pkl",
+        "positions": ["RB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_2_rushing_yds": {
+        "stat_name": "period_1_2_rushing_yds",
+        "model_path": "player_prop_period_1_2_rushing_yds_model.pkl",
+        "positions": ["RB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_passing_yds": {
+        "stat_name": "period_1_passing_yds",
+        "model_path": "player_prop_period_1_passing_yds_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_2_passing_yds": {
+        "stat_name": "period_1_2_passing_yds",
+        "model_path": "player_prop_period_1_2_passing_yds_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_passing_tds": {
+        "stat_name": "period_1_passing_tds",
+        "model_path": "player_prop_period_1_passing_tds_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_2_passing_tds": {
+        "stat_name": "period_1_2_passing_tds",
+        "model_path": "player_prop_period_1_2_passing_tds_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
 }
 
 # prop_type key -> underlying stat column in season_prop_features.STAT_COLS
@@ -235,6 +294,18 @@ SEASON_PROP_STAT_COLS = {
     "season_rec_tds": "receiving_tds",
     "season_rush_yards": "rushing_yards",
     "season_rush_tds": "rushing_tds",
+}
+
+# prop_type key -> (period, stat_col) for period_yardage_features.build_period_stat_dataset
+PERIOD_YARDAGE_CONFIGS = {
+    "period_1_receiving_yds": ("q1", "receiving_yards"),
+    "period_1_2_receiving_yds": ("h1", "receiving_yards"),
+    "period_1_rushing_yds": ("q1", "rushing_yards"),
+    "period_1_2_rushing_yds": ("h1", "rushing_yards"),
+    "period_1_passing_yds": ("q1", "passing_yards"),
+    "period_1_2_passing_yds": ("h1", "passing_yards"),
+    "period_1_passing_tds": ("q1", "passing_tds"),
+    "period_1_2_passing_tds": ("h1", "passing_tds"),
 }
 
 
@@ -273,6 +344,10 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
         from period_rush_rec_tds_features import build_period_rush_rec_tds_dataset
         period = "q1" if prop_type == "period_1_rush_rec_tds" else "h1"
         return build_period_rush_rec_tds_dataset(period, min_week=min_week)
+    if prop_type in PERIOD_YARDAGE_CONFIGS:
+        from period_yardage_features import build_period_stat_dataset
+        period, stat_col = PERIOD_YARDAGE_CONFIGS[prop_type]
+        return build_period_stat_dataset(period, stat_col, min_week=min_week)
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
