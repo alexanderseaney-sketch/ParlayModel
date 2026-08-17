@@ -154,6 +154,17 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    # Same real stat as "rush_rec_tds" above, separate QB model -- same reasoning
+    # as rushing_yards_qb, but here QBs actually validate STRONGER than RB/WR/TE
+    # (AUC 0.73 vs ~0.72), likely because starting-QB rushing role is more
+    # stable/binary than a committee backfield. See train_rush_rec_tds_qb_props.py.
+    "rush_rec_tds_qb": {
+        "stat_name": "rush_rec_tds",
+        "model_path": "player_prop_rush_rec_tds_qb_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
     # Season-long props: one row per player per season instead of per game (see
     # season_prop_features.py). "stats_as_of" for these means the most recent
     # COMPLETE regular season used as the projection basis, not a rolling window.
@@ -225,6 +236,13 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    "period_first_touchdown_scored_qb": {
+        "stat_name": "period_first_touchdown_scored",
+        "model_path": "player_prop_period_first_touchdown_scored_qb_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
     "period_1_rush_rec_tds": {
         "stat_name": "period_1_rush_rec_tds",
         "model_path": "player_prop_period_1_rush_rec_tds_model.pkl",
@@ -232,10 +250,24 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    "period_1_rush_rec_tds_qb": {
+        "stat_name": "period_1_rush_rec_tds",
+        "model_path": "player_prop_period_1_rush_rec_tds_qb_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
     "period_1_2_rush_rec_tds": {
         "stat_name": "period_1_2_rush_rec_tds",
         "model_path": "player_prop_period_1_2_rush_rec_tds_model.pkl",
         "positions": ["RB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "period_1_2_rush_rec_tds_qb": {
+        "stat_name": "period_1_2_rush_rec_tds",
+        "model_path": "player_prop_period_1_2_rush_rec_tds_qb_model.pkl",
+        "positions": ["QB"],
         "proxy_col": "proxy_line",
         "context": [],
     },
@@ -334,7 +366,7 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type == "receptions":
         from player_prop_receptions_features import build_receptions_dataset
         return build_receptions_dataset(min_week=min_week)
-    if prop_type == "rush_rec_tds":
+    if prop_type in ("rush_rec_tds", "rush_rec_tds_qb"):
         from player_prop_rush_rec_tds_features import build_rush_rec_tds_dataset
         return build_rush_rec_tds_dataset(min_week=min_week)
     if prop_type in SEASON_PROP_STAT_COLS:
@@ -349,12 +381,13 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type == "sacks":
         from defensive_sacks_features import build_sacks_dataset
         return build_sacks_dataset(min_week=min_week)
-    if prop_type == "period_first_touchdown_scored":
+    if prop_type in ("period_first_touchdown_scored", "period_first_touchdown_scored_qb"):
         from first_td_scorer_features import build_first_td_scorer_dataset
         return build_first_td_scorer_dataset(min_week=min_week)
-    if prop_type in ("period_1_rush_rec_tds", "period_1_2_rush_rec_tds"):
+    if prop_type in ("period_1_rush_rec_tds", "period_1_2_rush_rec_tds",
+                      "period_1_rush_rec_tds_qb", "period_1_2_rush_rec_tds_qb"):
         from period_rush_rec_tds_features import build_period_rush_rec_tds_dataset
-        period = "q1" if prop_type == "period_1_rush_rec_tds" else "h1"
+        period = "q1" if prop_type.startswith("period_1_rush_rec_tds") else "h1"
         return build_period_rush_rec_tds_dataset(period, min_week=min_week)
     if prop_type in PERIOD_YARDAGE_CONFIGS:
         from period_yardage_features import build_period_stat_dataset

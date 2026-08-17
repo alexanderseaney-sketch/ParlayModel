@@ -1,7 +1,7 @@
 """
 Player-prop feature engineering for combined rush + receiving touchdowns
-(RB/WR/TE "anytime TD"-style prop). Same no-leakage discipline as the other
-prop models: every feature is a strictly-prior rolling average
+("anytime TD"-style prop). Same no-leakage discipline as the other prop
+models: every feature is a strictly-prior rolling average
 (shift(1).expanding() / shift(1).rolling(3)).
 
 Unlike the yardage props, this one does NOT need a rolling-average proxy line.
@@ -10,6 +10,20 @@ essentially every player (confirmed against the live pulled props: all 398
 rows), so the proxy line is set to that same constant and the target is
 simply "did they score at least one rushing or receiving TD" -- this proxy
 matches the real market almost exactly rather than approximating it.
+
+Includes QB in the base filter (not just RB/WR/TE) -- unlike
+receiving_yards/rushing_yards, nothing here is NGS-derived (weekly_stats +
+team-level EPA + pbp-derived red zone usage, all position-agnostic), so
+there's no data-availability reason to exclude QBs. Found via a live-props
+audit (2026-08-17): rush_rec_tds and everything that reuses this dataset
+(period_first_touchdown_scored, period_1/1_2 rush_rec_tds) was excluding
+every mobile QB -- Josh Allen, Lamar Jackson, Jalen Hurts, etc. -- 71
+unmatched legs combined, all with real NFL rushing history. QBs are trained
+as a SEPARATE model though (see train_rush_rec_tds_qb_props.py) rather than
+folded into the RB/WR/TE one -- QB touchdown-scoring mechanics (goal-line
+sneaks, scramble TDs) are different enough from RB/WR/TE that mixing
+populations risked diluting the existing, already-validated model rather
+than improving it.
 """
 import os
 
@@ -25,7 +39,7 @@ def build_rush_rec_tds_dataset(min_week: int = 4) -> pd.DataFrame:
     weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
-    skill = weekly[weekly["position"].isin(["RB", "WR", "TE"])].copy()
+    skill = weekly[weekly["position"].isin(["RB", "WR", "TE", "QB"])].copy()
     skill["touches"] = skill["carries"] + skill["targets"]
     skill = skill[skill["touches"] >= MIN_TOUCHES_TO_QUALIFY]
 
