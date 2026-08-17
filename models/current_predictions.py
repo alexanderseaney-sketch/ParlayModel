@@ -175,6 +175,23 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    # Single-game QB props, reusing player_prop_passing_features.py's dataset (see
+    # train_passing_misc_props.py) -- proxy_col is "proxy_line" since
+    # _build_base_dataset overrides it to the right stat per prop_type below.
+    "passing_tds": {
+        "stat_name": "passing_tds",
+        "model_path": "player_prop_passing_tds_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "passing_ints": {
+        "stat_name": "passing_ints",
+        "model_path": "player_prop_passing_ints_model.pkl",
+        "positions": ["QB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
 }
 
 # prop_type key -> underlying stat column in season_prop_features.STAT_COLS
@@ -205,6 +222,12 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type in SEASON_PROP_STAT_COLS:
         from season_prop_features import build_season_prop_current_dataset
         return build_season_prop_current_dataset(SEASON_PROP_STAT_COLS[prop_type])
+    if prop_type in ("passing_tds", "passing_ints"):
+        from player_prop_passing_features import build_passing_yards_dataset
+        stat_col = "passing_tds" if prop_type == "passing_tds" else "interceptions"
+        df = build_passing_yards_dataset(min_week=min_week)
+        df["proxy_line"] = df[f"{stat_col}_rolling"]
+        return df
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
