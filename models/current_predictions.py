@@ -203,6 +203,16 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    # First of the "period" props (deliberately last -- different question shape:
+    # not a threshold, but "will this specific player be the one it happens to").
+    # Real line is a constant 0.5, same anytime-TD market structure as rush_rec_tds.
+    "period_first_touchdown_scored": {
+        "stat_name": "period_first_touchdown_scored",
+        "model_path": "player_prop_period_first_touchdown_scored_model.pkl",
+        "positions": ["RB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
 }
 
 # prop_type key -> underlying stat column in season_prop_features.STAT_COLS
@@ -242,6 +252,9 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type == "sacks":
         from defensive_sacks_features import build_sacks_dataset
         return build_sacks_dataset(min_week=min_week)
+    if prop_type == "period_first_touchdown_scored":
+        from first_td_scorer_features import build_first_td_scorer_dataset
+        return build_first_td_scorer_dataset(min_week=min_week)
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
