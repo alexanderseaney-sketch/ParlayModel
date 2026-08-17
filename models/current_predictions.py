@@ -129,6 +129,48 @@ PROP_CONFIGS = {
         "proxy_col": "proxy_line",
         "context": [],
     },
+    # Season-long props: one row per player per season instead of per game (see
+    # season_prop_features.py). "stats_as_of" for these means the most recent
+    # COMPLETE regular season used as the projection basis, not a rolling window.
+    # season_pass_yards/season_pass_tds were tried and dropped -- validated with
+    # AUC ~0.5 (no real signal from prior-season stats alone), see
+    # train_season_props.py's comment for why.
+    "season_receiving_yards": {
+        "stat_name": "season_receiving_yards",
+        "model_path": "player_prop_season_receiving_yards_model.pkl",
+        "positions": ["WR", "TE", "RB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "season_rec_tds": {
+        "stat_name": "season_rec_tds",
+        "model_path": "player_prop_season_rec_tds_model.pkl",
+        "positions": ["WR", "TE", "RB"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "season_rush_yards": {
+        "stat_name": "season_rush_yards",
+        "model_path": "player_prop_season_rush_yards_model.pkl",
+        "positions": ["RB", "QB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+    "season_rush_tds": {
+        "stat_name": "season_rush_tds",
+        "model_path": "player_prop_season_rush_tds_model.pkl",
+        "positions": ["RB", "QB", "WR", "TE"],
+        "proxy_col": "proxy_line",
+        "context": [],
+    },
+}
+
+# prop_type key -> underlying stat column in season_prop_features.STAT_COLS
+SEASON_PROP_STAT_COLS = {
+    "season_receiving_yards": "receiving_yards",
+    "season_rec_tds": "receiving_tds",
+    "season_rush_yards": "rushing_yards",
+    "season_rush_tds": "rushing_tds",
 }
 
 
@@ -148,6 +190,9 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     if prop_type == "rush_rec_tds":
         from player_prop_rush_rec_tds_features import build_rush_rec_tds_dataset
         return build_rush_rec_tds_dataset(min_week=min_week)
+    if prop_type in SEASON_PROP_STAT_COLS:
+        from season_prop_features import build_season_prop_current_dataset
+        return build_season_prop_current_dataset(SEASON_PROP_STAT_COLS[prop_type])
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
