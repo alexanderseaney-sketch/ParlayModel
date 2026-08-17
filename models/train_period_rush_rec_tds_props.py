@@ -13,7 +13,7 @@ from period_rush_rec_tds_features import build_period_rush_rec_tds_dataset
 
 FEATURES = ["rush_rec_tds_rolling", "rush_rec_tds_last3", "carries_rolling", "carries_last3",
             "targets_rolling", "targets_last3", "rushing_yards_rolling", "receiving_yards_rolling",
-            "def_epa_allowed_rolling"]
+            "def_epa_allowed_rolling", "red_zone_touches_rolling", "red_zone_share_rolling"]
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
 
 CONFIGS = {

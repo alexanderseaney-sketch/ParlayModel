@@ -3,18 +3,29 @@ Trains the single-game sacks model. Same leave-one-season-out discipline as
 everything else here, plus AUC (sacks are a rare discrete event -- ~11% base
 rate for "beat your own rolling average" -- so raw accuracy alone would be
 misleading, same lesson learned from rush_rec_tds).
+
+Uses XGBoost, not LogisticRegression -- head-to-head tested (see the
+"making models more accurate" pass) and XGBoost won here by +0.028 AUC
+(0.736 vs 0.708), the one clear win out of six models tested. The other
+five (rush_rec_tds, receiving_yards_rb, season_rec_tds,
+period_first_touchdown_scored, passing_yards) all did the same or worse
+with XGBoost, so they stayed on LogisticRegression -- this isn't a
+blanket "XGBoost is better" upgrade, it needed testing per model. Same
+XGB_PARAMS already proven in production for receiving_yards/rushing_yards/
+receptions (see train_momentum_and_receptions_gaps.py).
 """
 import pickle
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
+from xgboost import XGBClassifier
 
 from defensive_sacks_features import build_sacks_dataset, DEFENSIVE_POSITIONS
 
 FEATURES = ["sacks_rolling", "sacks_last3", "plays_on_defense_rolling",
             "plays_on_defense_last3", "team_sacks_rolling"]
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
 
 
 def main():
@@ -29,7 +40,7 @@ def main():
         test = df[df["season"] == holdout]
         X_train, y_train = train[FEATURES], train["over_proxy_line"]
         X_test, y_test = test[FEATURES], test["over_proxy_line"].values
-        model = LogisticRegression(max_iter=2000)
+        model = XGBClassifier(**XGB_PARAMS)
         model.fit(X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1]
         preds = (probs > 0.5).astype(int)
@@ -54,7 +65,7 @@ def main():
     models = []
     for i in range(100):
         idx = rng.choice(n, size=n, replace=True)
-        m = LogisticRegression(max_iter=2000)
+        m = XGBClassifier(**XGB_PARAMS)
         m.fit(X_all.iloc[idx], y_all.iloc[idx])
         models.append(m)
 
