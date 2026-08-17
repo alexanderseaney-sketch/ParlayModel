@@ -326,7 +326,16 @@ def page_parlay_builder():
             )
         else:
             search = st.text_input("Search player", placeholder="Type a name and press Enter…")
-            options_df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)] if search else df.head(50)
+            # No .head(50) here anymore -- it used to truncate BEFORE the predictions
+            # merge below, so the default (unfiltered) view was just whatever order
+            # the raw CSV happens to be in. Underdog's pull is dominated by season-
+            # long novelty props (win totals, "games started") the model was never
+            # built to cover, so real model data could end up completely absent from
+            # the visible list even though it was working correctly (confirmed
+            # 2026-08-16: 1483 real predictions existed the whole time, just buried
+            # past the default cutoff). Truncation now happens after sorting further
+            # down, once matched props are guaranteed to be at the front.
+            options_df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)] if search else df
 
             if predictions is not None:
                 options_df = options_df.copy()
@@ -345,6 +354,10 @@ def page_parlay_builder():
                 if below_bar.any() and not search:
                     st.caption(f"{below_bar.sum()} props below the confidence bar are hidden. Search or lower the bar to see them.")
                 options_df = options_df[~below_bar | options_df["confidence"].isna() | (search != "")]
+                options_df = options_df.sort_values("confidence", ascending=False, na_position="last")
+
+            if not search:
+                options_df = options_df.head(50)
 
             if not mult_col:
                 st.info(
