@@ -184,6 +184,77 @@ def _pretty_stat(stat_name) -> str:
     return stat_name.replace("_", " ").title()
 
 
+def _pretty_col(col: str) -> str:
+    """Same idea as _pretty_stat but for raw dataframe column names shown on the
+    NFL Stats page's "show all columns" fallback -- season_type -> Season Type.
+    Not meant to be as polished as the curated DATASET_DISPLAY_COLUMNS labels,
+    just less raw than a bare snake_case column header."""
+    return col.replace("_", " ").title()
+
+
+# The raw nflverse files carry 40-50+ columns each -- internal IDs, cross-reference
+# keys to other data providers (pfr/pff/espn/ftn/gsis), and advanced metrics few
+# would recognize by name on sight (pacr, dakota, racr, wopr). Dumping the whole
+# dataframe made this page unreadable. Each entry here is the subset of columns a
+# human actually scans for, in the order they'd expect to read them, with a plain
+# label instead of the raw column name. "Show all columns" on the page falls back
+# to the complete raw dataframe for anyone who wants the rest.
+DATASET_DISPLAY_COLUMNS = {
+    "schedules.csv": [
+        ("season", "Season"), ("week", "Week"), ("game_type", "Type"), ("gameday", "Date"),
+        ("away_team", "Away"), ("away_score", "Away Score"), ("home_team", "Home"), ("home_score", "Home Score"),
+        ("spread_line", "Spread"), ("total_line", "O/U Total"), ("roof", "Roof"), ("temp", "Temp"), ("wind", "Wind"),
+    ],
+    "weekly_stats.csv": [
+        ("player_display_name", "Player"), ("position", "Pos"), ("recent_team", "Team"), ("season", "Season"),
+        ("week", "Week"), ("opponent_team", "Opp"), ("completions", "Comp"), ("attempts", "Att"),
+        ("passing_yards", "Pass Yds"), ("passing_tds", "Pass TD"), ("interceptions", "INT"),
+        ("carries", "Carries"), ("rushing_yards", "Rush Yds"), ("rushing_tds", "Rush TD"),
+        ("receptions", "Rec"), ("targets", "Tgt"), ("receiving_yards", "Rec Yds"), ("receiving_tds", "Rec TD"),
+        ("fantasy_points_ppr", "Fantasy Pts (PPR)"),
+    ],
+    "ngs_passing.csv": [
+        ("player_display_name", "Player"), ("team_abbr", "Team"), ("season", "Season"), ("week", "Week"),
+        ("attempts", "Att"), ("completions", "Comp"), ("pass_yards", "Pass Yds"), ("pass_touchdowns", "Pass TD"),
+        ("interceptions", "INT"), ("passer_rating", "Rating"), ("avg_time_to_throw", "Avg Time to Throw"),
+        ("avg_intended_air_yards", "Avg Air Yds"), ("completion_percentage_above_expectation", "CPOE"),
+    ],
+    "ngs_rushing.csv": [
+        ("player_display_name", "Player"), ("team_abbr", "Team"), ("season", "Season"), ("week", "Week"),
+        ("rush_attempts", "Carries"), ("rush_yards", "Rush Yds"), ("avg_rush_yards", "Yds/Carry"),
+        ("rush_touchdowns", "Rush TD"), ("efficiency", "Efficiency"),
+        ("rush_yards_over_expected", "Yds Over Expected"),
+    ],
+    "ngs_receiving.csv": [
+        ("player_display_name", "Player"), ("team_abbr", "Team"), ("season", "Season"), ("week", "Week"),
+        ("targets", "Tgt"), ("receptions", "Rec"), ("yards", "Rec Yds"), ("rec_touchdowns", "Rec TD"),
+        ("catch_percentage", "Catch %"), ("avg_separation", "Avg Separation"), ("avg_cushion", "Avg Cushion"),
+        ("avg_yac_above_expectation", "YAC Over Expected"),
+    ],
+    "injuries.csv": [
+        ("full_name", "Player"), ("position", "Pos"), ("team", "Team"), ("season", "Season"), ("week", "Week"),
+        ("report_status", "Status"), ("report_primary_injury", "Injury"), ("practice_status", "Practice Status"),
+    ],
+    "snap_counts.csv": [
+        ("player", "Player"), ("position", "Pos"), ("team", "Team"), ("opponent", "Opp"),
+        ("season", "Season"), ("week", "Week"),
+        ("offense_snaps", "Off Snaps"), ("offense_pct", "Off %"),
+        ("defense_snaps", "Def Snaps"), ("defense_pct", "Def %"),
+        ("st_snaps", "ST Snaps"), ("st_pct", "ST %"),
+    ],
+}
+
+DATASET_LABELS = {
+    "schedules.csv": "Schedules",
+    "weekly_stats.csv": "Weekly Player Stats",
+    "ngs_passing.csv": "Next Gen Stats — Passing",
+    "ngs_rushing.csv": "Next Gen Stats — Rushing",
+    "ngs_receiving.csv": "Next Gen Stats — Receiving",
+    "injuries.csv": "Injury Reports",
+    "snap_counts.csv": "Snap Counts",
+}
+
+
 def _team_next_week_lookup(schedules: pd.DataFrame) -> dict:
     """team abbreviation -> that team's next unplayed game's week number. Computed
     independently of model predictions (same idea as models/current_predictions.py's
@@ -856,15 +927,12 @@ def page_overview():
 def page_nfl_stats():
     st.title("📊 NFL Stats (nflverse)")
 
-    dataset = st.selectbox(
-        "Dataset",
-        ["schedules.csv", "weekly_stats.csv", "ngs_passing.csv", "ngs_rushing.csv",
-         "ngs_receiving.csv", "injuries.csv", "snap_counts.csv"],
-    )
+    dataset_files = list(DATASET_DISPLAY_COLUMNS.keys())
+    dataset = st.selectbox("Dataset", dataset_files, format_func=lambda f: DATASET_LABELS.get(f, f))
     df = load_csv_if_exists(dataset)
 
     if df is None:
-        st.warning(f"`{dataset}` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+        st.warning(f"**{DATASET_LABELS.get(dataset, dataset)}** hasn't been pulled yet. Run it from **Run Data Pulls**.")
     else:
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -893,8 +961,20 @@ def page_nfl_stats():
             mask = filtered.astype(str).apply(lambda col: col.str.contains(search, case=False, na=False)).any(axis=1)
             filtered = filtered[mask]
 
+        show_all = st.checkbox(
+            "Show all columns", help="Every raw column from the source file, including internal IDs and "
+                                      "cross-reference keys most people never need.")
+
         st.caption(f"{len(filtered):,} of {len(df):,} rows")
-        st.dataframe(filtered, width='stretch', height=500)
+
+        if show_all:
+            display_df = filtered.rename(columns=_pretty_col)
+        else:
+            wanted = DATASET_DISPLAY_COLUMNS.get(dataset, [])
+            present = [(raw, label) for raw, label in wanted if raw in filtered.columns]
+            display_df = filtered[[raw for raw, _ in present]].rename(columns=dict(present))
+
+        st.dataframe(display_df, width='stretch', height=500, hide_index=True)
 
 
 STATUS_LABELS = {
@@ -987,7 +1067,7 @@ def _player_detail_dialog(row: dict):
                 prob = p["predicted_prob_over"] if side == "over" else 1 - p["predicted_prob_over"]
                 c1, c2 = st.columns([3, 1])
                 with c1:
-                    st.write(f"{p['stat_name']} {side} {p['proxy_line']}")
+                    st.write(f"{_pretty_stat(p['stat_name'])} {side} {p['proxy_line']}")
                 with c2:
                     _confidence_badge(prob, p["confidence"])
 
@@ -995,7 +1075,14 @@ def _player_detail_dialog(row: dict):
         with st.container(border=True):
             st.markdown("**Current Underdog lines**")
             cols = [c for c in ["stat_name", "choice", "stat_value", "american_price"] if c in detail["props"].columns]
-            st.dataframe(detail["props"][cols].sort_values("stat_name"), hide_index=True, width="stretch")
+            props_df = detail["props"][cols].sort_values("stat_name").copy()
+            if "stat_name" in props_df.columns:
+                props_df["stat_name"] = props_df["stat_name"].map(_pretty_stat)
+            if "choice" in props_df.columns:
+                props_df["choice"] = props_df["choice"].str.title()
+            props_df = props_df.rename(columns={"stat_name": "Stat", "choice": "Side",
+                                                  "stat_value": "Line", "american_price": "Price"})
+            st.dataframe(props_df, hide_index=True, width="stretch")
 
     if "recent_games" in detail:
         with st.container(border=True):
@@ -1004,7 +1091,7 @@ def _player_detail_dialog(row: dict):
             stat_cols = ["passing_yards", "rushing_yards", "receptions", "receiving_yards",
                          "passing_tds", "rushing_tds", "receiving_tds", "fantasy_points_ppr"]
             cols = ["season", "week", "opponent_team"] + [c for c in stat_cols if c in games.columns and games[c].fillna(0).ne(0).any()]
-            st.dataframe(games[cols], hide_index=True, width="stretch")
+            st.dataframe(games[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
 
     if "snap_trend" in detail:
         with st.container(border=True):
@@ -1013,7 +1100,7 @@ def _player_detail_dialog(row: dict):
             pct_cols = [c for c in ["offense_pct", "defense_pct", "st_pct"]
                         if c in snaps.columns and snaps[c].fillna(0).ne(0).any()]
             cols = [c for c in ["season", "week", "opponent"] if c in snaps.columns] + pct_cols
-            st.dataframe(snaps[cols], hide_index=True, width="stretch")
+            st.dataframe(snaps[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
 
     if not detail:
         st.caption("No model/stats/market data matched for this player yet.")
@@ -1198,6 +1285,12 @@ def page_depth_charts():
             _grouped_formation(cat_df, SPECIAL_TEAMS_GROUPS, photo_map)
 
 
+UNDERDOG_DISPLAY_COLUMNS = [
+    ("full_name", "Player"), ("position_display_name", "Position"), ("stat_name", "Stat"),
+    ("choice", "Side"), ("stat_value", "Line"), ("american_price", "Price"),
+]
+
+
 def page_underdog_props():
     st.title("💰 Underdog Pick'em Props")
     df = load_csv_if_exists("underdog_props.csv")
@@ -1209,7 +1302,7 @@ def page_underdog_props():
         with col1:
             stat_col = "stat_name" if "stat_name" in df.columns else None
             stats = sorted(df[stat_col].dropna().unique()) if stat_col else []
-            stat_filter = st.multiselect("Stat type", stats)
+            stat_filter = st.multiselect("Stat type", stats, format_func=_pretty_stat)
         with col2:
             search = st.text_input("Search player name")
 
@@ -1220,7 +1313,21 @@ def page_underdog_props():
             filtered = filtered[filtered["full_name"].astype(str).str.contains(search, case=False, na=False)]
 
         st.caption(f"{len(filtered):,} of {len(df):,} prop options")
-        st.dataframe(filtered, width='stretch', height=500)
+
+        # underdog_props.csv carries ~65 raw API-internal columns (hex color codes,
+        # request-building IDs, a literal stringified dict in "over_under") on top of
+        # the handful that mean anything to a person browsing props -- unlike NFL
+        # Stats, there's no "show all" toggle here, since none of those extra columns
+        # are something a bettor would ever want to see.
+        present = [(raw, label) for raw, label in UNDERDOG_DISPLAY_COLUMNS if raw in filtered.columns]
+        display_df = filtered[[raw for raw, _ in present]].copy()
+        if "stat_name" in [raw for raw, _ in present]:
+            display_df["stat_name"] = display_df["stat_name"].map(_pretty_stat)
+        if "choice" in display_df.columns:
+            display_df["choice"] = display_df["choice"].str.title()
+        display_df = display_df.rename(columns=dict(present))
+
+        st.dataframe(display_df, width='stretch', height=500, hide_index=True)
 
 
 def _news_page(title: str, icon: str, caption: str, filename: str, group_col: str, group_label: str,
