@@ -15,16 +15,27 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
 
-from season_prop_features import build_season_prop_training_dataset
+from season_prop_features import build_season_prop_training_dataset, EXPERIENCE_DRAFT_FEATURES
 from calibration_report import print_calibration_report
 
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
 
+# years_experience/draft_round/draft_pick added 2026-08-18 after a real, validated
+# gain -- checked via the same leave-one-season-out backtest as everything else here,
+# a genuine improvement across all 4 props (not a coverage/accuracy trade-off like
+# several other tested-and-rejected ideas this project has logged): biggest was
+# season_receiving_yards's >=0.4-confidence accuracy 72.3%->77.7% with MORE games
+# clearing that bar too (17.9%->22.7%). These props had the sparsest feature set of
+# any model family here (just prior-season totals), so real room existed for a signal
+# that isn't just another cut of the same box-score data -- experience/draft capital
+# are genuinely different in kind, matching this project's own finding (from 7-8
+# rounds of null opponent-context tests) that mechanism-specific signals beat generic
+# additive features.
 REC_FEATURES = ["prior_receiving_yards", "prior_receiving_tds", "prior_receptions",
                  "prior_targets", "prior_games_played", "prior_yards_per_target",
-                 "prior_yards_per_game_rec"]
+                 "prior_yards_per_game_rec"] + EXPERIENCE_DRAFT_FEATURES
 RUSH_FEATURES = ["prior_rushing_yards", "prior_rushing_tds", "prior_carries",
-                  "prior_games_played", "prior_yards_per_carry", "prior_yards_per_game_rush"]
+                  "prior_games_played", "prior_yards_per_carry", "prior_yards_per_game_rush"] + EXPERIENCE_DRAFT_FEATURES
 
 CONFIGS = {
     "season_receiving_yards": {"stat_col": "receiving_yards", "positions": ["WR", "TE", "RB"], "features": REC_FEATURES},

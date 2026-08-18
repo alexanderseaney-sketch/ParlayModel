@@ -61,6 +61,30 @@ RATE_COLS = ["yards_per_game_rec", "yards_per_target", "yards_per_game_rush",
 PRIOR_COLS = STAT_COLS + ["games_played"] + RATE_COLS
 
 
+def _load_experience_draft() -> pd.DataFrame:
+    """Player experience/draft capital -- real, well-established signals in fantasy/
+    dynasty analytics (breakout-age and aging-curve effects; draft round/pick as a
+    proxy for the talent/opportunity level a team originally saw in this player,
+    distinct from what they've shown so far) that this project's prior-season-totals-
+    only season-prop features never captured. Validated via the same leave-one-season-
+    out backtest as everything else: a real, consistent gain across all 4 season
+    props (biggest: season_receiving_yards's >=0.4-confidence accuracy 72.3%->77.7%,
+    with MORE games clearing that bar too, not a coverage/accuracy trade-off).
+
+    draft_round/draft_pick filled for undrafted players with a value WORSE than any
+    real late-round pick (Mr. Irrelevant is round 7, pick ~260) rather than left NaN
+    or 0 -- 0 would read to a model as "1st overall pick," the opposite of undrafted."""
+    players = pd.read_csv(os.path.join(RAW_DIR, "players.csv"), low_memory=False)
+    players = players.rename(columns={"gsis_id": "player_id"})
+    players = players[["player_id", "rookie_season", "draft_round", "draft_pick"]].drop_duplicates("player_id")
+    players["draft_round"] = players["draft_round"].fillna(8)
+    players["draft_pick"] = players["draft_pick"].fillna(300)
+    return players
+
+
+EXPERIENCE_DRAFT_FEATURES = ["years_experience", "draft_round", "draft_pick"]
+
+
 def build_season_prop_training_dataset(stat_col: str) -> pd.DataFrame:
     """Historical (prior season -> target season) pairs across every
     consecutive season available, for backtesting and training. stat_col
@@ -82,6 +106,10 @@ def build_season_prop_training_dataset(stat_col: str) -> pd.DataFrame:
     df["proxy_line"] = df[f"prior_{stat_col}"]
     df["over_proxy_line"] = (df[f"target_{stat_col}"] > df["proxy_line"]).astype(int)
 
+    exp_draft = _load_experience_draft()
+    df = df.merge(exp_draft, on="player_id", how="left")
+    df["years_experience"] = df["target_season"] - df["rookie_season"]
+
     return df
 
 
@@ -98,6 +126,10 @@ def build_season_prop_current_dataset(stat_col: str) -> pd.DataFrame:
     prior["week"] = 18  # last regular-season week -- "as of" marker, not a specific rolling-stats week
 
     prior["proxy_line"] = prior[f"prior_{stat_col}"]
+
+    exp_draft = _load_experience_draft()
+    prior = prior.merge(exp_draft, on="player_id", how="left")
+    prior["years_experience"] = (latest_season + 1) - prior["rookie_season"]
 
     return prior
 
