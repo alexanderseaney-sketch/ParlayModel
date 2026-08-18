@@ -17,6 +17,14 @@ RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
 BET_LOG_DIR = os.path.join(ROOT_DIR, "bet_logs")
 BET_LOG_PATH = os.path.join(BET_LOG_DIR, "bets.csv")
 
+# app.py adds models/ to sys.path itself, but only AFTER its own `from utils import
+# (...)` line -- meaning if utils.py needed models/ only at that point, it'd already be
+# too late. Matches the precedent generate_weekly_bet_slip.py already set for the
+# reverse direction: each module that needs a cross-directory import manages its own
+# sys.path rather than relying on caller ordering.
+sys.path.insert(0, os.path.join(ROOT_DIR, "models"))
+from line_movement_features import compute_line_movement  # noqa: E402
+
 # CRITICAL correctness constant, shared by the dashboard and
 # models/generate_weekly_bet_slip.py -- a model's predicted_prob_over answers
 # "beats OUR proxy line" (the player's own rolling average), not "beats Underdog's
@@ -201,6 +209,23 @@ def load_csv(filename: str, _mtime: float) -> pd.DataFrame:
     """_mtime is passed in purely to bust the cache when the underlying file changes."""
     path = os.path.join(RAW_DIR, filename)
     return pd.read_csv(path, low_memory=False)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_line_movement(history_state: tuple) -> pd.DataFrame:
+    """history_state (file count, newest mtime) is the real cache key -- a plain
+    hashable tuple, not an underscore-prefixed param, so there's no ambiguity about
+    whether it actually participates in Streamlit's cache-invalidation hash."""
+    return compute_line_movement()
+
+
+def load_line_movement() -> pd.DataFrame:
+    history_dir = os.path.join(RAW_DIR, "underdog_history")
+    if not os.path.isdir(history_dir):
+        return compute_line_movement()  # empty-history case, cheap enough to skip caching
+    files = os.listdir(history_dir)
+    newest_mtime = max((os.path.getmtime(os.path.join(history_dir, f)) for f in files), default=0.0)
+    return _cached_line_movement((len(files), newest_mtime))
 
 
 def load_csv_if_exists(filename: str) -> pd.DataFrame | None:

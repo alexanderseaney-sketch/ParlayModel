@@ -17,7 +17,7 @@ from utils import (
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
-    pretty_stat_name,
+    pretty_stat_name, load_line_movement,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -1365,18 +1365,36 @@ def page_underdog_props():
 
         st.caption(f"{len(filtered):,} of {len(df):,} prop options")
 
+        # Line movement since first seen -- from the timestamped snapshot archive
+        # pull_underdog.py has been saving on every run, not a new pull. Merged in
+        # BEFORE the display-column selection below since it needs the raw
+        # (unprettified) stat_name/choice to match the snapshot archive's own columns.
+        movement = load_line_movement()
+        if not movement.empty:
+            filtered = filtered.merge(
+                movement[["full_name", "stat_name", "choice", "line_movement"]],
+                on=["full_name", "stat_name", "choice"], how="left")
+        else:
+            filtered["line_movement"] = pd.NA
+
         # underdog_props.csv carries ~65 raw API-internal columns (hex color codes,
         # request-building IDs, a literal stringified dict in "over_under") on top of
         # the handful that mean anything to a person browsing props -- unlike NFL
         # Stats, there's no "show all" toggle here, since none of those extra columns
         # are something a bettor would ever want to see.
         present = [(raw, label) for raw, label in UNDERDOG_DISPLAY_COLUMNS if raw in filtered.columns]
-        display_df = filtered[[raw for raw, _ in present]].copy()
+        display_df = filtered[[raw for raw, _ in present] + ["line_movement"]].copy()
         if "stat_name" in [raw for raw, _ in present]:
             display_df["stat_name"] = display_df["stat_name"].map(_pretty_stat)
         if "choice" in display_df.columns:
             display_df["choice"] = display_df["choice"].str.title()
         display_df = display_df.rename(columns=dict(present))
+        # Blank rather than "0.0" or "nan" for the common case (no movement yet, or
+        # this prop's never appeared in an earlier snapshot) -- only a real, nonzero
+        # shift is worth a bettor's attention.
+        display_df["Movement"] = display_df["line_movement"].apply(
+            lambda v: f"{v:+g}" if pd.notna(v) and v != 0 else "")
+        display_df = display_df.drop(columns=["line_movement"])
 
         st.dataframe(display_df, width='stretch', height=500, hide_index=True)
 
