@@ -15,6 +15,9 @@ import sys
 import nfl_data_py as nfl
 import pandas as pd
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
+from pbp_derived_weekly_stats import build_weekly_stats_from_pbp  # noqa: E402
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
 
 
@@ -117,6 +120,47 @@ def _pull_per_year(fetch_one_year, years, label):
     return pd.concat(frames, ignore_index=True)
 
 
+def _fill_weekly_stats_gap_years(gap_years):
+    """nflverse's official player_stats release lags its play-by-play release --
+    confirmed 2026-08-17 that pbp.csv for 2025 is complete (full season, both REG
+    and POST) well before player_stats had anything for it. Rather than leaving
+    every model frozen on whatever season nflverse last aggregated, derive
+    weekly_stats-equivalent box scores directly from pbp for exactly the gap
+    years (see pbp_derived_weekly_stats.py for the derivation itself and its
+    validation against a real season). This pulls pbp for JUST the gap years --
+    a couple seconds per season, not the full multi-year backfill --skip-pbp
+    exists to avoid -- so it runs even when --skip-pbp is set. Once nflverse
+    actually publishes official data for a gap year, pull_weekly_stats's own
+    save() collision logic (new/real rows win) supersedes these derived rows on
+    the very next pull -- nothing here needs to be manually undone."""
+    print(f"[weekly_stats] no official data for {gap_years} yet -- deriving from play-by-play instead.")
+
+    # Pulled one year at a time, same as _pull_per_year -- pull_pbp(gap_years) as a
+    # single multi-year call has no per-year fallback, so a future/in-progress season
+    # with zero pbp rows yet (e.g. 2026 before it kicks off) would take down the
+    # derivation for every other gap year requested alongside it, not just itself.
+    succeeded_years = []
+    for year in gap_years:
+        try:
+            pull_pbp([year])
+            succeeded_years.append(year)
+        except Exception as e:
+            print(f"[weekly_stats] couldn't pull pbp for {year}, skipping derivation for it: {e}")
+
+    if not succeeded_years:
+        return pd.DataFrame()
+
+    players_path = os.path.join(RAW_DIR, "players.csv")
+    if not os.path.exists(players_path):
+        pull_players()
+
+    try:
+        return build_weekly_stats_from_pbp(succeeded_years)
+    except Exception as e:
+        print(f"[weekly_stats] derivation from pbp failed for {succeeded_years}: {e}")
+        return pd.DataFrame()
+
+
 def pull_weekly_stats(years):
     """Weekly player-level box score stats.
 
@@ -125,15 +169,21 @@ def pull_weekly_stats(years):
     nflverse restructured this before the 2025 season (nflreadr's load_player_stats()
     switched to nflfastR::calculate_stats() output) — the old per-year endpoint is
     deprecated and won't necessarily keep receiving new seasons going forward, even
-    though it still works for years it already has. Confirmed 2026-08-17: verified
-    directly against the new unified file too (not just the old one) that 2025 season
-    data genuinely isn't published yet at the source under EITHER structure — this
-    switch doesn't unlock 2025 data (it doesn't exist yet either way), it just moves
-    us onto the actively-maintained path so future seasons show up automatically.
+    though it still works for years it already has.
+
+    Any requested year with no official rows (e.g. the current season, before
+    nflverse has published its aggregate for it) is filled in from play-by-play --
+    see _fill_weekly_stats_gap_years.
     """
     url = "https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.parquet"
     full_df = pd.read_parquet(url)
     df = full_df[full_df["season"].isin([int(y) for y in years])].copy()
+
+    gap_years = [int(y) for y in years if int(y) not in set(df["season"].unique())]
+    if gap_years:
+        derived = _fill_weekly_stats_gap_years(gap_years)
+        if not derived.empty:
+            df = pd.concat([df, derived], ignore_index=True)
 
     key_cols = ["player_id", "season", "week"]
     validate(df, "weekly_stats", key_cols=key_cols)

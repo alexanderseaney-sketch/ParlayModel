@@ -117,8 +117,9 @@ def main():
     df, updated_text = parse_depth_charts(html)
 
     if df.empty:
-        print("WARNING: 0 rows parsed -- page structure may have changed. Nothing written.")
-        return
+        # Raise rather than a silent return -- see pull_espn_news.py's main() for why
+        # a quiet exit-0 here is a real trap (run_pull_script reads it as success).
+        raise RuntimeError("0 rows parsed -- page structure may have changed. Nothing written.")
 
     n_teams = df["team_abbr"].nunique()
     print(f"Parsed {len(df)} player-position rows across {n_teams} teams.")

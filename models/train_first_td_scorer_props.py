@@ -11,6 +11,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 from first_td_scorer_features import build_first_td_scorer_dataset
+from calibration_report import print_calibration_report
 
 FEATURES = ["rush_rec_tds_rolling", "rush_rec_tds_last3", "carries_rolling", "carries_last3",
             "targets_rolling", "targets_last3", "rushing_yards_rolling", "receiving_yards_rolling",
@@ -44,6 +45,7 @@ def main():
 
     all_probs, all_y, all_correct = np.array(all_probs), np.array(all_y), np.array(all_correct)
     print(f"\nPooled: {all_correct.mean()*100:.1f}% acc, AUC={roc_auc_score(all_y, all_probs):.3f}")
+    print_calibration_report(all_probs, all_y, "period_first_touchdown_scored")
 
     preds = (all_probs > 0.5).astype(int)
     over_mask = preds == 1

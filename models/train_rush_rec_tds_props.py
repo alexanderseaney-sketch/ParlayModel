@@ -5,6 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 
 from player_prop_rush_rec_tds_features import build_rush_rec_tds_dataset
+from calibration_report import print_calibration_report
 
 FEATURES = [
     "rush_rec_tds_rolling", "rush_rec_tds_last3", "carries_rolling", "carries_last3",
@@ -20,7 +21,7 @@ def main():
     df = df.dropna(subset=["rush_rec_tds_rolling"])
     print(f"Dataset: {len(df)} RB/WR/TE player-games\n")
 
-    all_probs, all_correct = [], []
+    all_probs, all_y, all_correct = [], [], []
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
         test = df[df["season"] == holdout]
@@ -33,14 +34,16 @@ def main():
         acc = accuracy_score(y_test, preds)
         print(f"{holdout}: {acc*100:.1f}%")
         all_probs.extend(probs)
+        all_y.extend(y_test)
         all_correct.extend(preds == y_test)
 
-    all_probs, all_correct = np.array(all_probs), np.array(all_correct)
+    all_probs, all_y, all_correct = np.array(all_probs), np.array(all_y), np.array(all_correct)
     print(f"\nMean: {all_correct.mean()*100:.1f}%")
     conf = np.abs(all_probs - 0.5) * 2
     for t in [0.2, 0.3, 0.4, 0.5]:
         mask = conf >= t
         print(f"  >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} games, {mask.mean()*100:.1f}%)")
+    print_calibration_report(all_probs, all_y, "rush_rec_tds")
 
     X_all, y_all = df[FEATURES].fillna(0), df["over_proxy_line"]
     rng = np.random.RandomState(42)

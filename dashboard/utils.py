@@ -57,20 +57,80 @@ PERIOD_GRAIN_STATS = {
     "period_1_receiving_yds", "period_1_2_receiving_yds",
     "period_1_rushing_yds", "period_1_2_rushing_yds",
     "period_1_passing_yds", "period_1_2_passing_yds",
-    "period_1_passing_tds", "period_1_2_passing_tds",
 }
+
+# Weekly rushing yards specifically, not the general 20% weekly bar -- checked
+# against live data 2026-08-17: passing_yds's 74th-percentile divergence is ~10%
+# and receiving_yds's is ~22% (both fine under the general 20% bar), but
+# rushing_yds's is ~42% -- a real, distinct pattern (committee backfields and
+# game-script-dependent volume swing week to week far more than an entrenched
+# starter's passing volume does), not noise. "Weekly" was never one uniform
+# distribution; this splits out the one stat where that assumption broke down.
+RUSHING_YDS_MAX_LINE_DIVERGENCE = 0.45
+
+# TD/INT/sack counts (weekly and quarter/half-scoped) -- percentage divergence is
+# the wrong metric here, not just a badly-calibrated threshold. A percentage-of-
+# proxy check breaks down when the proxy itself is a fraction (e.g. a QB averaging
+# 0.3 pass TDs/quarter): a completely normal, small real-world gap of 0.3 TDs
+# computes as literally 100% "divergence" purely from the denominator being tiny,
+# not because the match is actually bad. Checked against live data 2026-08-17: the
+# real ABSOLUTE gap for these stats is small and stable regardless of the count
+# scale (74th-percentile abs gap 0.20-0.54 across passing_tds/passing_ints/sacks/
+# period_1(_2)_passing_tds, max observed 1.40) -- so these are gated on absolute
+# difference instead of percentage, same underlying philosophy (let through the
+# natural majority of props whose proxy is roughly in the right neighborhood) with
+# a metric that doesn't fall apart at a small denominator. period_1_passing_tds and
+# period_1_2_passing_tds move here from PERIOD_GRAIN_STATS for the same reason --
+# even the widened 55% period bar didn't fix them, because the problem was never
+# the threshold number.
+COUNT_MAX_ABS_DIVERGENCE = 1.0
+COUNT_GRAIN_STATS = {"passing_tds", "passing_ints", "sacks", "period_1_passing_tds", "period_1_2_passing_tds"}
 
 
 def max_line_divergence_for(stat_name: str) -> float:
-    """Which divergence gate applies to this specific real Underdog stat. Anytime-TD
-    style props (rush_rec_tds, period_first_touchdown_scored, etc.) aren't listed
-    here since their proxy is a constant 0.5 matching the real market almost
-    exactly -- they essentially never need the wider bands."""
+    """Which PERCENTAGE divergence gate applies to this stat. Only meaningful for
+    stats not in COUNT_GRAIN_STATS -- see line_matches_proxy, the actual gate used
+    everywhere, which dispatches to an absolute-difference check for count stats
+    instead of calling this at all. Anytime-TD style props (rush_rec_tds,
+    period_first_touchdown_scored, etc.) aren't listed here since their proxy is a
+    constant 0.5 matching the real market almost exactly -- they essentially never
+    need the wider bands."""
     if stat_name in SEASON_GRAIN_STATS:
         return SEASON_MAX_LINE_DIVERGENCE
     if stat_name in PERIOD_GRAIN_STATS:
         return PERIOD_MAX_LINE_DIVERGENCE
+    if stat_name == "rushing_yds":
+        return RUSHING_YDS_MAX_LINE_DIVERGENCE
     return MAX_LINE_DIVERGENCE
+
+
+def line_matches_proxy(stat_value, proxy_line, stat_name: str) -> bool:
+    """The actual correctness gate: is Underdog's real posted line close enough to
+    our own proxy line that the model's probability (computed against the proxy) is
+    still a trustworthy stand-in for beating Underdog's real number? Single shared
+    implementation for the dashboard and generate_weekly_bet_slip.py, since this
+    used to be reimplemented in both places and only one of them would need to
+    change to drift out of sync with the other."""
+    if pd.isna(stat_value) or pd.isna(proxy_line):
+        return False
+    stat_value, proxy_line = float(stat_value), float(proxy_line)
+    if stat_name in COUNT_GRAIN_STATS:
+        return abs(stat_value - proxy_line) <= COUNT_MAX_ABS_DIVERGENCE
+    if proxy_line == 0:
+        return False
+    divergence = abs(stat_value - proxy_line) / abs(proxy_line)
+    return divergence <= max_line_divergence_for(stat_name)
+
+
+def pretty_stat_name(stat_name) -> str:
+    """receiving_yds -> Receiving Yds -- a readable label instead of a raw column
+    name, used anywhere a prop's stat type is shown to a human rather than matched
+    against other data. Shared between the dashboard and generate_weekly_bet_slip.py
+    so both surfaces describe a prop the same way instead of one of them leaking the
+    raw stat_name string into a bet suggestion's description."""
+    if not isinstance(stat_name, str) or not stat_name:
+        return "?"
+    return stat_name.replace("_", " ").title()
 
 # Every raw data file the pull scripts are expected to produce, and which script produces it.
 EXPECTED_FILES = {
