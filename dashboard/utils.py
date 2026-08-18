@@ -147,6 +147,8 @@ EXPECTED_FILES = {
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",
     "footballguys_depth.csv": "data/pull_footballguys_depth.py",
     "underdog_props.csv": "data/pull_underdog.py",
+    "weather_forecast.csv": "data/pull_weather_forecast.py (skipped by freshness check -- "
+                             "legitimately empty most of the time, see data_freshness_check)",
 }
 
 def _default_pull_years(lookback: int = 3) -> list[str]:
@@ -177,6 +179,7 @@ PULL_SCRIPTS = {
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
     "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],
     "Underdog pick'em props": [sys.executable, "data/pull_underdog.py"],
+    "Weather forecasts (upcoming outdoor games)": [sys.executable, "data/pull_weather_forecast.py"],
 }
 
 
@@ -490,9 +493,12 @@ STALE_THRESHOLD_HOURS = 24
 
 
 def data_freshness_check() -> dict:
-    """Checks every EXPECTED_FILE (except pbp.csv, which is skipped by default and not
-    part of the core freshness story) for missing/stale/ok, based on file mtime.
-    Returns {'missing': [filename, ...], 'stale': [(filename, age_hours), ...],
+    """Checks every EXPECTED_FILE (except pbp.csv, skipped by default and not part of
+    the core freshness story, and weather_forecast.csv, which is often LEGITIMATELY
+    empty -- see pull_weather_forecast.py: nothing to fetch whenever no outdoor game
+    falls within Open-Meteo's ~16-day forecast horizon, true for most of a season, not
+    just the off-season) for missing/stale/ok, based on file mtime. Returns
+    {'missing': [filename, ...], 'stale': [(filename, age_hours), ...],
     'ok': [filename, ...]}. Used by the app to show a freshness banner instead of
     silently rendering pages against empty or day(s)-old data -- this matters most
     right after a fresh Streamlit Community Cloud deploy, where data/raw/ starts
@@ -500,7 +506,7 @@ def data_freshness_check() -> dict:
     not source code) and never ships with the deployment itself."""
     missing, stale, ok = [], [], []
     for filename in EXPECTED_FILES:
-        if filename == "pbp.csv":
+        if filename in ("pbp.csv", "weather_forecast.csv"):
             continue
         status = file_status(filename)
         if not status["exists"]:
