@@ -75,8 +75,12 @@ def main():
 
     new_df = pull_all_feeds()
     if new_df.empty:
-        print("WARNING: 0 articles pulled -- feed may have changed. Nothing written.")
-        return
+        # Raise rather than a silent return -- this used to just print a warning and
+        # exit 0, which run_pull_script's subprocess.returncode check reads as a
+        # SUCCESSFUL pull even though nothing was written. That's how this could go
+        # stale indefinitely while the freshness banner's "Refresh" button kept
+        # reporting success on every click.
+        raise RuntimeError("0 articles pulled -- feed may have changed. Nothing written.")
     new_df["pulled_at"] = pulled_at
 
     if os.path.exists(OUT_PATH):
