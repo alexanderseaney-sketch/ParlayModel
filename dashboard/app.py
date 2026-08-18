@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from utils import (
-    EXPECTED_FILES, PULL_SCRIPTS, max_line_divergence_for, BET_LOG_PATH,
+    EXPECTED_FILES, PULL_SCRIPTS, line_matches_proxy, BET_LOG_PATH,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
@@ -580,15 +580,14 @@ def page_parlay_builder():
                 #    to be attached to. Now computed separately for each side below.
                 # 2. predicted_prob_over answers "beats OUR proxy line", not "beats
                 #    Underdog's posted line" -- only valid when those two numbers are
-                #    close (see max_line_divergence_for in utils.py, grain-specific
-                #    since season/period-scoped proxies are structurally noisier
-                #    than weekly ones).
+                #    close (see line_matches_proxy in utils.py: percentage-based,
+                #    grain-specific for yardage/season/period stats since those
+                #    proxies are structurally noisier than weekly ones; absolute-
+                #    difference-based for TD/INT/sack counts, where percentage
+                #    divergence is the wrong metric against a small proxy).
                 raw_prob_over = any_row.get("predicted_prob_over") if predictions is not None else None
                 proxy_line = any_row.get("proxy_line")
-                line_ok = True
-                if pd.notna(raw_prob_over) and pd.notna(proxy_line) and pd.notna(line_value) and proxy_line:
-                    divergence_limit = max_line_divergence_for(stat_name)
-                    line_ok = abs(float(line_value) - float(proxy_line)) / abs(float(proxy_line)) <= divergence_limit
+                line_ok = pd.notna(proxy_line) and line_matches_proxy(line_value, proxy_line, stat_name)
                 has_model = pd.notna(raw_prob_over) and line_ok
 
                 fbg_status = depth_status.get(normalize_name(player_name)) if depth_status is not None else None

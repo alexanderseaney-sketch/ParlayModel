@@ -41,7 +41,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # Windows console default codepage mangles em-dashes otherwise
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
-from utils import normalize_name, load_leg_correlations, max_line_divergence_for, pretty_stat_name  # noqa: E402
+from utils import normalize_name, load_leg_correlations, line_matches_proxy, pretty_stat_name  # noqa: E402
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
@@ -55,7 +55,7 @@ MIN_KELLY_EDGE = 0.02   # the real prudence lever: raw Kelly fraction must clear
                          # a percentage of), it's applied as "don't dilute the week's
                          # budget across marginal edges," which is the same underlying
                          # goal of not over-betting an uncertain edge estimate.
-                         # max_line_divergence_for() (the other correctness gate, for
+                         # line_matches_proxy() (the other correctness gate, for
                          # the proxy-line-vs-real-line bug) lives in dashboard/utils.py
                          # -- shared with the Parlay Builder rather than duplicated here.
 TOP_N_OPPORTUNITIES = 3
@@ -119,15 +119,17 @@ def load_matched_props() -> pd.DataFrame:
 
     # The correctness gate: my_prob only answers "beats OUR proxy_line", which is
     # only a valid stand-in for "beats Underdog's real stat_value" when the two
-    # numbers are actually close. See max_line_divergence_for's comment (in
-    # dashboard/utils.py) for the real bug this fixes and why the threshold varies
-    # by prop grain (season/period-scoped proxies are structurally noisier).
+    # numbers are actually close. See line_matches_proxy's comment (in
+    # dashboard/utils.py) for the real bug this fixes, why the threshold varies by
+    # prop grain (season/period-scoped proxies are structurally noisier), and why
+    # TD/INT/sack counts are gated on absolute difference instead of percentage.
+    # line_divergence itself is kept only for the human-readable "X% off" bet-slip
+    # description below -- it's not the actual pass/fail check for count stats.
     before = len(merged)
     merged["line_divergence"] = (merged["stat_value"] - merged["proxy_line"]).abs() / merged["proxy_line"].replace(0, np.nan)
-    merged = merged.dropna(subset=["line_divergence"])
-    merged["_divergence_limit"] = merged["stat_name"].apply(max_line_divergence_for)
-    merged = merged[merged["line_divergence"] <= merged["_divergence_limit"]]
-    merged = merged.drop(columns=["_divergence_limit"])
+    merged["_line_ok"] = merged.apply(
+        lambda r: line_matches_proxy(r["stat_value"], r["proxy_line"], r["stat_name"]), axis=1)
+    merged = merged[merged["_line_ok"]].drop(columns=["_line_ok"])
     excluded = before - len(merged)
     if excluded:
         print(f"Excluded {excluded} of {before} matched props: Underdog's real line diverges "
