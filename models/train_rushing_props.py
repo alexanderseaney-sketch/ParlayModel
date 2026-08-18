@@ -25,6 +25,7 @@ from xgboost import XGBClassifier
 from player_prop_rushing_features import build_rushing_yards_dataset
 from individual_context_features import build_game_flags
 from game_context_features import build_game_context, add_snap_share
+from calibration_report import print_calibration_report
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
@@ -85,6 +86,7 @@ def main():
     all_probs, all_y, all_correct = np.array(all_probs), np.array(all_y), np.array(all_correct)
     print("-" * 40)
     print(f"{'Pooled':<10} {all_correct.mean()*100:>9.1f}% {roc_auc_score(all_y, all_probs):>8.3f}")
+    print_calibration_report(all_probs, all_y, "rushing_yards")
     conf = np.abs(all_probs - 0.5) * 2
     for t in [0.2, 0.3, 0.4]:
         mask = conf >= t

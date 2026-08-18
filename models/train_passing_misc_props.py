@@ -15,6 +15,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 from player_prop_passing_features import build_passing_yards_dataset
+from calibration_report import print_calibration_report
 
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
 
@@ -63,6 +64,7 @@ def train_one(prop_type: str, config: dict) -> None:
     all_probs, all_y, all_correct = np.array(all_probs), np.array(all_y), np.array(all_correct)
     auc = roc_auc_score(all_y, all_probs)
     print(f"  Pooled: {all_correct.mean()*100:.1f}% acc, AUC={auc:.3f} (0.5=no signal)")
+    print_calibration_report(all_probs, all_y, prop_type)
     conf = np.abs(all_probs - 0.5) * 2
     for t in [0.2, 0.3, 0.4]:
         mask = conf >= t

@@ -21,6 +21,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from xgboost import XGBClassifier
 
 from defensive_sacks_features import build_sacks_dataset, DEFENSIVE_POSITIONS
+from calibration_report import print_calibration_report
 
 FEATURES = ["sacks_rolling", "sacks_last3", "plays_on_defense_rolling",
             "plays_on_defense_last3", "team_sacks_rolling"]
@@ -53,6 +54,7 @@ def main():
     all_probs, all_y, all_correct = np.array(all_probs), np.array(all_y), np.array(all_correct)
     auc = roc_auc_score(all_y, all_probs)
     print(f"\nPooled: {all_correct.mean()*100:.1f}% acc, AUC={auc:.3f} (0.5=no signal)")
+    print_calibration_report(all_probs, all_y, "sacks")
     conf = np.abs(all_probs - 0.5) * 2
     for t in [0.2, 0.3, 0.4]:
         mask = conf >= t
