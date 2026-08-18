@@ -259,6 +259,39 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-17 — [work]**
+- Did: Alex said the dashboard "feels basic and AI-generated" and asked about tools to
+  auto-fix it. Real answer: no separate tool needed, Streamlit's own theming (config.toml
+  + CSS injection) is fully capable — the issue was that what existed followed generic
+  defaults rather than making deliberate choices. Audited the existing theme (added over
+  the weekend): dark base with a gold accent was a reasonable start, but Space Grotesk-
+  on-headers-only + rounded-8px-everywhere + no distinct data typography is close to the
+  generic "clean SaaS dashboard" template — the exact pattern that reads as templated
+  regardless of subject matter. **Redesigned with a real signature grounded in the
+  actual subject** (NFL broadcast/scouting-terminal, not generic dashboard): condensed
+  broadcast-style headers (Oswald, evokes scoreboard/jersey typography), IBM Plex Sans
+  for body, **IBM Plex Mono specifically for numeric data** (odds, confidence scores,
+  dataframes) so stats read like a real stat sheet rather than decorative UI chrome,
+  sharper 4px corners instead of rounded-everywhere, and a signature "yard marker"
+  divider (gold hash-tick rule with a small-caps label) replacing all 4 of the app's
+  plain `st.divider()` calls, each given a real contextual label (MATCHED PROPS,
+  CORRELATION CHECK, STAKE, MANUAL PULLS) rather than being decorative.
+  **Tested, not just written**: verified the full app still loads with no exceptions
+  after both the CSS rewrite and the divider swaps (regex-replaced with an assertion
+  that each target line was actually `st.divider()` before touching it, so no risk of
+  silently corrupting unrelated code), and separately verified the new divider's HTML
+  renders clean and well-formed in isolation.
+- Blocked: couldn't take an actual visual screenshot to self-critique from this sandbox
+  (no browser rendering tool available here) — verification was functional (loads
+  without error, HTML is well-formed) rather than visual. **Worth a real visual check
+  at home or on the deployed site** before considering this done — CSS that's
+  functionally correct can still look off in ways only a screenshot catches.
+- Next: if the visual result still doesn't land, the signature element (yard-marker
+  divider) is the piece most worth iterating on first — it's the one deliberately
+  distinctive choice, so it's doing the most work toward "not generic."
+
+---
+
+**2026-08-17 — [work]**
 - Did: Quick pass on the minor/cosmetic known-issues list. Bumped `max_iter` from 1000
   to 3000 on every `LogisticRegression` call across the historical exploratory training
   scripts (`train_cv.py`, `train_ensemble_agreement.py`, `train_final.py`,

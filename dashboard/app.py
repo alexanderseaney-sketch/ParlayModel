@@ -34,20 +34,51 @@ st.set_page_config(page_title="ParlayModel", page_icon="🏈", layout="wide")
 # broad: Streamlit only applies a visible border/radius to it when a container was
 # actually created with border=True, so styling every instance is a safe no-op on
 # the many plain (unbordered) ones used just for layout.
+#
+# Design direction: a film-room / scouting-terminal feel grounded in NFL broadcast
+# graphics, not a generic dark SaaS dashboard reskin. Three deliberate type roles
+# (condensed broadcast display, clean body, mono for anything numeric -- odds,
+# confidence scores, stat tables) instead of one font on headers only. A gold "yard
+# marker" divider as the one signature element, used sparingly. Sharper 4px corners
+# throughout instead of the rounded-everywhere SaaS-card default.
 _GLOBAL_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
-    --pm-radius: 8px;
-    --pm-border: rgba(230, 237, 243, 0.12);
-    --pm-surface: #161B22;
-    --pm-text: #E6EDF3;
+    --pm-radius: 4px;
+    --pm-border: rgba(212, 169, 74, 0.18);
+    --pm-surface: #141920;
+    --pm-text: #E8ECEF;
+    --pm-muted: #7C8894;
+    --pm-gold: #D4A94A;
+}
+
+html, body, [class*="css"] {
+    font-family: 'IBM Plex Sans', sans-serif;
 }
 
 h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
-    letter-spacing: -0.01em;
+    font-family: 'Oswald', sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+}
+
+h1 { border-bottom: 2px solid var(--pm-gold); padding-bottom: 0.4rem; }
+
+/* Numeric/data surfaces read like a real stat sheet, not decorative UI chrome */
+div[data-testid="stMetricValue"],
+div[data-testid="stDataFrame"],
+code, pre {
+    font-family: 'IBM Plex Mono', monospace !important;
+}
+
+div[data-testid="stMetricLabel"] {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.75rem !important;
+    color: var(--pm-muted) !important;
 }
 
 .block-container {
@@ -61,10 +92,29 @@ div[data-testid="stVerticalBlock"] {
 
 div[data-testid^="stBaseButton-"] {
     border-radius: var(--pm-radius) !important;
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-weight: 500 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.85rem !important;
 }
 
 section[data-testid="stSidebar"] {
     border-right: 1px solid var(--pm-border);
+}
+
+/* Signature element: a "yard marker" divider -- gold hash ticks instead of a plain
+   hairline, used between major sections instead of st.divider()'s generic rule. */
+.pm-yard-divider {
+    display: flex; align-items: center; gap: 6px; margin: 1.75rem 0 1.25rem 0;
+}
+.pm-yard-divider::before, .pm-yard-divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--pm-border);
+}
+.pm-yard-divider span {
+    color: var(--pm-gold); font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase;
+    opacity: 0.75;
 }
 
 .pm-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
@@ -72,7 +122,8 @@ section[data-testid="stSidebar"] {
 .pm-photo-placeholder { width: 64px; height: 64px; border-radius: 50%; background: var(--pm-surface);
             color: var(--pm-text); display: flex; align-items: center; justify-content: center;
             margin: 4px auto; font-weight: 600; font-size: 20px; border: 2px solid var(--pm-border); }
-.pm-pos-pill { text-align: center; font-size: 11px; font-weight: 600; opacity: 0.55;
+.pm-pos-pill { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+            font-weight: 600; opacity: 0.75; color: var(--pm-gold);
             text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
 .pm-dialog-photo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
             display: block; border: 2px solid var(--pm-border); }
@@ -82,6 +133,12 @@ section[data-testid="stSidebar"] {
 </style>
 """
 st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+
+
+def yard_divider(label: str):
+    """The signature section divider -- a gold hash-marked rule with a small caps
+    label, instead of Streamlit's plain st.divider(). Use between major sections."""
+    st.markdown(f'<div class="pm-yard-divider"><span>{label}</span></div>', unsafe_allow_html=True)
 
 
 def check_password() -> bool:
@@ -270,7 +327,7 @@ def page_weekly_bet_slip():
     if not result:
         return
 
-    st.divider()
+    yard_divider("MATCHED PROPS")
     st.caption(
         f"{result['matched_count']} live props matched to a model prediction and passed "
         f"the line-divergence check · {result['candidate_count']} genuinely +EV at real prices."
@@ -651,7 +708,7 @@ def page_parlay_builder():
                     st.session_state.slip.pop(i)
                     st.rerun()
 
-        st.divider()
+        yard_divider("CORRELATION CHECK")
 
         legs_for_corr = [
             {"team": leg.get("team"), "position_prop": leg.get("position_prop"), "prob": leg["my_prob"]}
@@ -696,7 +753,7 @@ def page_parlay_builder():
         stake = st.number_input("Stake ($)", min_value=0.0, value=10.0, step=1.0)
         st.write(f"Potential payout at your fair (correlation-adjusted) odds: **${stake * combined_fair_mult:.2f}**")
 
-        st.divider()
+        yard_divider("STAKE")
         st.caption(
             "Placement isn't automated yet (Phase 5 — Claude in Chrome, home only, "
             "human-approved each time). For now this gives you a clean slip to place manually."
@@ -1324,7 +1381,7 @@ def page_run_pulls():
             with st.expander(f"{'✅' if success else '❌'} {label}"):
                 st.code(output or "(no output)")
 
-    st.divider()
+    yard_divider("MANUAL PULLS")
 
     for label, cmd in PULL_SCRIPTS.items():
         if st.button(f"Run: {label}"):
