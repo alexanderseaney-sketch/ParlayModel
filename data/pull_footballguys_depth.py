@@ -117,8 +117,9 @@ def main():
     df, updated_text = parse_depth_charts(html)
 
     if df.empty:
-        # Raise rather than a silent return -- see pull_espn_news.py's main() for why
-        # a quiet exit-0 here is a real trap (run_pull_script reads it as success).
+        # Raise rather than a silent return -- a quiet exit-0 here is a real trap,
+        # since run_pull_script's subprocess.returncode check reads it as a
+        # successful pull even though nothing was written.
         raise RuntimeError("0 rows parsed -- page structure may have changed. Nothing written.")
 
     n_teams = df["team_abbr"].nunique()

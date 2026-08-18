@@ -143,7 +143,6 @@ EXPECTED_FILES = {
     "injuries.csv": "data/pull_nflverse.py",
     "snap_counts.csv": "data/pull_nflverse.py",
     "players.csv": "data/pull_nflverse.py",
-    "espn_news.csv": "data/pull_espn_news.py",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",
     "footballguys_depth.csv": "data/pull_footballguys_depth.py",
@@ -174,7 +173,6 @@ def _default_pull_years(lookback: int = 3) -> list[str]:
 # on both local dev and Streamlit Cloud's container.
 PULL_SCRIPTS = {
     "nflverse (schedules + stats + NGS + injuries + snaps)": [sys.executable, "data/pull_nflverse.py", "--years", *_default_pull_years(), "--skip-pbp"],
-    "ESPN news": [sys.executable, "data/pull_espn_news.py"],
     "SB Nation team news": [sys.executable, "data/pull_sbnation_news.py"],
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
     "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],
@@ -427,7 +425,7 @@ def get_player_news(player_name: str, max_items: int = 8) -> list[dict]:
     """Live, on-demand news search via Google News' public RSS search (no key, no
     login -- explicitly offered by Google for "rendering Google News results within
     a personal feed reader for personal, non-commercial use," which is exactly this).
-    Deliberately NOT one of the bulk scheduled pulls (espn/sbnation/nbcsports_news.csv)
+    Deliberately NOT one of the bulk scheduled pulls (sbnation/nbcsports_news.csv)
     -- those are team/league-wide feeds that only catch a player if they're a big
     enough story to appear in a general feed. This is a real-time, player-specific
     search instead, triggered by the user clicking "Pull recent news" on that one

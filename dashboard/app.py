@@ -1383,13 +1383,9 @@ def page_underdog_props():
 
 def _news_page(title: str, icon: str, caption: str, filename: str, group_col: str, group_label: str,
                 caption_cols: tuple[str, ...] = ("author", "published")):
-    """Shared layout for the three news feed pages -- same filter/card pattern, only
-    the source file, the column used to group by (team vs. feed), and which extra
-    columns are meaningful to show in each card's caption differ. caption_cols is
-    explicit per page rather than guessed generically: sbnation_news.csv's "source"
-    column is a raw blog URL (not meant for display), while espn_news.csv's "source"
-    is a real feed-name label meant to be shown -- same column name, different
-    meaning, so this can't be inferred safely from column presence alone."""
+    """Shared layout for the news feed pages -- same filter/card pattern, only the
+    source file, the column used to group by (team vs. feed), and which extra
+    columns are meaningful to show in each card's caption differ."""
     st.title(f"{icon} {title}")
     st.caption(caption)
     df = load_csv_if_exists(filename)
@@ -1430,14 +1426,6 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
                 st.caption(f"Athletes: {row['athletes_tagged']}")
             if pd.notna(row.get("link")):
                 st.markdown(f"[Read more]({row['link']})")
-
-
-def page_espn_news():
-    _news_page("ESPN News Feed", "📰",
-               "League-wide news from ESPN's public RSS feed (their JSON API is blocked by "
-               "ESPN's own edge/bot protection, unrelated to per-team breakdowns — see "
-               "pull_espn_news.py for details).",
-               "espn_news.csv", "source", "Source", caption_cols=("author", "published"))
 
 
 def page_sbnation_news():
@@ -1510,14 +1498,13 @@ PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈"
 PAGE_NFL_STATS = st.Page(page_nfl_stats, title="NFL Stats", icon="📊")
 PAGE_SBNATION_NEWS = st.Page(page_sbnation_news, title="SB Nation News", icon="📰")
 PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
-PAGE_ESPN_NEWS = st.Page(page_espn_news, title="ESPN News", icon="📰")
 PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
 PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
 
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
     "Research": [PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_NFL_STATS,
-                 PAGE_SBNATION_NEWS, PAGE_NBC_NEWS, PAGE_ESPN_NEWS],
+                 PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
     "Admin": [PAGE_OVERVIEW, PAGE_RUN_PULLS],
 })
 

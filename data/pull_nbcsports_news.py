@@ -80,8 +80,9 @@ def main():
 
     new_df = pull_all_feeds()
     if new_df.empty:
-        # Raise rather than a silent return -- see pull_espn_news.py's main() for why
-        # a quiet exit-0 here is a real trap (run_pull_script reads it as success).
+        # Raise rather than a silent return -- a quiet exit-0 here is a real trap,
+        # since run_pull_script's subprocess.returncode check reads it as a
+        # successful pull even though nothing was written.
         raise RuntimeError("0 items pulled across all feeds -- feeds may have changed. Nothing written.")
     new_df["pulled_at"] = pulled_at
 
