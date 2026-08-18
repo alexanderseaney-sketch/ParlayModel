@@ -72,6 +72,17 @@ def max_line_divergence_for(stat_name: str) -> float:
         return PERIOD_MAX_LINE_DIVERGENCE
     return MAX_LINE_DIVERGENCE
 
+
+def pretty_stat_name(stat_name) -> str:
+    """receiving_yds -> Receiving Yds -- a readable label instead of a raw column
+    name, used anywhere a prop's stat type is shown to a human rather than matched
+    against other data. Shared between the dashboard and generate_weekly_bet_slip.py
+    so both surfaces describe a prop the same way instead of one of them leaking the
+    raw stat_name string into a bet suggestion's description."""
+    if not isinstance(stat_name, str) or not stat_name:
+        return "?"
+    return stat_name.replace("_", " ").title()
+
 # Every raw data file the pull scripts are expected to produce, and which script produces it.
 EXPECTED_FILES = {
     "schedules.csv": "data/pull_nflverse.py",

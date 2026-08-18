@@ -17,6 +17,7 @@ from utils import (
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
+    pretty_stat_name,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -175,13 +176,7 @@ def _confidence_badge(model_prob: float, conf: float):
         st.badge(f"{pct} confident", icon="⚪", color="gray")
 
 
-def _pretty_stat(stat_name) -> str:
-    """receiving_yds -> Receiving Yds -- a readable label instead of a raw column
-    name, used anywhere a prop's stat type is shown to a human rather than matched
-    against other data."""
-    if not isinstance(stat_name, str) or not stat_name:
-        return "?"
-    return stat_name.replace("_", " ").title()
+_pretty_stat = pretty_stat_name  # local alias -- shared with generate_weekly_bet_slip.py, see utils.pretty_stat_name
 
 
 def _pretty_col(col: str) -> str:
@@ -744,7 +739,7 @@ def page_parlay_builder():
             )
             for pos_prop_a, pos_prop_b, phi in adjustments:
                 direction = "raises" if phi > 0 else "lowers"
-                st.caption(f"　　{pos_prop_a} + {pos_prop_b}: phi={phi:+.3f} — {direction} the true combined hit rate vs. treating them as independent")
+                st.caption(f"　　{pos_prop_a} + {pos_prop_b}: correlation {phi:+.2f} — {direction} the true combined hit rate vs. treating them as independent")
             col1, col2, col3 = st.columns(3)
             col1.metric("Naive (independent) probability", f"{naive_prob * 100:.1f}%")
             col2.metric("Correlation-adjusted probability", f"{adjusted_prob * 100:.1f}%",
