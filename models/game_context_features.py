@@ -18,21 +18,35 @@ RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 def build_game_context(schedules: pd.DataFrame) -> pd.DataFrame:
     """One row per team-week: that team's own perspective on total/spread/weather/rest."""
-    home = schedules[["season", "week", "home_team", "away_team", "total_line", "spread_line",
-                       "temp", "wind", "roof", "home_rest", "away_rest"]].copy()
+    home = schedules[["game_id", "season", "week", "home_team", "away_team", "total_line",
+                       "spread_line", "temp", "wind", "roof", "home_rest", "away_rest"]].copy()
     home["team"] = home["home_team"]
     home["is_home"] = 1
     home["team_implied_total"] = (home["total_line"] / 2) - (home["spread_line"] / 2)
     home["rest_days"] = home["home_rest"]
 
-    away = schedules[["season", "week", "home_team", "away_team", "total_line", "spread_line",
-                       "temp", "wind", "roof", "home_rest", "away_rest"]].copy()
+    away = schedules[["game_id", "season", "week", "home_team", "away_team", "total_line",
+                       "spread_line", "temp", "wind", "roof", "home_rest", "away_rest"]].copy()
     away["team"] = away["away_team"]
     away["is_home"] = 0
     away["team_implied_total"] = (away["total_line"] / 2) + (away["spread_line"] / 2)
     away["rest_days"] = away["away_rest"]
 
     context = pd.concat([home, away], ignore_index=True)
+
+    # For an unplayed game, schedules.csv's temp/wind are NaN (nflverse only records
+    # ACTUAL observed conditions, filled in after the game). Prefer a real forecast
+    # (data/pull_weather_forecast.py) when one's been pulled for that game -- only
+    # falls through to the median/0 placeholder below when neither a played-game
+    # value nor a forecast exists yet (game too far out, or forecast not pulled).
+    forecast_path = os.path.join(RAW_DIR, "weather_forecast.csv")
+    if os.path.exists(forecast_path):
+        forecast = pd.read_csv(forecast_path, usecols=["game_id", "temp_forecast", "wind_forecast"])
+        context = context.merge(forecast, on="game_id", how="left")
+        context["temp"] = context["temp"].fillna(context["temp_forecast"])
+        context["wind"] = context["wind"].fillna(context["wind_forecast"])
+        context = context.drop(columns=["temp_forecast", "wind_forecast"])
+
     context["temp"] = context["temp"].fillna(context["temp"].median())
     context["wind"] = context["wind"].fillna(0)
     context["is_dome"] = context["roof"].isin(["dome", "closed"]).astype(int)
