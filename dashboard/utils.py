@@ -1,5 +1,6 @@
 """Shared helpers for the ParlayModel dashboard."""
 import email.utils
+import json
 import os
 import subprocess
 import sys
@@ -16,6 +17,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
 BET_LOG_DIR = os.path.join(ROOT_DIR, "bet_logs")
 BET_LOG_PATH = os.path.join(BET_LOG_DIR, "bets.csv")
+DEV_NOTES_DIR = os.path.join(ROOT_DIR, "dev_notes")
+DEV_NOTES_PATH = os.path.join(DEV_NOTES_DIR, "dev_notes.jsonl")
 
 # app.py adds models/ to sys.path itself, but only AFTER its own `from utils import
 # (...)` line -- meaning if utils.py needed models/ only at that point, it'd already be
@@ -250,6 +253,54 @@ def append_bet(row: dict) -> None:
     df = load_bet_log()
     df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
     df.to_csv(BET_LOG_PATH, index=False)
+
+
+def save_dev_note(page_title: str, note: str, frozen_at: str, page_state: dict) -> None:
+    """Appends one Dev Mode note -- the page it was left on, the note text, and a
+    snapshot of that page's own filter/selection state captured at the exact moment
+    Dev Mode was switched on (not when the note was saved), so it always describes
+    what was actually on screen at that instant regardless of anything that happened
+    on the page while the note was being written. JSONL (one JSON object per line),
+    not CSV -- page_state is a nested dict of arbitrary widget values, not a flat row.
+    Appending a line is also safe against a half-written file the way a full CSV
+    rewrite wouldn't be."""
+    os.makedirs(DEV_NOTES_DIR, exist_ok=True)
+    safe_state = {}
+    for k, v in page_state.items():
+        try:
+            json.dumps(v)
+            safe_state[k] = v
+        except (TypeError, ValueError):
+            safe_state[k] = repr(v)  # non-serializable widget internals -- keep a readable trace, not a crash
+    entry = {"timestamp": frozen_at, "page": page_title, "note": note,
+              "page_state": safe_state, "resolved": False}
+    with open(DEV_NOTES_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def load_dev_notes() -> list[dict]:
+    if not os.path.exists(DEV_NOTES_PATH):
+        return []
+    notes = []
+    with open(DEV_NOTES_PATH, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                notes.append(json.loads(line))
+    return notes
+
+
+def set_dev_note_resolved(index: int, resolved: bool) -> None:
+    """Rewrites the whole file with one note's resolved flag flipped -- JSONL has no
+    efficient in-place row update, and this file is human-sized (dozens of notes,
+    not millions), so a full rewrite is the simplest correct approach here rather
+    than a premature optimization."""
+    notes = load_dev_notes()
+    if 0 <= index < len(notes):
+        notes[index]["resolved"] = resolved
+    with open(DEV_NOTES_PATH, "w", encoding="utf-8") as f:
+        for n in notes:
+            f.write(json.dumps(n) + "\n")
 
 
 CURRENT_PREDICTIONS_PATH = os.path.join(ROOT_DIR, "models", "current_player_predictions.csv")

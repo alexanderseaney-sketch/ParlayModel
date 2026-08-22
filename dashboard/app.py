@@ -6,7 +6,7 @@ Run with:
 """
 import os
 import sys
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 import pandas as pd
 import streamlit as st
@@ -17,7 +17,7 @@ from utils import (
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
-    pretty_stat_name, load_line_movement,
+    pretty_stat_name, load_line_movement, save_dev_note, load_dev_notes, set_dev_note_resolved,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -213,6 +213,81 @@ def show_freshness_banner():
                     run_all_pulls()
                 st.cache_data.clear()
                 st.rerun()
+
+
+def show_dev_mode_panel(page_title: str):
+    """Freeze-and-annotate tool: lets Alex flag something on whatever screen he's
+    looking at with a plain-English note, paired with a snapshot of THIS page's own
+    filter/selection state -- not a picture, but the actual underlying state, which
+    is what's needed to reproduce exactly what he saw. Snapshotted at the MOMENT Dev
+    Mode is switched on (not when the note is saved) into a separate session_state
+    key, so the eventual note always describes that exact instant regardless of
+    anything that happens on the page -- including Streamlit's own rerun-on-every-
+    interaction behavior -- while the note is being written. That's the actual
+    "freeze": not a technical lock on the widgets, but never reading live state again
+    once it's been captured."""
+    if "dev_mode" not in st.session_state:
+        st.session_state.dev_mode = False
+
+    # Streamlit's multipage nav is client-side routing, not a full page reload --
+    # session_state (including dev_mode) survives a click to a different page. Left
+    # unhandled, that would silently carry a stale "frozen on X" banner onto whatever
+    # page got clicked next, which defeats the entire point (the note has to
+    # describe the page it's actually attached to). Auto-exit instead of re-freezing
+    # on the new page -- re-freezing silently would just look like it never froze.
+    if st.session_state.dev_mode and st.session_state.get("dev_mode_page") != page_title:
+        st.session_state.dev_mode = False
+        st.info(f"Dev Mode turned off — you navigated away from "
+                f"\"{st.session_state.get('dev_mode_page')}\". Click 🛠️ Dev Mode again to freeze this page.")
+
+    with st.sidebar:
+        st.divider()
+        if not st.session_state.dev_mode:
+            if st.button("🛠️ Dev Mode", width="stretch",
+                         help="Freeze this screen and leave a note describing what to fix"):
+                st.session_state.dev_mode = True
+                st.session_state.dev_mode_page = page_title
+                st.session_state.dev_mode_frozen_at = datetime.now(timezone.utc).isoformat()
+                # Everything currently selected on this page (filters, search text,
+                # the current slip, etc.) -- excluding dev-mode's OWN bookkeeping keys
+                # and Streamlit's internal per-widget/form keys, neither of which
+                # describe what Alex was actually looking at.
+                st.session_state.dev_mode_snapshot = {
+                    k: v for k, v in st.session_state.items()
+                    if not k.startswith("dev_mode") and not k.startswith("FormSubmitter")
+                }
+                st.rerun()
+        else:
+            if st.button("🔓 Exit Dev Mode", width="stretch"):
+                st.session_state.dev_mode = False
+                st.rerun()
+
+    if not st.session_state.dev_mode:
+        return
+
+    frozen_at_display = st.session_state.dev_mode_frozen_at[:16].replace("T", " ")
+    with st.container(border=True):
+        st.warning(
+            f"🔒 **DEV MODE — frozen on \"{st.session_state.dev_mode_page}\"** at "
+            f"{frozen_at_display} UTC. Only the state at the moment you clicked Dev "
+            f"Mode is saved with your note — anything you click on this page now "
+            f"won't change what gets recorded."
+        )
+        with st.form("dev_note_form", clear_on_submit=True):
+            note = st.text_area(
+                "What do you want fixed or changed on this screen?", height=100,
+                placeholder='e.g. "The Movement column here should be colored red/green, not plain text"',
+            )
+            submitted = st.form_submit_button("💾 Save note")
+        if submitted:
+            if note.strip():
+                save_dev_note(
+                    st.session_state.dev_mode_page, note.strip(),
+                    st.session_state.dev_mode_frozen_at, st.session_state.dev_mode_snapshot,
+                )
+                st.success("Saved — see it under Admin → Dev Notes.")
+            else:
+                st.error("Write a note before saving.")
 
 
 show_freshness_banner()
@@ -1465,6 +1540,42 @@ def page_nbc_news():
 
 # ==================================================================== Admin
 
+def page_dev_notes():
+    st.title("📝 Dev Notes")
+    st.caption(
+        "Notes left from Dev Mode (the 🛠️ button in the sidebar) -- what to fix, and "
+        "the exact filter/selection state on that page at the moment each one was frozen."
+    )
+    notes = load_dev_notes()
+    if not notes:
+        st.info("No dev notes yet. Click **🛠️ Dev Mode** in the sidebar on any page to leave one.")
+        return
+
+    show_resolved = st.checkbox("Show resolved notes", value=False)
+    for i, n in reversed(list(enumerate(notes))):
+        if n.get("resolved") and not show_resolved:
+            continue
+        with st.container(border=True):
+            header_cols = st.columns([5, 1])
+            with header_cols[0]:
+                ts = n["timestamp"][:16].replace("T", " ")
+                status = "✅ resolved" if n.get("resolved") else "🟡 open"
+                st.markdown(f"**{n['page']}** — {ts} UTC · {status}")
+            with header_cols[1]:
+                if not n.get("resolved"):
+                    if st.button("Mark resolved", key=f"resolve_{i}", width="stretch"):
+                        set_dev_note_resolved(i, True)
+                        st.rerun()
+                else:
+                    if st.button("Reopen", key=f"reopen_{i}", width="stretch"):
+                        set_dev_note_resolved(i, False)
+                        st.rerun()
+            st.write(n["note"])
+            if n.get("page_state"):
+                with st.expander("Page state at the time"):
+                    st.json(n["page_state"])
+
+
 def page_run_pulls():
     st.title("🔄 Run Data Pulls")
     st.caption("Runs the actual pull scripts. Output streams below once finished (can take a minute).")
@@ -1518,15 +1629,17 @@ PAGE_SBNATION_NEWS = st.Page(page_sbnation_news, title="SB Nation News", icon="�
 PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
 PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
 PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
+PAGE_DEV_NOTES = st.Page(page_dev_notes, title="Dev Notes", icon="📝")
 
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
     "Research": [PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
-    "Admin": [PAGE_OVERVIEW, PAGE_RUN_PULLS],
+    "Admin": [PAGE_OVERVIEW, PAGE_RUN_PULLS, PAGE_DEV_NOTES],
 })
 
 st.sidebar.divider()
 st.sidebar.caption("ParlayModel")
 
+show_dev_mode_panel(nav.title)
 nav.run()
