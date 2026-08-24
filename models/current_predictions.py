@@ -34,8 +34,10 @@ predicted probability of beating it, and a confidence score (0-1, how far the
 prediction sits from a coinflip) -- >=0.4 confidence historically hit ~78-84% accuracy
 depending on the prop, per backtesting.
 """
+import functools
 import os
 import pickle
+import sys
 
 import numpy as np
 import pandas as pd
@@ -44,8 +46,39 @@ from individual_context_features import build_player_injury_status, build_game_f
 from game_context_features import build_game_context, add_snap_share
 from defensive_sacks_features import DEFENSIVE_POSITIONS
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
+from utils import normalize_name  # noqa: E402
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "current_player_predictions.csv")
+
+
+@functools.lru_cache(maxsize=1)
+def _current_roster_names() -> frozenset | None:
+    """Normalized names of every player on the current Footballguys depth-chart pull
+    -- the only source this project has for "is this person actually on an NFL
+    roster right now," as opposed to just having a player_id that once appeared in
+    weekly_stats.csv. Real bug found 2026-08-23: score_prop() below used to take
+    each player_id's single most recent game ever, no matter how old, and score it
+    against their old team's next game -- so a player_id last seen in weekly_stats
+    2014 got scored as a live prop for whichever team currently holds that old team
+    slot. Confirmed 63.1% of all 18279 predictions were "stale" (pre-2025), and of
+    those, 90% (2476 of 2756 unique players) don't appear on any current depth chart
+    at all -- e.g. DeMarco Murray, Torrey Smith, long retired. The other 10% are
+    real current players in a genuine lull (e.g. Brandon Aiyuk, injured most of
+    2024) and should keep showing their real stale-data badge, not be silently
+    dropped -- this filters by ROSTER membership, not by how recent stats_as_of is.
+    Cached (lru_cache, not a module-level constant) since score_prop() is called
+    once per prop_type (~28 times) in build_current_predictions() -- reads the file
+    once instead of 28 times. Returns None (rather than an empty set, which would
+    silently exclude everyone) if the depth-chart pull hasn't run yet, so callers
+    can choose to skip the filter entirely rather than mistake "no data" for "empty
+    roster."""
+    path = os.path.join(RAW_DIR, "footballguys_depth.csv")
+    if not os.path.exists(path):
+        return None
+    depth = pd.read_csv(path)
+    return frozenset(depth["player_name"].apply(normalize_name))
 
 
 def _next_game_lookup(schedules: pd.DataFrame) -> pd.DataFrame:
@@ -419,6 +452,18 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
     # silently passing as "current" the way it used to.
     latest = df.sort_values(["player_id", "season", "week"]).groupby("player_id").tail(1).copy()
     latest = latest.rename(columns={"season": "stats_as_of_season", "week": "stats_as_of_week"})
+
+    # Roster check -- see _current_roster_names() docstring for the bug this fixes
+    # (retired players being scored as live props). Skips the filter (rather than
+    # dropping everyone) if the depth-chart pull hasn't run yet, matching how the
+    # rest of this file degrades when an optional input is missing.
+    roster = _current_roster_names()
+    if roster is not None:
+        before = len(latest)
+        latest = latest[latest["player_display_name"].apply(normalize_name).isin(roster)]
+        dropped = before - len(latest)
+        if dropped:
+            print(f"[{prop_type}] dropped {dropped} player(s) not on a current NFL roster.")
 
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
     # Rename BEFORE merging, not after -- the base dataset already has its own
