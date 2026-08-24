@@ -30,13 +30,22 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
     wr_te = weekly[weekly["position"].isin(["WR", "TE", "RB"])].copy()
-    wr_te = wr_te[wr_te["targets"] >= MIN_TARGETS_TO_QUALIFY]
 
     keep_cols = ["player_id", "player_display_name", "position", "recent_team", "season", "week",
                  "targets", "receiving_yards", "target_share", "receiving_air_yards"]
     wr_te = wr_te[keep_cols].sort_values(["player_id", "season", "week"]).reset_index(drop=True)
 
-    # Rolling pre-game features from the player's own history (strictly prior weeks)
+    # Rolling pre-game features from the player's own FULL history (strictly prior
+    # weeks) -- deliberately NOT pre-filtered to targets >= MIN_TARGETS_TO_QUALIFY
+    # here. Real bug found 2026-08-23: filtering low-target games out BEFORE this
+    # rolling average meant a player's own baseline silently excluded their cold
+    # games, not just this week's label -- systematically inflating the proxy for
+    # anyone with an irregular receiving role (worst for run-first RBs: Derrick
+    # Henry's live proxy was 15.2 receiving yards against a real Underdog line of
+    # 4.5). MIN_TARGETS_TO_QUALIFY is still applied below, just after the rolling
+    # features are computed instead of before -- still excludes a barely-used game
+    # from being a training LABEL, without also erasing it from being part of
+    # every later week's rolling INPUT.
     for col in ["receiving_yards", "targets", "target_share", "receiving_air_yards"]:
         wr_te[f"{col}_rolling"] = (
             wr_te.groupby(["player_id", "season"])[col]
@@ -119,6 +128,12 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
             columns={"team": "recent_team", **{c: f"team_{c}" for c in team_cols_pbp}}),
         on=["recent_team", "season", "week"], how="left",
     )
+
+    # Applied here, after every rolling/merge step above, not on the raw weekly log --
+    # excludes a barely-used game (garbage-time/emergency snaps) from being a row this
+    # function outputs, without also erasing it from earlier filtering out of any
+    # OTHER row's rolling average (see comment above where wr_te is first built).
+    wr_te = wr_te[wr_te["targets"] >= MIN_TARGETS_TO_QUALIFY].reset_index(drop=True)
 
     # The backtestable proxy target: did the player beat their own season-to-date average?
     wr_te["proxy_line"] = wr_te["receiving_yards_rolling"]

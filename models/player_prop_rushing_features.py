@@ -30,12 +30,17 @@ def build_rushing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
     rb = weekly[weekly["position"].isin(["RB", "QB"])].copy()
-    rb = rb[rb["carries"] >= MIN_CARRIES_TO_QUALIFY]
 
     keep_cols = ["player_id", "player_display_name", "position", "recent_team", "season", "week",
                  "carries", "rushing_yards", "targets", "receiving_yards"]
     rb = rb[keep_cols].sort_values(["player_id", "season", "week"]).reset_index(drop=True)
 
+    # Deliberately NOT pre-filtered to carries >= MIN_CARRIES_TO_QUALIFY here -- same
+    # bug as player_prop_features.py's receiving-yards dataset (fixed alongside this,
+    # 2026-08-23): filtering low-carry games out before this rolling average meant a
+    # player's own baseline silently excluded their cold games, not just this week's
+    # label, inflating the proxy for anyone with an irregular rushing role. Applied
+    # below instead, after the rolling features are computed.
     for col in ["rushing_yards", "carries", "targets", "receiving_yards"]:
         rb[f"{col}_rolling"] = (
             rb.groupby(["player_id", "season"])[col]
@@ -84,6 +89,10 @@ def build_rushing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     )
 
     rb = rb[rb["week"] >= min_week].reset_index(drop=True)
+
+    # Applied here, after every rolling/merge step above, not on the raw weekly log --
+    # see the matching comment where rb is first built.
+    rb = rb[rb["carries"] >= MIN_CARRIES_TO_QUALIFY].reset_index(drop=True)
 
     rb["proxy_line"] = rb["rushing_yards_rolling"]
     rb["over_proxy_line"] = (rb["rushing_yards"] > rb["proxy_line"]).astype(int)
