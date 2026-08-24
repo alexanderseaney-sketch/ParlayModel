@@ -601,14 +601,21 @@ def page_parlay_builder():
             "78% accuracy at the 0.4 threshold, pooled across 5 real seasons. Being confident "
             "here means the model has a real, tested reason, not a guess."
         )
-        min_confidence = st.slider(
-            "Minimum confidence to show a prop", 0.0, 1.0, 0.4, 0.05,
-            help="0 = show everything (coinflips included). 0.4 historically ~78% accurate. Higher = fewer, stronger picks.",
+        # A range, not just a floor -- a floor-only filter can't isolate a middle
+        # band (e.g. "show me the 0.4-0.7 picks, not the >0.7 ones I've already
+        # bet"). Defaults to [0.4, 1.0] so the out-of-the-box behavior matches the
+        # old minimum-only slider exactly (everything from the validated 0.4
+        # threshold up).
+        min_confidence, max_confidence = st.slider(
+            "Confidence range to show", 0.0, 1.0, (0.4, 1.0), 0.05,
+            help="0 = coinflips included. 0.4 historically ~78% accurate. Drag both ends to isolate a band instead of just a floor.",
         )
 
         if predictions is not None:
-            qualifying = predictions[predictions["confidence"] >= min_confidence]
-            st.metric("Players clearing this bar right now", f"{len(qualifying)} of {len(predictions)}")
+            qualifying = predictions[
+                predictions["confidence"].between(min_confidence, max_confidence)
+            ]
+            st.metric("Players in this range right now", f"{len(qualifying)} of {len(predictions)}")
 
         name_col = find_column(df, ["full_name", "player_name", "name"])
         stat_col = find_column(df, ["stat_name", "stat"])
@@ -701,10 +708,10 @@ def page_parlay_builder():
                     left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
                     how="left",
                 )
-                below_bar = options_df["confidence"] < min_confidence
-                if below_bar.any() and not narrowed:
-                    st.caption(f"{below_bar.sum()} props below the confidence bar are hidden. Search or lower the bar to see them.")
-                options_df = options_df[~below_bar | options_df["confidence"].isna() | narrowed]
+                outside_range = ~options_df["confidence"].between(min_confidence, max_confidence)
+                if outside_range.any() and not narrowed:
+                    st.caption(f"{outside_range.sum()} props outside the confidence range are hidden. Search or widen the range to see them.")
+                options_df = options_df[~outside_range | options_df["confidence"].isna() | narrowed]
                 options_df = options_df.sort_values("confidence", ascending=False, na_position="last")
 
             if not narrowed:
