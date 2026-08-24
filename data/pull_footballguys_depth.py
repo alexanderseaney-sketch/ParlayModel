@@ -32,6 +32,7 @@ Usage:
 """
 import os
 import re
+import time
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -40,9 +41,21 @@ from bs4 import BeautifulSoup
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
 OUT_PATH = os.path.join(RAW_DIR, "footballguys_depth.csv")
-URL = "https://www.footballguys.com/depthcharts"
+# Footballguys restructured their URLs at some point between 2026-08-15 (this
+# puller's last confirmed-working check) and 2026-08-23 -- the old /depthcharts
+# 404s outright now. Found the replacement (2026-08-23) via the real "Depth
+# Charts" nav link on their homepage: /depth-charts, but ONLY with a ?team=
+# query param -- the bare URL 400s/404s with a raw "No input file specified"
+# server error even though it's the exact same page and returns all 32 teams
+# regardless of which team the param names. Also confirmed their backend is
+# now flaky independent of this fix: the identical request succeeded only 1
+# of 5 tries in testing (mix of 400/404/200), hence the retry loop below --
+# this wasn't a factor before the restructuring.
+URL = "https://www.footballguys.com/depth-charts?team=ARI"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ParlayModel/1.0)"}
 TIMEOUT = 20
+MAX_ATTEMPTS = 6
+RETRY_DELAY_SECONDS = 3
 
 STATUS_RE = re.compile(r"\(([A-Z]{1,4})\)\s*$")
 CATEGORY_MAP = {
@@ -53,9 +66,23 @@ CATEGORY_MAP = {
 
 
 def fetch_page() -> str:
-    resp = requests.get(URL, headers=HEADERS, timeout=TIMEOUT)
-    resp.raise_for_status()
-    return resp.text
+    """Retries because the site itself is currently flaky for this exact URL --
+    same request returned 400, 400, 404, 404, 200 across 5 tries in testing, not
+    a transient one-off. A bad response never has the real markup in it, so
+    checking for that (rather than just status == 200) is what actually
+    distinguishes a good fetch from Footballguys' own error pages."""
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            resp = requests.get(URL, headers=HEADERS, timeout=TIMEOUT)
+            if resp.status_code == 200 and "depth_chart_" in resp.text:
+                return resp.text
+            last_error = f"status {resp.status_code}, {len(resp.text)} bytes, no depth-chart markup found"
+        except requests.exceptions.RequestException as e:
+            last_error = str(e)
+        if attempt < MAX_ATTEMPTS:
+            time.sleep(RETRY_DELAY_SECONDS)
+    raise RuntimeError(f"Failed after {MAX_ATTEMPTS} attempts against {URL}. Last error: {last_error}")
 
 
 def parse_depth_charts(html: str) -> tuple[pd.DataFrame, str | None]:
