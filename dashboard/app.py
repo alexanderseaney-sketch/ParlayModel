@@ -1267,23 +1267,49 @@ def _player_detail_dialog(row: dict):
                                                   "stat_value": "Line", "american_price": "Price"})
             st.dataframe(props_df, hide_index=True, width="stretch")
 
+    if "recent_games" in detail or "snap_trend" in detail:
+        # One season picker drives both tables below -- they're the same shape of
+        # data (season/week rows about this player) and asking twice would be
+        # redundant. weekly_stats.csv goes back to 2014, but the dialog used to
+        # just show the last 5 rows regardless of season with no way to see
+        # anything older or to tell at a glance which season a "recent" game was
+        # even from -- Alex asked to be able to pick the season directly instead.
+        # Cast to plain Python int, not numpy.int64 -- keeps it out of the display
+        # strings below (no int() wrapping needed) and avoids numpy types leaking
+        # into widget options generally.
+        seasons = set()
+        if "recent_games" in detail:
+            seasons |= set(detail["recent_games"]["season"].unique())
+        if "snap_trend" in detail:
+            seasons |= set(detail["snap_trend"]["season"].unique())
+        season_options = sorted((int(s) for s in seasons), reverse=True)
+        selected_season = st.selectbox("Season", season_options, key=f"season_{name_key}")
+
     if "recent_games" in detail:
         with st.container(border=True):
-            st.markdown("**Recent games**")
+            st.markdown(f"**Games — {selected_season}**")
             games = detail["recent_games"]
-            stat_cols = ["passing_yards", "rushing_yards", "receptions", "receiving_yards",
-                         "passing_tds", "rushing_tds", "receiving_tds", "fantasy_points_ppr"]
-            cols = ["season", "week", "opponent_team"] + [c for c in stat_cols if c in games.columns and games[c].fillna(0).ne(0).any()]
-            st.dataframe(games[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
+            games = games[games["season"] == selected_season]
+            if games.empty:
+                st.caption(f"No {selected_season} games in this data.")
+            else:
+                stat_cols = ["passing_yards", "rushing_yards", "receptions", "receiving_yards",
+                             "passing_tds", "rushing_tds", "receiving_tds", "fantasy_points_ppr"]
+                cols = ["week", "opponent_team"] + [c for c in stat_cols if c in games.columns and games[c].fillna(0).ne(0).any()]
+                st.dataframe(games[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
 
     if "snap_trend" in detail:
         with st.container(border=True):
-            st.markdown("**Snap share, recent games**")
+            st.markdown(f"**Snap share — {selected_season}**")
             snaps = detail["snap_trend"]
-            pct_cols = [c for c in ["offense_pct", "defense_pct", "st_pct"]
-                        if c in snaps.columns and snaps[c].fillna(0).ne(0).any()]
-            cols = [c for c in ["season", "week", "opponent"] if c in snaps.columns] + pct_cols
-            st.dataframe(snaps[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
+            snaps = snaps[snaps["season"] == selected_season]
+            if snaps.empty:
+                st.caption(f"No {selected_season} snap data in this data.")
+            else:
+                pct_cols = [c for c in ["offense_pct", "defense_pct", "st_pct"]
+                            if c in snaps.columns and snaps[c].fillna(0).ne(0).any()]
+                cols = [c for c in ["week", "opponent"] if c in snaps.columns] + pct_cols
+                st.dataframe(snaps[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
 
     if not detail:
         st.caption("No model/stats/market data matched for this player yet.")

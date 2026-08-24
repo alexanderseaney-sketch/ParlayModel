@@ -418,9 +418,14 @@ def get_player_detail(player_name: str) -> dict:
 
     Returns a dict that may contain any of:
       "injury_report"  -- most recent nflverse injury-report row (a Series)
-      "recent_games"   -- last 5 rows of weekly_stats.csv, oldest first (a DataFrame)
+      "recent_games"   -- every weekly_stats.csv row for this player, every season
+                          back to 2014, oldest first (a DataFrame) -- the Player
+                          dialog filters this down to one season for display
       "predictions"    -- all current_player_predictions.csv rows for this player
       "props"          -- all underdog_props.csv rows for this player
+      "snap_trend"     -- every snap_counts.csv row for this player, every season,
+                          oldest first (a DataFrame) -- same per-season filtering
+                          as recent_games
     """
     key = normalize_name(player_name)
     result: dict = {}
@@ -439,7 +444,7 @@ def get_player_detail(player_name: str) -> dict:
         weekly["_match_key"] = weekly["player_display_name"].apply(normalize_name)
         matches = weekly[weekly["_match_key"] == key].sort_values(["season", "week"])
         if not matches.empty:
-            result["recent_games"] = matches.tail(5)
+            result["recent_games"] = matches
 
     predictions = load_current_predictions()
     if predictions is not None and "player_display_name" in predictions.columns:
@@ -463,7 +468,7 @@ def get_player_detail(player_name: str) -> dict:
         snaps["_match_key"] = snaps["player"].apply(normalize_name)
         matches = snaps[snaps["_match_key"] == key].sort_values(["season", "week"])
         if not matches.empty:
-            result["snap_trend"] = matches.tail(5)
+            result["snap_trend"] = matches
 
     return result
 
