@@ -959,6 +959,20 @@ def page_bet_log():
     st.title("📒 Bet Log")
     st.caption("Manual tracking for now — will connect to the automated flow once Phase 4/5 are built.")
 
+    # Real stat types, not a raw text box the user has to remember an exact internal
+    # spelling for (underscores and all) -- sourced from live Underdog markets first
+    # since that's the most complete real list (covers plenty of prop types no
+    # trained model exists for yet, e.g. "kicking_points"), falling back to whatever
+    # this app currently predicts if props haven't been pulled, and to a plain typed
+    # entry only if neither source is available.
+    props_df = load_csv_if_exists("underdog_props.csv")
+    if props_df is not None and "stat_name" in props_df.columns:
+        stat_options = sorted(props_df["stat_name"].dropna().unique())
+    else:
+        preds_df = load_current_predictions()
+        stat_options = sorted(preds_df["stat_name"].dropna().unique()) if preds_df is not None else []
+    OTHER_STAT = "__other__"
+
     with st.expander("➕ Log a new bet", expanded=False):
         with st.form("new_bet_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
@@ -967,7 +981,14 @@ def page_bet_log():
                 sport = st.text_input("Sport/League", value="NFL")
                 player = st.text_input("Player")
             with c2:
-                stat = st.text_input("Stat (e.g. rushing_yards)")
+                if stat_options:
+                    stat_choice = st.selectbox(
+                        "Stat", stat_options + [OTHER_STAT],
+                        format_func=lambda s: "Other (type below)" if s == OTHER_STAT else _pretty_stat(s))
+                    stat_other = st.text_input(
+                        "If \"Other\" above, name the stat", disabled=stat_choice != OTHER_STAT)
+                else:
+                    stat_choice, stat_other = OTHER_STAT, st.text_input("Stat (e.g. rushing_yards)")
                 choice = st.selectbox("Choice", ["over", "under"])
                 line = st.number_input("Line", step=0.5)
             with c3:
@@ -977,6 +998,7 @@ def page_bet_log():
             notes = st.text_area("Notes")
 
             if st.form_submit_button("Save bet"):
+                stat = stat_other.strip() if stat_choice == OTHER_STAT else stat_choice
                 append_bet({
                     "date": bet_date.isoformat(),
                     "sport": sport,
