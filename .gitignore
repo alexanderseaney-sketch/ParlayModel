@@ -5,6 +5,25 @@ __pycache__/
 .ipynb_checkpoints/
 data/raw/*
 !data/raw/.gitkeep
+# Committed so Streamlit Community Cloud's deploy actually carries fresh data --
+# it only ever serves what's in the git repo, no persistent storage of its own, so
+# a scheduled pull that isn't committed never reaches the deployed site. Explicit
+# allow-list (not un-ignoring the whole directory) so anything NOT part of the
+# routine automated pull -- a manually-tested pbp.csv, stray one-off files --
+# stays untracked by default. See .github/workflows/refresh-data.yml.
+!data/raw/schedules.csv
+!data/raw/weekly_stats.csv
+!data/raw/ngs_passing.csv
+!data/raw/ngs_rushing.csv
+!data/raw/ngs_receiving.csv
+!data/raw/injuries.csv
+!data/raw/snap_counts.csv
+!data/raw/players.csv
+!data/raw/sbnation_news.csv
+!data/raw/nbcsports_news.csv
+!data/raw/footballguys_depth.csv
+!data/raw/underdog_props.csv
+!data/raw/weather_forecast.csv
 data/processed/*
 !data/processed/.gitkeep
 .DS_Store
