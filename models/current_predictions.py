@@ -52,15 +52,15 @@ def _next_game_lookup(schedules: pd.DataFrame) -> pd.DataFrame:
     """Each team's next unplayed game (home_score still null in schedules.csv), one row
     per team. This is what "current" predictions should actually be conditioned on --
     not whatever game a player's rolling-stats row happens to be dated."""
-    home = schedules[["season", "week", "home_team", "away_team", "home_score"]].rename(
+    home = schedules[["season", "week", "home_team", "away_team", "home_score", "gameday"]].rename(
         columns={"home_team": "team", "away_team": "opponent"})
-    away = schedules[["season", "week", "home_team", "away_team", "home_score"]].rename(
+    away = schedules[["season", "week", "home_team", "away_team", "home_score", "gameday"]].rename(
         columns={"away_team": "team", "home_team": "opponent"})
     all_games = pd.concat([home, away], ignore_index=True)
 
     unplayed = all_games[all_games["home_score"].isna()].copy()
     unplayed = unplayed.sort_values(["team", "season", "week"])
-    return unplayed.groupby("team").head(1)[["team", "season", "week", "opponent"]]
+    return unplayed.groupby("team").head(1)[["team", "season", "week", "opponent", "gameday"]]
 
 
 def _merge_injury(df: pd.DataFrame) -> pd.DataFrame:
@@ -429,6 +429,12 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
         "team": "recent_team", "season": "next_season", "week": "next_week", "opponent": "next_opponent",
     })
     latest = latest.merge(next_game, on="recent_team", how="left")
+    # DD/MM (Alex's requested format, day before month) -- formatted once here rather
+    # than at every display site, so the dashboard and generate_weekly_bet_slip.py
+    # show the identical string instead of two independent date-formatting calls
+    # drifting apart.
+    latest["next_gameday"] = pd.to_datetime(latest["gameday"], errors="coerce").dt.strftime("%d/%m")
+    latest = latest.drop(columns=["gameday"])
 
     # No upcoming scheduled game found (stale team assignment, wrong era of data,
     # etc.) -- can't responsibly attach injury/matchup context to a game that doesn't
@@ -476,7 +482,7 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
 
     return latest[[
         "player_id", "player_display_name", "position", "recent_team",
-        "stats_as_of_season", "stats_as_of_week", "next_season", "next_week", "next_opponent",
+        "stats_as_of_season", "stats_as_of_week", "next_season", "next_week", "next_opponent", "next_gameday",
         "prop_type", "stat_name", "proxy_line", "predicted_prob_over", "confidence",
     ]]
 
@@ -495,7 +501,7 @@ def build_current_predictions() -> pd.DataFrame:
     if not frames:
         return pd.DataFrame(columns=[
             "player_id", "player_display_name", "position", "recent_team",
-            "stats_as_of_season", "stats_as_of_week", "next_season", "next_week", "next_opponent",
+            "stats_as_of_season", "stats_as_of_week", "next_season", "next_week", "next_opponent", "next_gameday",
             "prop_type", "stat_name", "proxy_line", "predicted_prob_over", "confidence",
         ])
 
@@ -516,5 +522,5 @@ if __name__ == "__main__":
     print("\nHighest-confidence predictions right now:")
     print(predictions.head(10)[[
         "player_display_name", "recent_team", "prop_type", "proxy_line",
-        "predicted_prob_over", "confidence", "next_season", "next_week", "next_opponent",
+        "predicted_prob_over", "confidence", "next_season", "next_week", "next_opponent", "next_gameday",
     ]])

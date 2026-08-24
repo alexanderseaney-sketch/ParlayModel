@@ -109,7 +109,7 @@ def load_matched_props() -> pd.DataFrame:
 
     merged = props.merge(
         predictions[["_match_key", "stat_name", "my_side", "my_prob", "confidence",
-                     "recent_team", "position", "prop_type", "proxy_line"]],
+                     "recent_team", "position", "prop_type", "proxy_line", "next_week", "next_gameday"]],
         on=["_match_key", "stat_name"], how="inner",
     )
     merged = merged[merged["choice"].str.lower() == merged["my_side"]]
@@ -151,7 +151,8 @@ def build_single_leg_candidates(matched: pd.DataFrame) -> list[dict]:
         candidates.append({
             "type": "single",
             "description": f"{row['full_name']} — {pretty_stat_name(row['stat_name'])} {row['my_side']} {row['stat_value']} "
-                            f"(our proxy: {row['proxy_line']:.1f}, {row['line_divergence']*100:.0f}% off)",
+                            f"(our proxy: {row['proxy_line']:.1f}, {row['line_divergence']*100:.0f}% off) "
+                            f"[Wk {int(row['next_week'])} · {row['next_gameday']}]",
             "legs": [row["full_name"]],
             "leg_details": [_leg_detail(row)],
             "model_prob": p,
@@ -204,9 +205,13 @@ def build_parlay_candidates(matched: pd.DataFrame) -> list[dict]:
                     continue
                 candidates.append({
                     "type": "parlay",
+                    # a and b are always a same-team same-game pair (see the team loop
+                    # above), so their next_week/next_gameday are identical -- only
+                    # need to show it once.
                     "description": f"{a['full_name']} ({pretty_stat_name(a['stat_name'])} {a['my_side']}) + "
                                     f"{b['full_name']} ({pretty_stat_name(b['stat_name'])} {b['my_side']}) "
-                                    f"[{team}, correlation {effective_phi:+.2f}]",
+                                    f"[{team}, Wk {int(a['next_week'])} · {a['next_gameday']}, "
+                                    f"correlation {effective_phi:+.2f}]",
                     "legs": [a["full_name"], b["full_name"]],
                     "leg_details": [_leg_detail(a), _leg_detail(b)],
                     "model_prob": p_joint,

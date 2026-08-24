@@ -399,6 +399,23 @@ def _team_next_week_lookup(schedules: pd.DataFrame) -> dict:
     return next_game.set_index("team")["week"].to_dict()
 
 
+def _team_next_gameday_lookup(schedules: pd.DataFrame) -> dict:
+    """team abbreviation -> that team's next unplayed game's date, as "DD/MM" (Alex's
+    requested format, day before month). Same next-unplayed-game logic as
+    _team_next_week_lookup, kept as a separate small pass rather than folded into
+    that function's return value -- lower risk of disturbing the week filter's
+    already-working int-keyed dict than restructuring it to carry two fields."""
+    home = schedules[["season", "week", "home_team", "away_team", "home_score", "gameday"]].rename(
+        columns={"home_team": "team", "away_team": "opponent"})
+    away = schedules[["season", "week", "home_team", "away_team", "home_score", "gameday"]].rename(
+        columns={"away_team": "team", "home_team": "opponent"})
+    all_games = pd.concat([home, away], ignore_index=True)
+    unplayed = all_games[all_games["home_score"].isna()].sort_values(["team", "season", "week"])
+    next_game = unplayed.groupby("team").head(1).copy()
+    next_game["_date_fmt"] = pd.to_datetime(next_game["gameday"], errors="coerce").dt.strftime("%d/%m")
+    return next_game.set_index("team")["_date_fmt"].to_dict()
+
+
 def _leg_photo(player_name: str, photo_map: dict):
     """The player photo (or initials placeholder) used on every leg/bet card --
     Weekly Bet Slip, Parlay Builder, Bet Log -- reusing the exact same .pm-photo /
@@ -551,10 +568,20 @@ def page_parlay_builder():
         # because the prediction was generated from his last known game stats, not
         # his current roster spot). Footballguys' depth chart is pulled fresh and
         # reflects actual current rosters regardless of how stale weekly_stats is.
+        # Footballguys' "LAR" vs. nflverse's "LA" for the Rams -- confirmed 2026-08-22
+        # by diffing footballguys_depth.csv's team_abbr set against schedules.csv's
+        # (the only live mismatch found; OAK/SD/STL only appear in old historical
+        # schedule rows for since-relocated franchises, not a current-data problem).
+        # Normalized here, not at every place a team code gets compared against
+        # nflverse-sourced data, since this is a fresh Series built just for this
+        # name->team lookup -- doesn't touch the Depth Charts page's own separate
+        # read of the same raw file.
+        TEAM_ABBR_TO_NFLVERSE = {"LAR": "LA"}
         depth_team = (
             depth.assign(_match_key=lambda d: d["player_name"].apply(normalize_name))
             .drop_duplicates(subset="_match_key")
             .set_index("_match_key")["team_abbr"]
+            .replace(TEAM_ABBR_TO_NFLVERSE)
         )
     else:
         depth_status = None
@@ -562,6 +589,7 @@ def page_parlay_builder():
 
     schedules_df = load_csv_if_exists("schedules.csv")
     team_next_week = _team_next_week_lookup(schedules_df) if schedules_df is not None else None
+    team_next_gameday = _team_next_gameday_lookup(schedules_df) if schedules_df is not None else None
 
     photo_map = load_player_photos()
     tab_slip, tab_add = st.tabs([f"📋 Current slip ({len(st.session_state.slip)})", "➕ Add legs"])
@@ -736,7 +764,14 @@ def page_parlay_builder():
                         # still show their real current team.
                         team = depth_team.get(normalize_name(player_name)) if depth_team is not None else None
                         position = any_row.get("position") if has_model else None
-                        meta = " · ".join(str(b) for b in [team, position] if pd.notna(b) and b)
+                        # Which game this prop is actually FOR -- previously only used
+                        # internally to build the Week filter's options, never shown on
+                        # the card itself, so there was no way to tell at a glance which
+                        # week/date a prop belonged to without opening the filter.
+                        week_num = team_next_week.get(team) if team_next_week is not None and team else None
+                        game_date = team_next_gameday.get(team) if team_next_gameday is not None and team else None
+                        when = f"Wk {int(week_num)} · {game_date}" if pd.notna(week_num) and game_date else None
+                        meta = " · ".join(str(b) for b in [team, position, when] if pd.notna(b) and b)
                         # Same player-profile dialog as Depth Charts, not a second
                         # one -- name_col/stat_col/line_col already make this key
                         # unique per card the same way the Add buttons below are keyed.
