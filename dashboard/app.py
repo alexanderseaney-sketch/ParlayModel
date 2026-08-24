@@ -708,7 +708,31 @@ def page_parlay_builder():
                     left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
                     how="left",
                 )
-                outside_range = ~options_df["confidence"].between(min_confidence, max_confidence)
+                # "confidence" is symmetric (distance from a coinflip, either
+                # direction) -- correct for a two-sided market, since a confident
+                # UNDER means the UNDER row is real and biddable. But some prop
+                # types (anytime-TD style: rush_rec_tds, period_first_touchdown_
+                # scored, etc.) are one-sided -- Underdog only ever offers OVER,
+                # there's no UNDER row to bet. For those, high confidence can mean
+                # "very sure this WON'T happen," which isn't a real, actionable
+                # signal since the only offered side is the one the model doesn't
+                # like. Bug found live 2026-08-23: a 0.65-0.80 range was showing a
+                # player at "OVER 10% confident / UNDER not offered" -- it passed
+                # because confidence (~0.8, symmetric) was in range, even though
+                # the only biddable side was a bad 10% bet. Checked from the real
+                # data (does the opposite choice actually exist for this player/
+                # stat/line), not a hardcoded list of "which stat types are
+                # one-sided" -- more robust if Underdog's own market structure
+                # varies by player/week in ways a fixed list would miss.
+                both_sides = options_df.groupby([name_col, stat_col, line_col])[choice_col].transform(
+                    lambda s: set(s.astype(str).str.lower()) >= {"over", "under"}
+                ).astype(bool)  # transform returns object dtype here, not bool -- ~ on it raises TypeError
+                choice_lower = options_df[choice_col].astype(str).str.lower()
+                own_side_prob = options_df["predicted_prob_over"].where(
+                    choice_lower != "under", 1 - options_df["predicted_prob_over"])
+                unbettable_direction = ~both_sides & (own_side_prob < 0.5)
+
+                outside_range = ~options_df["confidence"].between(min_confidence, max_confidence) | unbettable_direction
                 if outside_range.any() and not narrowed:
                     st.caption(f"{outside_range.sum()} props outside the confidence range are hidden. Search or widen the range to see them.")
                 options_df = options_df[~outside_range | options_df["confidence"].isna() | narrowed]
