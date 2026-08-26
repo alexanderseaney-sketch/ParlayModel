@@ -12,7 +12,7 @@ period_first_touchdown_scored, passing_yards) all did the same or worse
 with XGBoost, so they stayed on LogisticRegression -- this isn't a
 blanket "XGBoost is better" upgrade, it needed testing per model. Same
 XGB_PARAMS already proven in production for receiving_yards/rushing_yards/
-receptions (see train_momentum_and_receptions_gaps.py).
+receptions (see experiments/train_momentum_and_receptions_gaps.py).
 """
 import pickle
 

@@ -257,6 +257,38 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex asked whether the code needed cleanup. Checked rather than guessed:
+  1. **Real gap found and fixed**: `scipy` was imported by `simulate_season_bankroll.py`
+     but never listed in `requirements.txt`. Wasn't actually causing failures in
+     practice — scikit-learn pulls scipy in as its own dependency, so it was riding
+     along invisibly — but relying on that silently is fragile, so added it explicitly.
+  2. **19 confirmed-orphaned scripts, ~2,155 lines**, all in `models/` — verified via
+     grep that none are imported anywhere in the codebase, all one-off exploratory
+     tests from earlier "keep testing theories" rounds (mine and the home session's:
+     `train_cv.py`, `train_matchup_test.py`, `train_consistency_qb_continuity_
+     interactions.py`, `train_momentum_and_receptions_gaps.py`, etc.). Their actual
+     findings are already fully preserved in this README's log — the files themselves
+     were just leftover scratch work.
+  3. **Checked and found genuinely clean**: no orphaned functions in `dashboard/
+     utils.py` currently (resolved since an earlier open item — the codebase has
+     grown enough that this needed a fresh check, not trusting the old one), no stray
+     committed `__pycache__` (confirmed via `git ls-files`, already correctly
+     gitignored), `data/*.py` are all real, legitimately-used pull scripts.
+  Alex chose to move the 19 orphaned scripts to `models/experiments/` rather than
+  delete them — `git mv`'d all 19 (tracked as renames, full history preserved, not a
+  delete+recreate). Fixed one comment in `train_sacks_props.py` that referenced one
+  of the moved files by its old path. **Verified nothing broke**: re-grepped for any
+  of the 19 old filenames across the whole codebase after moving (caught the one
+  comment reference, confirmed it was documentation not a real import), confirmed the
+  full app still compiles and loads with zero exceptions.
+- Blocked: nothing — real, evidence-based cleanup, fully verified.
+- Next: none needed immediately. If more scripts accumulate in `models/` from future
+  exploratory rounds, `models/experiments/` is now the established place for them
+  from the start, rather than another cleanup pass being needed later.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex decided to scrap Dev Mode entirely — removed it completely rather than
   disabling it, given the last few rounds (screenshot upload, the "Go there" restore,
   the live full-page drawing overlay) had grown into real uncertainty about whether
