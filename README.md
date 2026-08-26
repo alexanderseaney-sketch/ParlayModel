@@ -5,7 +5,7 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 ## Status
 
-**Currently on: Phase 2 — Baseline model + backtesting harness (game model done, player-prop models started)**
+**Currently on: Phase 2/3 — 29 player-prop models + game-winner model, all trained on 2014/2016-2024 (varies by feature requirements), real data pipeline now committed to the repo. See the 2026-08-26 log entry for a full catch-up on everything the Status list below doesn't yet reflect — that entry is more current than the bullets underneath it.**
 
 Done:
 - [x] Real 6-season historical pull (2019-2024) — nflverse works from any environment
@@ -253,6 +253,68 @@ before starting work to see what the other side left you.*
 - Blocked: anything that couldn't be finished here + why (e.g. network restriction, need a decision)
 - Next: what the other environment (or next session) should pick up
 ```
+
+---
+
+**2026-08-26 — [work]**
+- Did: Alex returned to work after several home Claude Code sessions (Aug 16, 17, 22,
+  23) that pushed real substantial progress but never got logged here — the README's
+  Status/Log had drifted noticeably behind the actual repo. Read the real commit
+  history (git log, not assumptions) to catch up honestly rather than let the doc rot
+  further. Real headline changes since the last logged entry:
+  - **Prop coverage expanded from 4 models to 29** (Aug 16): season-long props,
+    single-game sacks (first defensive-player prop), passing TDs/INTs, RB receiving
+    yards, QB rushing yards, period-scoped props (1st quarter / 1st half yards and
+    TDs), first-touchdown-scorer, combined rush+rec TDs — closing real position-scope
+    coverage gaps (props were going unmatched because no model existed for that
+    stat/position combination, not because the underlying signal was weak).
+  - **Retrained all 29 models on 5 more years of history** (2014-2018, Aug 16) — but
+    only after validating empirically whether more history actually helps (tested
+    4 diverse models three ways: current window, full-history equal-weighted, full-
+    history recency-weighted). Also found and respected a real data constraint: NGS
+    and PBP's defense_players column both start in 2016, capping the usable extension
+    at 3-5 years depending on which features a given model needs.
+  - **Two real, well-diagnosed bugs fixed** (Aug 23): retired/inactive players (2,476
+    of them — DeMarco Murray, Torrey Smith, a guy who left for rugby in 2015) were
+    being scored as live props because nothing checked whether a player_id was still
+    actually on a roster — fixed with a roster-membership filter, verified live
+    (18,279 → 7,395 predictions, stale rate 63.1% → a legitimate 17.0%). Separately:
+    the receiving/rushing-yards proxy-line calculation was silently inflated for
+    low-target-share players (a qualification filter was applied before computing the
+    rolling average instead of after, erasing exactly the low-volume games that should
+    have pulled a run-first back's average down — Derrick Henry's receiving proxy was
+    15.2 yards against Underdog's real 4.5 line before the fix).
+  - **Recalibrated the line-mismatch confidence gate per prop grain** (Aug 16) instead
+    of one global 20% threshold — measured real divergence distributions and found
+    season-long/period-scoped props are fundamentally noisier than weekly props, so
+    the weekly-tuned threshold was wrongly flagging good season props as mismatched.
+  - **Real data now committed to the repo** (Aug 23) — schedules/weekly_stats/NGS/
+    injuries/snap_counts/players/news/depth-chart/Underdog props are explicitly
+    allow-listed in `.gitignore` and committed, specifically so Streamlit Community
+    Cloud's deploy (which only ever serves what's in the repo, no persistent storage)
+    actually carries fresh data instead of an empty `data/raw/`.
+  - **Dev Mode** (Aug 22): freezes the actual underlying page state (not a screenshot)
+    at the moment it's switched on, so a note left for Claude describes state that
+    can't drift before it's read — addresses the "no visual screenshot tool in the
+    sandbox" limitation from a different angle than a literal screenshot would.
+  - Also: real weather forecasts (was a fake placeholder the whole time), line
+    movement surfaced on Underdog props, a second historical-odds path via The Odds
+    API, ESPN news removed (persistently blocked even from Streamlit Cloud, not just
+    this sandbox), and various Parlay Builder UX fixes (confidence range filter
+    instead of floor-only, week/team/parlay-type filters, clickable player profiles).
+  - **The scheduled-automation piece referenced in the `.gitignore` comment** ("ahead
+    of scheduled automation") doesn't appear to actually exist as a GitHub Actions
+    workflow file in this repo — checked directly, no `.github/workflows/` present.
+    The Aug 23 data commit looks like a one-time manual pull+commit, not a recurring
+    automated one yet, despite the comment's wording.
+- Blocked: nothing — this is a documentation catch-up, no code changed.
+- Next: **the real gap is that this log fell behind reality for over a week** — worth
+  either committing to updating it every session (as the format asks) or accepting
+  that `git log` is the more reliable source of truth going forward and treating the
+  README as a periodic summary rather than a complete record. Also worth deciding
+  deliberately whether to actually build the GitHub Actions scheduled pull, since
+  right now "the archive accumulates automatically" isn't true yet — it accumulates
+  whenever someone manually runs and commits it.
 
 ---
 
