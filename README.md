@@ -257,6 +257,65 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex said he doesn't want confidence based on our proxy line — he wants it
+  based on the real Underdog line. Checked first whether we could just retrain
+  against real historical lines directly (the ideal fix): **confirmed there is no
+  real accumulating historical archive yet** — `underdog_props.csv` is a single
+  snapshot (Aug 24), overwritten on each pull, not appended over time. So retraining
+  against real historical outcomes isn't possible yet; needed a different real fix
+  usable right now with just today's live snapshot plus real historical game logs.
+  **Built a statistically principled recalibration** rather than a cosmetic relabel:
+  `recompute_probability_for_real_line()` (`dashboard/utils.py`) converts the
+  existing trained model's probability of beating the PROXY line into an implied
+  performance level (assuming roughly-normal week-to-week variance — standard,
+  defensible for continuous yardage stats, not claimed to be exact), then recomputes
+  the probability of beating the REAL Underdog line against that same implied level.
+  Reuses every model's real, already-validated predictive signal rather than
+  needing to retrain 29 models from scratch.
+  Needs real per-player variance to do this: `estimate_player_stat_std()` uses each
+  player's own real historical week-to-week standard deviation (season 2024-2025,
+  4+ games required to trust it over a fallback) — genuine empirical variance, not
+  guessed. **Caught myself fabricating placeholder fallback numbers** for players
+  with too little history (rookies, injury returns) — wrote plausible-looking
+  numbers first, then stopped and actually built `models/estimate_stat_std_
+  fallbacks.py` to compute real ones from real weekly_stats.csv data (within-player
+  variance averaged across players with 4+ games each — deliberately NOT the pooled
+  std of all players at once, which would wrongly conflate real week-to-week
+  fluctuation with between-player skill differences). Replaced the fabricated
+  numbers with the real computed ones before this ever reached a commit.
+  **Tested thoroughly with real data and hand-verified math** before wiring in:
+  confirmed `estimate_player_stat_std` returns real per-player variance for a real
+  player (Justin Jefferson: 36.8) and correctly falls back for an unknown player
+  (23.6, matching the real WR receiving_yards fallback); confirmed
+  `recompute_probability_for_real_line` against three hand-calculated cases — a
+  harder real line drops confidence, an easier one raises it, and an identical line
+  returns the exact original probability (0.7000, not an approximation); ran the
+  complete pipeline end-to-end with a real player and realistic matched prop data,
+  confirmed the recomputed probability was correctly lower when the real line was
+  harder than the proxy.
+  **Wired into the player card's combined predictions/lines section**: when a real
+  Underdog line is matched, the confidence badge now shows the recomputed
+  probability against the real line (labeled as the real line, not "(proxy)");
+  when no live line exists yet, falls back to the proxy-based confidence with an
+  explicit "showing proxy-based confidence" caption so it's never ambiguous which
+  one is being shown.
+- Blocked: this only reaches the player card's combined section so far — the
+  Parlay Builder's separate matching logic (`line_matches_proxy`, still in use
+  there) has NOT been updated to use this same real-line recomputation yet.
+- Next: apply the same `estimate_player_stat_std` + `recompute_probability_for_real_
+  line` pattern to the Parlay Builder's own prop-matching code (currently still
+  showing proxy-based confidence with a match/mismatch flag rather than a properly
+  recomputed probability) and to `generate_weekly_bet_slip.py`, so all three places
+  that show confidence are consistent. Also worth reconsidering once a real
+  historical Underdog archive actually exists (still gated on either paying for
+  The Odds API or the daily-snapshot archive actually accumulating, which per an
+  earlier session's finding isn't running as true scheduled automation yet) —
+  at that point this normal-distribution approximation could be validated against
+  real graded outcomes, or replaced entirely by a model retrained on the real target.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex used a different tool (an external design/theming assistant, judging by
   the artifacts) to produce a full "Nocturne" reskin — a dark blue-grey/blurple
   design system replacing the earlier gold/broadcast-terminal theme — and uploaded

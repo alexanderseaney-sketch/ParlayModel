@@ -18,6 +18,7 @@ from utils import (
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
     pretty_stat_name, load_line_movement,
+    estimate_player_stat_std, recompute_probability_for_real_line,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -1116,6 +1117,7 @@ def _player_detail_dialog(row: dict):
                 "today's actual market line, side by side)"
             )
             predicted_stats = set(predictions["stat_name"]) if predictions is not None else set()
+            weekly_stats_for_std = load_csv_if_exists("weekly_stats.csv") if predictions is not None else None
 
             # Main case: a stat we have a model prediction for. Row-based (not a
             # single st.dataframe) specifically to keep the colored confidence
@@ -1133,20 +1135,43 @@ def _player_detail_dialog(row: dict):
                         if not match.empty:
                             matching_prop = match.iloc[0]
 
+                    # The actual fix Alex asked for: confidence based on the REAL
+                    # Underdog line, not our proxy line. When a live line is
+                    # matched, recompute probability against IT instead of just
+                    # showing the model's raw proxy-based number -- see
+                    # recompute_probability_for_real_line()'s docstring for the
+                    # full reasoning (no historical archive of real past lines
+                    # exists yet to retrain against, so this reuses the existing
+                    # trained model's real signal and re-targets it at serving time).
+                    display_prob, display_conf = prob, p["confidence"]
+                    real_line_used = False
+                    if matching_prop is not None and weekly_stats_for_std is not None:
+                        std = estimate_player_stat_std(
+                            p["player_id"], stat_name, weekly_stats_for_std, position=p["position"],
+                        )
+                        new_prob_over = recompute_probability_for_real_line(
+                            p["predicted_prob_over"], p["proxy_line"], matching_prop["stat_value"], std,
+                        )
+                        if new_prob_over is not None:
+                            side = "over" if new_prob_over >= 0.5 else "under"
+                            display_prob = new_prob_over if side == "over" else 1 - new_prob_over
+                            display_conf = abs(new_prob_over - 0.5) * 2
+                            real_line_used = True
+
                     c1, c2, c3 = st.columns([3, 1.3, 2])
                     with c1:
-                        st.write(f"{_pretty_stat(stat_name)} {side} {p['proxy_line']}")
+                        line_shown = matching_prop["stat_value"] if real_line_used else p["proxy_line"]
+                        label = "" if real_line_used else " (proxy)"
+                        st.write(f"{_pretty_stat(stat_name)} {side} {line_shown}{label}")
                     with c2:
-                        _confidence_badge(prob, p["confidence"])
+                        _confidence_badge(display_prob, display_conf)
                     with c3:
                         if matching_prop is not None:
-                            line_ok = line_matches_proxy(matching_prop["stat_value"], p["proxy_line"], stat_name)
-                            icon = "✅" if line_ok else "⚠️"
                             price = matching_prop.get("american_price")
                             price_str = f" ({price})" if pd.notna(price) else ""
-                            st.write(f"{icon} UD: {matching_prop['stat_value']}{price_str}")
+                            st.write(f"✅ UD: {matching_prop['stat_value']}{price_str}")
                         else:
-                            st.caption("No live line yet")
+                            st.caption("No live line yet — showing proxy-based confidence")
 
             # Secondary case: an Underdog line exists with no model prediction at
             # all -- still worth showing (nothing should just disappear), demoted

@@ -131,6 +131,76 @@ def line_matches_proxy(stat_value, proxy_line, stat_name: str) -> bool:
     return divergence <= max_line_divergence_for(stat_name)
 
 
+# Position+stat fallback std, used only when a player has too few real games of
+# their own to estimate variance reliably. Real empirical WITHIN-PLAYER standard
+# deviations (averaged across players with 4+ real games each, 2024-2025 seasons),
+# computed by models/estimate_stat_std_fallbacks.py -- not guessed. Deliberately
+# NOT pooled-across-all-players std, which would conflate real week-to-week
+# fluctuation with between-player skill differences and overstate the real spread.
+_FALLBACK_STAT_STD = {
+    ("WR", "receiving_yards"): 23.6,   # n=229 players
+    ("TE", "receiving_yards"): 16.8,   # n=117 players
+    ("RB", "receiving_yards"): 11.8,   # n=144 players
+    ("RB", "rushing_yards"): 23.4,     # n=144 players
+    ("QB", "passing_yards"): 79.0,     # n=81 players
+    ("QB", "rushing_yards"): 12.7,     # n=81 players
+    ("WR", "receptions"): 1.6,         # n=229 players
+    ("TE", "receptions"): 1.4,         # n=117 players
+    ("RB", "receptions"): 1.2,         # n=144 players
+}
+
+
+def estimate_player_stat_std(player_id: str, stat_col: str, weekly_stats: pd.DataFrame,
+                              position: str = None, min_games: int = 4, recent_seasons: int = 2) -> float:
+    """Real empirical week-to-week standard deviation for this player's own history
+    in this stat -- the actual spread of their real outcomes, not a guess. Falls
+    back to a position/stat-type league average (see _FALLBACK_STAT_STD) only when
+    the player has fewer than min_games real games to estimate from (rookies,
+    recent injury returns, etc.) -- their own real variance is always preferred
+    over a league average when there's enough of it to trust."""
+    if stat_col not in weekly_stats.columns:
+        return None
+    recent = weekly_stats[weekly_stats["season"] >= weekly_stats["season"].max() - recent_seasons + 1]
+    player_games = recent[recent["player_id"] == player_id][stat_col].dropna()
+    player_games = player_games[player_games.notna()]
+
+    if len(player_games) >= min_games:
+        std = player_games.std()
+        if pd.notna(std) and std > 0:
+            return float(std)
+
+    fallback = _FALLBACK_STAT_STD.get((position, stat_col))
+    return fallback  # None if no fallback exists for this position/stat combo either
+
+
+def recompute_probability_for_real_line(model_prob_vs_proxy: float, proxy_line: float,
+                                         real_line: float, std: float) -> float:
+    """The actual fix for 'confidence is based on our proxy line, I want it based on
+    the real line': converts the model's probability of beating the PROXY line into
+    an implied performance level (assuming a roughly normal distribution around that
+    level -- a standard, defensible first-pass assumption for continuous yardage-
+    type stats, not claimed to be exact), then recomputes the probability of beating
+    the REAL Underdog line against that same implied level. Reuses the existing
+    trained model's real predictive signal (its confidence about outperforming the
+    player's own baseline) rather than needing to retrain against real lines, which
+    isn't possible yet -- no historical archive of real past Underdog lines with
+    graded outcomes exists to train against (checked: underdog_props.csv is a single
+    current snapshot, not an accumulated history).
+
+    Math: model_prob_vs_proxy -> z-score (how many std above/below their own recent
+    average the model thinks they'll land) -> implied_mean = proxy_line + z*std ->
+    new probability = P(real outcome > real_line | implied_mean, std)."""
+    from scipy.stats import norm
+
+    if std is None or std <= 0 or pd.isna(proxy_line) or pd.isna(real_line):
+        return None
+
+    z = norm.ppf(min(max(model_prob_vs_proxy, 0.0001), 0.9999))
+    implied_mean = proxy_line + z * std
+    new_z = (real_line - implied_mean) / std
+    return float(norm.sf(new_z))  # P(exceed real_line)
+
+
 def pretty_stat_name(stat_name) -> str:
     """receiving_yds -> Receiving Yds -- a readable label instead of a raw column
     name, used anywhere a prop's stat type is shown to a human rather than matched
