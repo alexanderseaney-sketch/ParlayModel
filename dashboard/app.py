@@ -10,8 +10,6 @@ from datetime import datetime, date, timezone
 
 import pandas as pd
 import streamlit as st
-from PIL import Image
-from streamlit_drawable_canvas import st_canvas
 
 from utils import (
     EXPECTED_FILES, PULL_SCRIPTS, line_matches_proxy, BET_LOG_PATH,
@@ -19,8 +17,7 @@ from utils import (
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
-    pretty_stat_name, load_line_movement, save_dev_note, load_dev_notes, set_dev_note_resolved,
-    DEV_NOTES_DIR,
+    pretty_stat_name, load_line_movement,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -216,203 +213,6 @@ def show_freshness_banner():
                     run_all_pulls()
                 st.cache_data.clear()
                 st.rerun()
-
-
-def _screenshot_annotation_widget(key_prefix: str):
-    """Optional 'upload a screenshot and draw on it' step for a Dev Mode note.
-    Streamlit has no way to capture a screenshot of itself -- Alex takes his own (one
-    keystroke on any OS) and uploads it here, then draws directly on top of it with a
-    real canvas (streamlit-drawable-canvas-fix -- the original streamlit-drawable-
-    canvas is broken on current Streamlit, calls an internal function that no longer
-    exists; confirmed by testing, not assumed, before picking the fork instead).
-    Deliberately kept OUTSIDE any st.form that wraps the note text/submit button --
-    custom components like this one need to update on every stroke via their own
-    render cycle, which forms suppress until submission. Returns the drawn-on image
-    as an RGBA numpy array ready for save_dev_note, or None if nothing was uploaded.
-    Sized to the uploaded image's own aspect ratio (capped at a max width) rather than
-    a fixed box, so a tall phone screenshot and a wide desktop one both render sensibly."""
-    uploaded = st.file_uploader(
-        "Optional: upload a screenshot to draw on", type=["png", "jpg", "jpeg"],
-        key=f"{key_prefix}_upload",
-        help="Take your own screenshot (any OS: one keystroke), upload it here, then draw directly on it below.",
-    )
-    if not uploaded:
-        return None
-
-    img = Image.open(uploaded).convert("RGB")
-    max_width = 700
-    if img.width > max_width:
-        scale = max_width / img.width
-        img = img.resize((max_width, int(img.height * scale)))
-
-    st.caption("Draw on the screenshot below (freehand, red pen).")
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 0, 0, 0.0)",
-        stroke_width=3,
-        stroke_color="#FF0000",
-        background_image=img,
-        height=img.height,
-        width=img.width,
-        drawing_mode="freedraw",
-        key=f"{key_prefix}_canvas",
-    )
-    return canvas_result.image_data
-
-
-def _live_overlay_drawing_widget(key_prefix: str):
-    """The overlay Alex actually asked for: draw directly on the live page itself,
-    only while Dev Mode is on -- not a separate uploaded image. Real technical
-    reality worth being upfront about: Streamlit custom components (st_canvas
-    included) always render inside a sandboxed iframe. Making that iframe float
-    transparently over the already-rendered page underneath it, rather than sitting
-    in normal document flow like every other widget on this page, needs real CSS
-    positioning -- something this sandbox cannot visually verify without a live
-    browser, unlike everything else built in this project so far.
-
-    The one part of this that IS on solid ground: `st.container(key=...)` is a
-    documented Streamlit feature (confirmed directly in Streamlit's own source
-    docstrings, not guessed) that applies a stable `st-key-{key}` CSS class to that
-    container's wrapping div -- so `.st-key-{prefix} iframe` reliably targets this
-    specific canvas's iframe, not a guess at internal/undocumented DOM structure the
-    way targeting by iframe title or position would be.
-
-    What's genuinely unverified: whether the iframe's internal canvas coordinate
-    system (baked in at the height/width passed to st_canvas) stays visually aligned
-    once CSS stretches the iframe itself to 100vw/100vh -- if there's a mismatch, a
-    stroke drawn at one screen position could land at a different coordinate than
-    where the mouse actually was. This needs a real, live check.
-    """
-    overlay_key = f"{key_prefix}_overlay"
-    st.markdown(f"""
-    <style>
-    .st-key-{overlay_key} {{
-        position: fixed !important;
-        top: 0; left: 0; width: 0; height: 0; overflow: visible;
-    }}
-    .st-key-{overlay_key} iframe {{
-        position: fixed !important;
-        top: 0 !important; left: 0 !important;
-        width: 100vw !important; height: 100vh !important;
-        z-index: 999998 !important;
-        background: transparent !important;
-        pointer-events: auto !important;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-
-    with st.container(key=overlay_key):
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 0, 0, 0)",  # transparent fill -- outline only, not solid shapes
-            stroke_width=4,
-            stroke_color="#FF3B30",
-            background_color="",  # transparent -- the real page shows through underneath
-            height=2200,   # generous fixed size so the drawable area covers a scrolled page;
-            width=1600,    # CSS then stretches the iframe to the actual viewport (see caveat above)
-            drawing_mode="freedraw",
-            key=f"{key_prefix}_canvas",
-            display_toolbar=False,
-        )
-    return canvas_result.image_data if canvas_result is not None else None
-
-
-def show_dev_mode_panel(page_title: str):
-    """Freeze-and-annotate tool: lets Alex flag something on whatever screen he's
-    looking at with a plain-English note, paired with a snapshot of THIS page's own
-    filter/selection state -- not a picture, but the actual underlying state, which
-    is what's needed to reproduce exactly what he saw. Snapshotted at the MOMENT Dev
-    Mode is switched on (not when the note is saved) into a separate session_state
-    key, so the eventual note always describes that exact instant regardless of
-    anything that happens on the page -- including Streamlit's own rerun-on-every-
-    interaction behavior -- while the note is being written. That's the actual
-    "freeze": not a technical lock on the widgets, but never reading live state again
-    once it's been captured."""
-    if "dev_mode" not in st.session_state:
-        st.session_state.dev_mode = False
-
-    # Streamlit's multipage nav is client-side routing, not a full page reload --
-    # session_state (including dev_mode) survives a click to a different page. Left
-    # unhandled, that would silently carry a stale "frozen on X" banner onto whatever
-    # page got clicked next, which defeats the entire point (the note has to
-    # describe the page it's actually attached to). Auto-exit instead of re-freezing
-    # on the new page -- re-freezing silently would just look like it never froze.
-    if st.session_state.dev_mode and st.session_state.get("dev_mode_page") != page_title:
-        st.session_state.dev_mode = False
-        st.info(f"Dev Mode turned off — you navigated away from "
-                f"\"{st.session_state.get('dev_mode_page')}\". Click 🛠️ Dev Mode again to freeze this page.")
-
-    with st.sidebar:
-        st.divider()
-        if not st.session_state.dev_mode:
-            if st.button("🛠️ Dev Mode", width="stretch",
-                         help="Freeze this screen and leave a note describing what to fix"):
-                st.session_state.dev_mode = True
-                st.session_state.dev_mode_page = page_title
-                st.session_state.dev_mode_frozen_at = datetime.now(timezone.utc).isoformat()
-                # Everything currently selected on this page (filters, search text,
-                # the current slip, etc.) -- excluding dev-mode's OWN bookkeeping keys
-                # and Streamlit's internal per-widget/form keys, neither of which
-                # describe what Alex was actually looking at.
-                st.session_state.dev_mode_snapshot = {
-                    k: v for k, v in st.session_state.items()
-                    if not k.startswith("dev_mode") and not k.startswith("FormSubmitter")
-                }
-                st.rerun()
-        else:
-            if st.button("🔓 Exit Dev Mode", width="stretch"):
-                st.session_state.dev_mode = False
-                st.rerun()
-
-    if not st.session_state.dev_mode:
-        return
-
-    annotated_image = _live_overlay_drawing_widget(key_prefix="dev_mode_sidebar")
-
-    # The note panel needs its OWN higher z-index than the canvas overlay (999998) --
-    # otherwise it would be visually present but unclickable underneath the
-    # transparent drawing layer, since that layer captures pointer events across the
-    # full viewport by design. Floated bottom-right rather than left in normal flow,
-    # since normal flow no longer means anything once the overlay above takes the
-    # whole page out of the usual layout.
-    panel_key = "dev_mode_note_panel"
-    st.markdown(f"""
-    <style>
-    .st-key-{panel_key} {{
-        position: fixed !important;
-        bottom: 20px; right: 20px;
-        width: 380px; max-height: 75vh; overflow-y: auto;
-        z-index: 999999 !important;
-        background: #141920;
-        border: 1px solid rgba(212, 169, 74, 0.5);
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.6);
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-
-    frozen_at_display = st.session_state.dev_mode_frozen_at[:16].replace("T", " ")
-    with st.container(key=panel_key):
-        st.warning(
-            f"🔒 **DEV MODE — frozen on \"{st.session_state.dev_mode_page}\"** at "
-            f"{frozen_at_display} UTC. Draw directly on the page behind this panel, "
-            f"then describe it below."
-        )
-        with st.form("dev_note_form", clear_on_submit=True):
-            note = st.text_area(
-                "What do you want fixed or changed on this screen?", height=100,
-                placeholder='e.g. "The Movement column here should be colored red/green, not plain text"',
-            )
-            submitted = st.form_submit_button("💾 Save note")
-        if submitted:
-            if note.strip():
-                save_dev_note(
-                    st.session_state.dev_mode_page, note.strip(),
-                    st.session_state.dev_mode_frozen_at, st.session_state.dev_mode_snapshot,
-                    annotated_image=annotated_image,
-                )
-                st.success("Saved — see it under Admin → Dev Notes.")
-            else:
-                st.error("Write a note before saving.")
 
 
 show_freshness_banner()
@@ -1492,37 +1292,6 @@ def _player_detail_dialog(row: dict):
                 if meta:
                     st.caption(meta)
 
-    # Dev Mode's sidebar button is genuinely unreachable here -- st.dialog is a true
-    # Streamlit modal, everything outside it (sidebar included) is inert while it's
-    # open, not just visually behind it. Rather than something that can't be worked
-    # around from inside the dialog, this gives the note-taking flow its own entry
-    # point scoped to the card itself, since Alex specifically wants to describe how
-    # player cards should display -- exactly the content that lives in here.
-    with st.expander("🛠️ Leave a note about this card"):
-        card_note_key = f"dev_note_{name_key}_{row.get('position', '')}_{depth_rank if depth_rank is not None else ''}"
-        note = st.text_area(
-            "What do you want fixed or changed on this card?", key=f"{card_note_key}_text",
-            placeholder='e.g. "Show target share next to the season picker, not buried in Games"',
-        )
-        card_annotated_image = _screenshot_annotation_widget(key_prefix=card_note_key)
-        if st.button("💾 Save note", key=f"{card_note_key}_save"):
-            if note.strip():
-                save_dev_note(
-                    f"Player Card — {player_name}", note.strip(),
-                    datetime.now(timezone.utc).isoformat(),
-                    {
-                        "player_name": player_name,
-                        "team": row.get("team_name") or row.get("team_abbr"),
-                        "position": row.get("position"),
-                        "depth_rank": depth_rank,
-                        "selected_season": selected_season,
-                    },
-                    annotated_image=card_annotated_image,
-                )
-                st.success("Saved — see it under Admin → Dev Notes.")
-            else:
-                st.error("Write a note before saving.")
-
 
 def _card_button(p: pd.Series, is_starter_card: bool):
     label = p["player_name"] if is_starter_card else f"{p['depth_rank']}. {p['player_name']}"
@@ -1811,72 +1580,6 @@ def page_nbc_news():
 
 # ==================================================================== Admin
 
-def page_dev_notes():
-    st.title("📝 Dev Notes")
-    st.caption(
-        "Notes left from Dev Mode (the 🛠️ button in the sidebar) -- what to fix, and "
-        "the exact filter/selection state on that page at the moment each one was frozen."
-    )
-    notes = load_dev_notes()
-    if not notes:
-        st.info("No dev notes yet. Click **🛠️ Dev Mode** in the sidebar on any page to leave one.")
-        return
-
-    c1, c2 = st.columns([2, 1])
-    pages_with_notes = sorted({n["page"] for n in notes})
-    page_filter = c1.selectbox("Filter by page", ["All pages"] + pages_with_notes)
-    show_resolved = c2.checkbox("Show resolved", value=False)
-
-    visible = [
-        (i, n) for i, n in enumerate(notes)
-        if (show_resolved or not n.get("resolved"))
-        and (page_filter == "All pages" or n["page"] == page_filter)
-    ]
-    if not visible:
-        st.info("No notes match this filter.")
-        return
-
-    for i, n in reversed(visible):
-        with st.container(border=True):
-            header_cols = st.columns([4, 1, 1])
-            with header_cols[0]:
-                ts = n["timestamp"][:16].replace("T", " ")
-                status = "✅ resolved" if n.get("resolved") else "🟡 open"
-                st.markdown(f"**{n['page']}** — {ts} UTC · {status}")
-            with header_cols[1]:
-                target_page = PAGE_BY_TITLE.get(n["page"])
-                if target_page and n.get("page_state") and st.button(
-                    "↩️ Go there", key=f"restore_{i}", width="stretch",
-                    help="Reload that page with the exact filters/selections it had when this was frozen",
-                ):
-                    for k, v in n["page_state"].items():
-                        st.session_state[k] = v
-                    st.switch_page(target_page)
-            with header_cols[2]:
-                if not n.get("resolved"):
-                    if st.button("Resolve", key=f"resolve_{i}", width="stretch"):
-                        set_dev_note_resolved(i, True)
-                        st.rerun()
-                else:
-                    if st.button("Reopen", key=f"reopen_{i}", width="stretch"):
-                        set_dev_note_resolved(i, False)
-                        st.rerun()
-            st.write(n["note"])
-            if n.get("image_path"):
-                full_image_path = os.path.join(DEV_NOTES_DIR, n["image_path"])
-                if os.path.exists(full_image_path):
-                    st.image(full_image_path, caption="Drawn annotation")
-            if n.get("page_state"):
-                with st.expander("Page state at the time"):
-                    # Plain key/value lines instead of a collapsed JSON tree -- every
-                    # value here is either a simple scalar (most filters/search boxes)
-                    # or something whose str() is already readable (the parlay slip's
-                    # list of leg dicts, etc.), so this reads noticeably faster than
-                    # having to expand nested JSON nodes to see what was selected.
-                    for k, v in n["page_state"].items():
-                        st.markdown(f"**{k}:** `{v}`")
-
-
 def page_run_pulls():
     st.title("🔄 Run Data Pulls")
     st.caption("Runs the actual pull scripts. Output streams below once finished (can take a minute).")
@@ -1930,26 +1633,15 @@ PAGE_SBNATION_NEWS = st.Page(page_sbnation_news, title="SB Nation News", icon="�
 PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
 PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
 PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
-PAGE_DEV_NOTES = st.Page(page_dev_notes, title="Dev Notes", icon="📝")
-
-# Lets Dev Notes turn a frozen page title back into the actual st.Page object needed
-# for st.switch_page -- built once, right after every page exists, used by the
-# "restore this state" button on the Dev Notes page.
-PAGE_BY_TITLE = {p.title: p for p in [
-    PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG, PAGE_UNDERDOG_PROPS,
-    PAGE_DEPTH_CHARTS, PAGE_NFL_STATS, PAGE_SBNATION_NEWS, PAGE_NBC_NEWS,
-    PAGE_OVERVIEW, PAGE_RUN_PULLS, PAGE_DEV_NOTES,
-]}
 
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
     "Research": [PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
-    "Admin": [PAGE_OVERVIEW, PAGE_RUN_PULLS, PAGE_DEV_NOTES],
+    "Admin": [PAGE_OVERVIEW, PAGE_RUN_PULLS],
 })
 
 st.sidebar.divider()
 st.sidebar.caption("ParlayModel")
 
-show_dev_mode_panel(nav.title)
 nav.run()

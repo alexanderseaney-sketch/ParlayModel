@@ -257,6 +257,42 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex decided to scrap Dev Mode entirely — removed it completely rather than
+  disabling it, given the last few rounds (screenshot upload, the "Go there" restore,
+  the live full-page drawing overlay) had grown into real uncertainty about whether
+  the feature was worth its own complexity, especially the overlay approach's
+  unverified CSS/browser risk. Removed cleanly, not just hidden: `_screenshot_
+  annotation_widget()`, `_live_overlay_drawing_widget()`, `show_dev_mode_panel()`,
+  the player-card-embedded note form, `page_dev_notes()`, `PAGE_DEV_NOTES`,
+  `PAGE_BY_TITLE` (only ever used by Dev Notes' restore button, confirmed via grep
+  before removing, not assumed), the "Dev Notes" nav entry, and the `show_dev_mode_
+  panel(nav.title)` call. In `utils.py`: `save_dev_note()`, `load_dev_notes()`,
+  `set_dev_note_resolved()`, the three `DEV_NOTES_*` path constants, and the now-
+  unused `re` import (confirmed nothing else in the file used it before removing).
+  In `app.py`: the `PIL`/`Image` and `streamlit_drawable_canvas`/`st_canvas` imports
+  (confirmed PIL wasn't used anywhere else in the file first). Removed `streamlit-
+  drawable-canvas-fix` and `pillow` from `requirements.txt`.
+  **Verified thoroughly rather than assuming a clean removal**: grepped the entire
+  repo (not just the two files directly touched) for every Dev Mode-related term —
+  `dev_mode`, `dev_note`, `dev notes`, `st_canvas`, `streamlit_drawable_canvas`,
+  `PAGE_BY_TITLE` — and confirmed zero remaining references outside this README's own
+  historical log entries (correctly left alone — they document what was tried, which
+  is the point of keeping a real record). Confirmed `dev_notes/` was never actually
+  committed to git at any point (checked `git ls-files`), so there was no leftover
+  data to clean up either. Verified the app still compiles and loads with zero
+  exceptions after every removal, and specifically confirmed the Dev Mode button is
+  genuinely gone from the sidebar (checked the actual rendered button list, not just
+  that the code compiles).
+- Blocked: nothing — clean, verified removal.
+- Next: none. If something like this is wanted again later, the honest lesson from
+  this whole arc is worth remembering: the inline "mark this section" alternative
+  (proposed, never built) had much higher confidence of working correctly than the
+  screenshot/overlay approaches actually built, precisely because it wouldn't have
+  depended on CSS/iframe positioning this sandbox could never fully verify.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex clarified he doesn't want the upload-a-screenshot flow — he wants to draw
   directly on the LIVE page itself, visible only while Dev Mode is on. Real technical
   fork before building anything: Streamlit custom components (st_canvas included)

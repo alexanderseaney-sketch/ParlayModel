@@ -8,5 +8,3 @@ python-dotenv
 nfl_data_py
 matplotlib
 streamlit
-streamlit-drawable-canvas-fix
-pillow
