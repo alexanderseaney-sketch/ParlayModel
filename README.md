@@ -257,6 +257,48 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Improved Dev Notes (the viewer for notes left via Dev Mode) three ways. (1)
+  **"Go there" button** — the biggest gap: notes showed the frozen page state as
+  read-only JSON with no way to actually get back to it. Built a `PAGE_BY_TITLE`
+  lookup (page title string → the real `st.Page` object) right after all pages are
+  defined, so a note's saved page name can resolve to something `st.switch_page()`
+  actually accepts. Clicking "Go there" writes every saved key/value back into
+  `st.session_state` before switching, so the destination page's widgets re-initialize
+  from the restored values — not just a link to the page, the actual filters/search/
+  slip as they were at freeze time. (2) **Page filter** on the notes list — a flat
+  reverse-chronological list stops scaling once notes span all 11 pages. (3)
+  **Readable state display** — plain `key: value` lines instead of a collapsed JSON
+  tree, faster to scan without expanding nested nodes.
+  **Tested the actual mechanism, not just the UI**: `AppTest.switch_page()` turned out
+  to only support file-based pages, not the function-based `st.Page()` objects this
+  app uses — a real tooling limitation, confirmed by checking the method's own
+  docstring rather than assuming. Worked around it for testing purposes: verified the
+  restore logic (write saved key/value pairs into session_state) in isolation with a
+  stub page object standing in for the real `st.switch_page` call, and confirmed all
+  three saved values (`search`, `min_confidence`, `stat_filter`) landed correctly in
+  session_state after clicking the button. **Did not verify the full click-through in
+  the live multipage app** (actually landing on Weekly Bet Slip with its widgets
+  showing restored values) — that needs a real browser session this sandbox doesn't
+  have, same category of gap as the earlier CSS redesign that couldn't be screenshotted.
+  **Near-miss caught before it mattered**: the routine `rm -f data/raw/*.csv` cleanup
+  used throughout this project's history is now WRONG — the Aug 23 session
+  deliberately allow-listed specific `data/raw/` files in `.gitignore` so Streamlit
+  Cloud's deploy has real committed data to serve. Ran the old habit out of muscle
+  memory, staged a deletion of 12 real committed data files, caught it before
+  committing (`git status` showed deletions, not new files, which was the tell), and
+  restored with `git checkout -- data/raw/`. Nothing was actually lost since it never
+  got committed, but flagging this clearly so it doesn't happen again.
+- Blocked: the full multipage restore flow (click "Go there" → land on the actual
+  destination page → confirm its widgets show restored values) is unverified in a real
+  browser. Worth a manual check once deployed.
+- Next: if the live restore flow doesn't work as expected, the likely culprit is
+  widget key mismatches — a saved session_state key needs to exactly match the `key=`
+  a widget uses on the destination page, and that wasn't independently re-verified
+  against every page's actual widget keys, only the general Streamlit behavior pattern.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex returned to work after several home Claude Code sessions (Aug 16, 17, 22,
   23) that pushed real substantial progress but never got logged here — the README's
   Status/Log had drifted noticeably behind the actual repo. Read the real commit

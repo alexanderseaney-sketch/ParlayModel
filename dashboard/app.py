@@ -1665,19 +1665,39 @@ def page_dev_notes():
         st.info("No dev notes yet. Click **🛠️ Dev Mode** in the sidebar on any page to leave one.")
         return
 
-    show_resolved = st.checkbox("Show resolved notes", value=False)
-    for i, n in reversed(list(enumerate(notes))):
-        if n.get("resolved") and not show_resolved:
-            continue
+    c1, c2 = st.columns([2, 1])
+    pages_with_notes = sorted({n["page"] for n in notes})
+    page_filter = c1.selectbox("Filter by page", ["All pages"] + pages_with_notes)
+    show_resolved = c2.checkbox("Show resolved", value=False)
+
+    visible = [
+        (i, n) for i, n in enumerate(notes)
+        if (show_resolved or not n.get("resolved"))
+        and (page_filter == "All pages" or n["page"] == page_filter)
+    ]
+    if not visible:
+        st.info("No notes match this filter.")
+        return
+
+    for i, n in reversed(visible):
         with st.container(border=True):
-            header_cols = st.columns([5, 1])
+            header_cols = st.columns([4, 1, 1])
             with header_cols[0]:
                 ts = n["timestamp"][:16].replace("T", " ")
                 status = "✅ resolved" if n.get("resolved") else "🟡 open"
                 st.markdown(f"**{n['page']}** — {ts} UTC · {status}")
             with header_cols[1]:
+                target_page = PAGE_BY_TITLE.get(n["page"])
+                if target_page and n.get("page_state") and st.button(
+                    "↩️ Go there", key=f"restore_{i}", width="stretch",
+                    help="Reload that page with the exact filters/selections it had when this was frozen",
+                ):
+                    for k, v in n["page_state"].items():
+                        st.session_state[k] = v
+                    st.switch_page(target_page)
+            with header_cols[2]:
                 if not n.get("resolved"):
-                    if st.button("Mark resolved", key=f"resolve_{i}", width="stretch"):
+                    if st.button("Resolve", key=f"resolve_{i}", width="stretch"):
                         set_dev_note_resolved(i, True)
                         st.rerun()
                 else:
@@ -1687,7 +1707,13 @@ def page_dev_notes():
             st.write(n["note"])
             if n.get("page_state"):
                 with st.expander("Page state at the time"):
-                    st.json(n["page_state"])
+                    # Plain key/value lines instead of a collapsed JSON tree -- every
+                    # value here is either a simple scalar (most filters/search boxes)
+                    # or something whose str() is already readable (the parlay slip's
+                    # list of leg dicts, etc.), so this reads noticeably faster than
+                    # having to expand nested JSON nodes to see what was selected.
+                    for k, v in n["page_state"].items():
+                        st.markdown(f"**{k}:** `{v}`")
 
 
 def page_run_pulls():
@@ -1744,6 +1770,15 @@ PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
 PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
 PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
 PAGE_DEV_NOTES = st.Page(page_dev_notes, title="Dev Notes", icon="📝")
+
+# Lets Dev Notes turn a frozen page title back into the actual st.Page object needed
+# for st.switch_page -- built once, right after every page exists, used by the
+# "restore this state" button on the Dev Notes page.
+PAGE_BY_TITLE = {p.title: p for p in [
+    PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG, PAGE_UNDERDOG_PROPS,
+    PAGE_DEPTH_CHARTS, PAGE_NFL_STATS, PAGE_SBNATION_NEWS, PAGE_NBC_NEWS,
+    PAGE_OVERVIEW, PAGE_RUN_PULLS, PAGE_DEV_NOTES,
+]}
 
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
