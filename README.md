@@ -257,6 +257,46 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex sent a screenshot — every row in a player's 2025 "Games" table showed
+  "None" for Opponent Team. Traced to the real, exact root cause rather than guessing:
+  `models/pbp_derived_weekly_stats.py` (built earlier to derive 2025 weekly stats
+  from play-by-play, since nflverse's official aggregate lagged behind) never
+  computed `opponent_team` at all — confirmed by grep, zero mentions of "opponent"
+  anywhere in that file. **Fixed** using the same team-week matchup pattern already
+  proven elsewhere in this project (`feature_engineering.py`'s `build_team_week_
+  defense`): expand `schedules.csv` into one row per team per game with the OTHER
+  team as `opponent_team`, join onto the derived stats by season/week/team.
+  **Validated properly, not just "should work"**: extended the file's own existing
+  `validate_against_real(2024)` function (which cross-checks derived-from-pbp output
+  against real nflverse data for a season where both exist) to also check
+  `opponent_team` row-by-row. Real result: **0 mismatches, 0 nulls across 5,583 real
+  player-weeks** — exact match against nflverse's own official values.
+  **Bigger finding while investigating**: the currently-committed `weekly_stats.csv`
+  (what the deployed app was actually serving) had `opponent_team` **100% null** for
+  2025 — matching the screenshot exactly. But a fresh pull today shows nflverse has
+  since published REAL official 2025 weekly stats, which the derivation script's own
+  self-healing design (new rows win on key collision) already superseded correctly —
+  confirmed the fresh pull's 2025 `opponent_team` is 0% null with sane, real matchups
+  (spot-checked: Zach Ertz/WAS vs GB/DET/DEN, Keenan Allen/LAC vs KC/LV/DEN/WAS/IND/
+  JAX, etc. — genuine 2025 games, not placeholder garbage). So the screenshot was
+  showing **stale committed data**, not a live, currently-unfixable bug — the actual
+  derivation bug is now fixed AND doesn't even need to fire for today's data, since
+  nflverse caught up in the meantime. Committed the refreshed, corrected data
+  (schedules/injuries/NGS/players/snap_counts/weekly_stats, all pulled fresh) so the
+  deployed site actually serves the fix rather than continuing to show the stale
+  version. Regenerated `current_player_predictions.csv` against the corrected data
+  too. Full app load confirmed clean after all changes.
+- Blocked: nothing — real root cause found, real fix, real validation against real
+  official data, real corrected data committed.
+- Next: none needed for this specific bug. Worth keeping in mind generally: any time
+  `pbp_derived_weekly_stats.py`'s output ships, it's worth re-running
+  `validate_against_real()` after adding a new derived column, the same way this
+  session did for `opponent_team` — it's what actually caught this rather than just
+  assuming the fix was correct.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Combined the player card's "Model predictions" and "Current Underdog lines"
   sections — previously two separate blocks you had to mentally cross-reference by
   stat name to see whether the model's pick actually lined up with a real market

@@ -142,8 +142,24 @@ def build_weekly_stats_from_pbp(years: list[int]) -> pd.DataFrame:
     merged = merged.dropna(subset=["player_id"])
     merged = merged[(merged[stat_cols].abs().sum(axis=1) > 0)]  # drop rows with literally no recorded stat
 
-    return merged[["player_id", "player_display_name", "position", "recent_team", "season", "week", "season_type"]
-                   + stat_cols + ["target_share"]]
+    # opponent_team: never computed before this fix -- the dashboard's player-card
+    # Games table reads it directly, and every derived-from-pbp row showed "None"
+    # for every week as a result (confirmed by grep: zero mentions of "opponent"
+    # anywhere in this file before this change). Same team-week matchup pattern
+    # already used elsewhere in this project (feature_engineering.py's
+    # build_team_week_defense) rather than inventing a new approach: schedules.csv
+    # gives each game's home/away teams, expanded to one row per team with the
+    # OTHER team as "opponent", then joined onto the derived stats by season/week/team.
+    schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
+    home_side = schedules[["season", "week", "home_team", "away_team"]].rename(
+        columns={"home_team": "recent_team", "away_team": "opponent_team"})
+    away_side = schedules[["season", "week", "home_team", "away_team"]].rename(
+        columns={"away_team": "recent_team", "home_team": "opponent_team"})
+    matchups = pd.concat([home_side, away_side], ignore_index=True).drop_duplicates()
+    merged = merged.merge(matchups, on=["season", "week", "recent_team"], how="left")
+
+    return merged[["player_id", "player_display_name", "position", "recent_team", "opponent_team",
+                    "season", "week", "season_type"] + stat_cols + ["target_share"]]
 
 
 def save_derived_weekly_stats(years: list[int], real_data_max_frac: float = 0.5) -> None:
@@ -212,6 +228,20 @@ def validate_against_real(year: int = 2024) -> None:
     print(f"\n=== target_share (per player-week, {len(merged_ts)} rows with targets>0) ===")
     print(f"  mean abs diff: {merged_ts['ts_diff'].mean():.4f}  max abs diff: {merged_ts['ts_diff'].max():.4f}")
     print(f"  rows off by >0.02: {(merged_ts['ts_diff'] > 0.02).sum()}")
+
+    # opponent_team: added after the original validation was written (was never
+    # computed at all before -- every derived row showed a blank opponent). Row-by-
+    # row exact match check, same spirit as target_share above.
+    if "opponent_team" in real.columns:
+        merged_opp = derived.merge(
+            real[["player_id", "season", "week", "opponent_team"]], on=["player_id", "season", "week"],
+            suffixes=("_derived", "_real"))
+        mismatches = merged_opp[merged_opp["opponent_team_derived"] != merged_opp["opponent_team_real"]]
+        null_derived = merged_opp["opponent_team_derived"].isna().sum()
+        print(f"\n=== opponent_team ({len(merged_opp)} player-weeks) ===")
+        print(f"  exact mismatches: {len(mismatches)}   null in derived: {null_derived}")
+        if len(mismatches) > 0:
+            print(mismatches[["player_id", "season", "week", "opponent_team_derived", "opponent_team_real"]].head(10))
 
 
 if __name__ == "__main__":
