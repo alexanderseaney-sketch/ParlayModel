@@ -257,6 +257,37 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Combined the player card's "Model predictions" and "Current Underdog lines"
+  sections — previously two separate blocks you had to mentally cross-reference by
+  stat name to see whether the model's pick actually lined up with a real market
+  line. Now one section: for each stat the model has a prediction for, the row shows
+  the pick + confidence badge + the matching Underdog line/price right next to it,
+  reusing the already-established `line_matches_proxy` gate (✅/⚠️) so a proxy-vs-
+  real-line mismatch is visible right there instead of requiring a mental comparison.
+  Matched on stat_name AND the model's predicted side (over/under) specifically, so
+  the price shown is for the side actually being recommended, not just whichever
+  side happened to be listed first. Kept the row-based layout (not a single
+  `st.dataframe`) specifically because `_confidence_badge` renders a real colored
+  Streamlit widget, not text — it can't live inside a dataframe cell.
+  **Nothing silently disappears**: a predicted stat with no live Underdog line yet
+  shows "No live line yet" instead of just omitting the row; an Underdog line that
+  exists with no model prediction at all still shows up in a secondary table below,
+  demoted (no model opinion to act on) but not deleted.
+  **Tested the actual matching logic directly with realistic fake data covering all
+  four real cases** before wiring it into the dialog: a stat with both a prediction
+  and a matching line (confirmed correct match/price/mismatch-flagging), a prediction
+  with no live line (confirmed "no live line" path), and an Underdog line with no
+  prediction (confirmed it lands in the secondary table, both sides shown). Also
+  verified the raw `choice` values in `props_df` are genuinely lowercase
+  `"over"`/`"under"` (checked `pull_underdog.py`'s own mapping) before relying on an
+  exact-match join against the model's lowercase `side` variable — not assumed.
+  Full app load confirmed clean after the change.
+- Blocked: nothing — real logic, tested against real scenarios, not just "should work."
+- Next: none needed.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Two player-card changes. (1) **Season selector now requires an explicit
   choice** — previously `st.selectbox` defaulted to the most recent season and the
   Games/Snap share tables rendered immediately on open. Added a "Select a season..."

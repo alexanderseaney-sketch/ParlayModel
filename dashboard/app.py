@@ -1198,30 +1198,61 @@ def _player_detail_dialog(row: dict):
             if isinstance(primary, str) and primary.strip():
                 st.caption(primary)
 
-    if "predictions" in detail:
+    predictions = detail.get("predictions")
+    props = detail.get("props")
+    if predictions is not None or props is not None:
         with st.container(border=True):
-            st.markdown("**Model predictions** (vs. our own proxy line, not necessarily today's market line)")
-            for _, p in detail["predictions"].iterrows():
-                side = "over" if p["predicted_prob_over"] >= 0.5 else "under"
-                prob = p["predicted_prob_over"] if side == "over" else 1 - p["predicted_prob_over"]
-                c1, c2 = st.columns([3, 1])
-                with c1:
-                    st.write(f"{_pretty_stat(p['stat_name'])} {side} {p['proxy_line']}")
-                with c2:
-                    _confidence_badge(prob, p["confidence"])
+            st.markdown(
+                "**Model predictions vs. Underdog lines** (our proxy line vs. "
+                "today's actual market line, side by side)"
+            )
+            predicted_stats = set(predictions["stat_name"]) if predictions is not None else set()
 
-    if "props" in detail:
-        with st.container(border=True):
-            st.markdown("**Current Underdog lines**")
-            cols = [c for c in ["stat_name", "choice", "stat_value", "american_price"] if c in detail["props"].columns]
-            props_df = detail["props"][cols].sort_values("stat_name").copy()
-            if "stat_name" in props_df.columns:
-                props_df["stat_name"] = props_df["stat_name"].map(_pretty_stat)
-            if "choice" in props_df.columns:
-                props_df["choice"] = props_df["choice"].str.title()
-            props_df = props_df.rename(columns={"stat_name": "Stat", "choice": "Side",
-                                                  "stat_value": "Line", "american_price": "Price"})
-            st.dataframe(props_df, hide_index=True, width="stretch")
+            # Main case: a stat we have a model prediction for. Row-based (not a
+            # single st.dataframe) specifically to keep the colored confidence
+            # badge -- that's a real widget, not text, so it can't live in a
+            # dataframe cell.
+            if predictions is not None:
+                for _, p in predictions.iterrows():
+                    stat_name = p["stat_name"]
+                    side = "over" if p["predicted_prob_over"] >= 0.5 else "under"
+                    prob = p["predicted_prob_over"] if side == "over" else 1 - p["predicted_prob_over"]
+
+                    matching_prop = None
+                    if props is not None:
+                        match = props[(props["stat_name"] == stat_name) & (props["choice"] == side)]
+                        if not match.empty:
+                            matching_prop = match.iloc[0]
+
+                    c1, c2, c3 = st.columns([3, 1.3, 2])
+                    with c1:
+                        st.write(f"{_pretty_stat(stat_name)} {side} {p['proxy_line']}")
+                    with c2:
+                        _confidence_badge(prob, p["confidence"])
+                    with c3:
+                        if matching_prop is not None:
+                            line_ok = line_matches_proxy(matching_prop["stat_value"], p["proxy_line"], stat_name)
+                            icon = "✅" if line_ok else "⚠️"
+                            price = matching_prop.get("american_price")
+                            price_str = f" ({price})" if pd.notna(price) else ""
+                            st.write(f"{icon} UD: {matching_prop['stat_value']}{price_str}")
+                        else:
+                            st.caption("No live line yet")
+
+            # Secondary case: an Underdog line exists with no model prediction at
+            # all -- still worth showing (nothing should just disappear), demoted
+            # below the predicted rows since there's no model opinion to act on.
+            if props is not None:
+                unpredicted = props[~props["stat_name"].isin(predicted_stats)]
+                if not unpredicted.empty:
+                    st.caption("No model prediction yet for:")
+                    cols = [c for c in ["stat_name", "choice", "stat_value", "american_price"] if c in unpredicted.columns]
+                    extra_df = unpredicted[cols].sort_values("stat_name").copy()
+                    extra_df["stat_name"] = extra_df["stat_name"].map(_pretty_stat)
+                    extra_df["choice"] = extra_df["choice"].str.title()
+                    extra_df = extra_df.rename(columns={"stat_name": "Stat", "choice": "Side",
+                                                          "stat_value": "Line", "american_price": "Price"})
+                    st.dataframe(extra_df, hide_index=True, width="stretch")
 
     selected_season = None
     if "recent_games" in detail or "snap_trend" in detail:
