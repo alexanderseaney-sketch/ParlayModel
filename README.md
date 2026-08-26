@@ -257,6 +257,49 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Finished what the last two entries flagged as pending — `generate_weekly_bet_
+  slip.py` (the Weekly Bet Slip page's underlying script) was the third and last
+  place still gating on `line_matches_proxy` and excluding "mismatched" props
+  entirely instead of recomputing. Since this script computes one `my_prob` per
+  matched row (already resolved to whichever side the model favors, unlike the
+  Parlay Builder's two-sided rendering) the fix was simpler: replaced the exclusion
+  logic with a single recompute step feeding straight into `my_prob` — everything
+  downstream (Kelly-fraction ranking, correlation math, the bet-slip description)
+  already reads from `my_prob`, so fixing it once at the source fixed the whole
+  script rather than needing separate edits at each consumer. Updated the
+  description string (used to append "our proxy: X, Y% off" as if flagging a
+  problem — removed, since the real Underdog line is already shown directly and
+  there's nothing left to flag) and both places the top-of-file caveat gets stated
+  (the docstring and the actual runtime printout) to accurately describe what's now
+  true: probabilities are recomputed against the real line, but that recomputation
+  is still a statistical approximation unvalidated against real historical outcomes
+  (no archive exists yet) — different, more precise claim than the old "raw proxy,
+  unvalidated" framing.
+  **Caught a real bug by actually running the script, not just compiling it**: both
+  `props` (Underdog's own internal player ID) and `predictions` (nflverse's gsis ID)
+  have their own column literally named `player_id` — a plain merge silently
+  produces `player_id_x`/`player_id_y` instead of the plain name the code expected,
+  a `KeyError` invisible from reading the code alone. Fixed by explicitly renaming
+  the nflverse one to `_nflverse_player_id` before merging.
+  **Ran the complete script against real, live data** after the fix (not a
+  synthetic test): 755 real matched props, 251 flagged genuinely +EV, real
+  Kelly-ranked suggestions produced, zero exceptions, and — the actual point of
+  today's whole arc — no more "Excluded N of M matched props" messaging anywhere,
+  since nothing gets excluded for line divergence anymore.
+- Blocked: nothing — all three places that show model confidence (player card,
+  Parlay Builder, Weekly Bet Slip) are now consistently using real-line
+  recomputation instead of proxy-based gating.
+- Next: the real live run's top suggestions were dominated by season-long TD-under
+  picks at ~99% model probability — plausible on its face this early in a season
+  (few games played, "under 9.5 season TDs" is close to trivially true in Week 1),
+  but worth a closer look at whether season-long props specifically need their own
+  sanity check distinct from weekly props, since near-certainty picks like these
+  could just be an artifact of early-season timing rather than real edge. Separate
+  concern from today's fix, not caused by it — flagging for a future session.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex correctly called out that "line mismatch" shouldn't exist as a concept
   anymore — last session's real-line recomputation fix only reached the player
   card's combined section, and the Parlay Builder (the primary place legs actually

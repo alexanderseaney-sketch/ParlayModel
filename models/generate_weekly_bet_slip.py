@@ -4,11 +4,15 @@ Alex places every bet themselves; this produces WHAT to consider and HOW MUCH to
 stake, using real Kelly-fraction edge ranking against REAL live Underdog prices (not
 assumed odds).
 
-CRITICAL CAVEAT, stated here and repeated in every output: model confidence is
-validated against each player's own PROXY line (rolling average), not a real
-historical Underdog line -- see README, this is still the single biggest open
-question in the whole project. Real accuracy against actual market prices is
-UNVALIDATED.
+CRITICAL CAVEAT, stated here and repeated in every output: as of 2026-08-26, my_prob
+is recomputed against Underdog's REAL posted line (not the raw proxy-based number) --
+see recompute_probability_for_real_line() in dashboard/utils.py. But that
+recomputation is itself a statistical approximation (assumes roughly-normal week-to-
+week variance around each model's implied performance level), not something trained
+or validated against real historical Underdog lines with graded outcomes -- no such
+archive exists yet (see README, still the single biggest open question in the whole
+project). Real accuracy against actual market prices remains UNVALIDATED; this is the
+best real-time estimate available given that gap, not a proven number.
 
 Kelly criterion: for a bet with true win probability p and decimal odds d, the
 bankroll-growth-optimal fraction is f* = p - (1-p)/(d-1), positive only when p*d > 1
@@ -41,7 +45,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # Windows console default codepage mangles em-dashes otherwise
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
-from utils import normalize_name, load_leg_correlations, line_matches_proxy, pretty_stat_name  # noqa: E402
+from utils import (
+    normalize_name, load_leg_correlations, pretty_stat_name,
+    estimate_player_stat_std, recompute_probability_for_real_line,
+)  # noqa: E402
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
@@ -55,9 +62,6 @@ MIN_KELLY_EDGE = 0.02   # the real prudence lever: raw Kelly fraction must clear
                          # a percentage of), it's applied as "don't dilute the week's
                          # budget across marginal edges," which is the same underlying
                          # goal of not over-betting an uncertain edge estimate.
-                         # line_matches_proxy() (the other correctness gate, for
-                         # the proxy-line-vs-real-line bug) lives in dashboard/utils.py
-                         # -- shared with the Parlay Builder rather than duplicated here.
 TOP_N_OPPORTUNITIES = 3
 MIN_STAKE = 0.50
 
@@ -107,9 +111,17 @@ def load_matched_props() -> pd.DataFrame:
         1 - predictions["predicted_prob_over"],
     )
 
+    # Both dataframes have their own "player_id" -- Underdog's internal ID (props)
+    # and nflverse's gsis ID (predictions). A plain merge would silently produce
+    # player_id_x/player_id_y instead of a clean column (a real KeyError caught by
+    # actually running this, not just reading it) -- renamed explicitly so the
+    # nflverse ID (the one weekly_stats.csv/estimate_player_stat_std actually need)
+    # survives the merge under an unambiguous name.
+    predictions = predictions.rename(columns={"player_id": "_nflverse_player_id"})
     merged = props.merge(
         predictions[["_match_key", "stat_name", "my_side", "my_prob", "confidence",
-                     "recent_team", "position", "prop_type", "proxy_line", "next_week", "next_gameday"]],
+                     "recent_team", "position", "prop_type", "proxy_line", "next_week", "next_gameday",
+                     "_nflverse_player_id"]],
         on=["_match_key", "stat_name"], how="inner",
     )
     merged = merged[merged["choice"].str.lower() == merged["my_side"]]
@@ -117,24 +129,38 @@ def load_matched_props() -> pd.DataFrame:
     merged = merged[merged["decimal_price"] > 1]
     merged = merged.drop_duplicates(subset=["full_name", "stat_name"])
 
-    # The correctness gate: my_prob only answers "beats OUR proxy_line", which is
-    # only a valid stand-in for "beats Underdog's real stat_value" when the two
-    # numbers are actually close. See line_matches_proxy's comment (in
-    # dashboard/utils.py) for the real bug this fixes, why the threshold varies by
-    # prop grain (season/period-scoped proxies are structurally noisier), and why
-    # TD/INT/sack counts are gated on absolute difference instead of percentage.
-    # line_divergence itself is kept only for the human-readable "X% off" bet-slip
-    # description below -- it's not the actual pass/fail check for count stats.
-    before = len(merged)
+    # Real fix (2026-08-26): there should never be a "line mismatch" concept here
+    # anymore -- my_prob only ever answered "beats OUR proxy_line", so it's
+    # recomputed against Underdog's REAL stat_value for every matched row instead
+    # of being excluded when the two numbers diverge. Same fix as the Parlay
+    # Builder and player card (see recompute_probability_for_real_line's docstring
+    # in dashboard/utils.py for the full reasoning). line_divergence is kept only
+    # as informational context in the bet-slip description below, not a pass/fail
+    # gate -- nothing gets dropped for this reason anymore.
     merged["line_divergence"] = (merged["stat_value"] - merged["proxy_line"]).abs() / merged["proxy_line"].replace(0, np.nan)
-    merged["_line_ok"] = merged.apply(
-        lambda r: line_matches_proxy(r["stat_value"], r["proxy_line"], r["stat_name"]), axis=1)
-    merged = merged[merged["_line_ok"]].drop(columns=["_line_ok"])
-    excluded = before - len(merged)
-    if excluded:
-        print(f"Excluded {excluded} of {before} matched props: Underdog's real line diverges "
-              f"too far from our proxy line for its prop type, so our model's probability "
-              f"isn't a trustworthy stand-in for beating THAT specific number.")
+
+    weekly_stats = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
+
+    def _recompute_row(row):
+        # my_prob/proxy_line are stated in terms of whichever side the model
+        # favors (my_side) -- recompute_probability_for_real_line expects a
+        # probability of exceeding a line, so this recomputes P(exceed real
+        # stat_value) directly when my_side is "over", or works in "under" terms
+        # (both flipped) when my_side is "under", then returns whichever matches
+        # my_side so downstream code (Kelly calc etc.) keeps meaning the same thing.
+        std = estimate_player_stat_std(row["_nflverse_player_id"], row["stat_name"], weekly_stats, position=row["position"])
+        if row["my_side"] == "over":
+            recomputed = recompute_probability_for_real_line(row["my_prob"], row["proxy_line"], row["stat_value"], std)
+        else:
+            # my_prob is P(under proxy_line) here; recompute_probability_for_real_line
+            # computes P(exceed X), so flip in and flip back out.
+            recomputed_over = recompute_probability_for_real_line(1 - row["my_prob"], row["proxy_line"], row["stat_value"], std)
+            recomputed = None if recomputed_over is None else 1 - recomputed_over
+        return recomputed if recomputed is not None else row["my_prob"]  # fall back to proxy-based if std unavailable
+
+    merged["my_prob"] = merged.apply(_recompute_row, axis=1)
+    merged["confidence"] = (merged["my_prob"] - 0.5).abs() * 2
+
     return merged
 
 
@@ -151,7 +177,6 @@ def build_single_leg_candidates(matched: pd.DataFrame) -> list[dict]:
         candidates.append({
             "type": "single",
             "description": f"{row['full_name']} — {pretty_stat_name(row['stat_name'])} {row['my_side']} {row['stat_value']} "
-                            f"(our proxy: {row['proxy_line']:.1f}, {row['line_divergence']*100:.0f}% off) "
                             f"[Wk {int(row['next_week'])} · {row['next_gameday']}]",
             "legs": [row["full_name"]],
             "leg_details": [_leg_detail(row)],
@@ -250,11 +275,13 @@ def main():
     print("=" * 78)
     print("WEEKLY BET SLIP -- SUGGESTIONS ONLY. You place every bet yourself.")
     print("=" * 78)
-    print("CAVEAT: model confidence is validated against each player's own rolling")
-    print("average (proxy line), NOT a real historical Underdog line. Real accuracy")
-    print("against actual market prices is unvalidated -- everything below only")
-    print("surfaces bets that clear a real edge bar at REAL live prices, which is a")
-    print("much stricter test than confidence alone. Only wager what you can afford to lose.")
+    print("CAVEAT: probabilities below are recomputed against Underdog's REAL posted")
+    print("line (not a raw proxy-based number) -- but that recomputation is a")
+    print("statistical approximation, not something trained on real historical")
+    print("Underdog lines with graded outcomes (no such archive exists yet). Real")
+    print("accuracy against actual market prices remains unvalidated -- everything")
+    print("below only surfaces bets that clear a real edge bar at REAL live prices,")
+    print("which is a much stricter test than confidence alone. Only wager what you can afford to lose.")
     print()
 
     matched = load_matched_props()
