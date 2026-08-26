@@ -10,6 +10,8 @@ from datetime import datetime, date, timezone
 
 import pandas as pd
 import streamlit as st
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
 
 from utils import (
     EXPECTED_FILES, PULL_SCRIPTS, line_matches_proxy, BET_LOG_PATH,
@@ -18,6 +20,7 @@ from utils import (
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
     pretty_stat_name, load_line_movement, save_dev_note, load_dev_notes, set_dev_note_resolved,
+    DEV_NOTES_DIR,
 )
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
@@ -215,6 +218,47 @@ def show_freshness_banner():
                 st.rerun()
 
 
+def _screenshot_annotation_widget(key_prefix: str):
+    """Optional 'upload a screenshot and draw on it' step for a Dev Mode note.
+    Streamlit has no way to capture a screenshot of itself -- Alex takes his own (one
+    keystroke on any OS) and uploads it here, then draws directly on top of it with a
+    real canvas (streamlit-drawable-canvas-fix -- the original streamlit-drawable-
+    canvas is broken on current Streamlit, calls an internal function that no longer
+    exists; confirmed by testing, not assumed, before picking the fork instead).
+    Deliberately kept OUTSIDE any st.form that wraps the note text/submit button --
+    custom components like this one need to update on every stroke via their own
+    render cycle, which forms suppress until submission. Returns the drawn-on image
+    as an RGBA numpy array ready for save_dev_note, or None if nothing was uploaded.
+    Sized to the uploaded image's own aspect ratio (capped at a max width) rather than
+    a fixed box, so a tall phone screenshot and a wide desktop one both render sensibly."""
+    uploaded = st.file_uploader(
+        "Optional: upload a screenshot to draw on", type=["png", "jpg", "jpeg"],
+        key=f"{key_prefix}_upload",
+        help="Take your own screenshot (any OS: one keystroke), upload it here, then draw directly on it below.",
+    )
+    if not uploaded:
+        return None
+
+    img = Image.open(uploaded).convert("RGB")
+    max_width = 700
+    if img.width > max_width:
+        scale = max_width / img.width
+        img = img.resize((max_width, int(img.height * scale)))
+
+    st.caption("Draw on the screenshot below (freehand, red pen).")
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 0, 0, 0.0)",
+        stroke_width=3,
+        stroke_color="#FF0000",
+        background_image=img,
+        height=img.height,
+        width=img.width,
+        drawing_mode="freedraw",
+        key=f"{key_prefix}_canvas",
+    )
+    return canvas_result.image_data
+
+
 def show_dev_mode_panel(page_title: str):
     """Freeze-and-annotate tool: lets Alex flag something on whatever screen he's
     looking at with a plain-English note, paired with a snapshot of THIS page's own
@@ -273,6 +317,8 @@ def show_dev_mode_panel(page_title: str):
             f"Mode is saved with your note — anything you click on this page now "
             f"won't change what gets recorded."
         )
+        annotated_image = _screenshot_annotation_widget(key_prefix="dev_mode_sidebar")
+
         with st.form("dev_note_form", clear_on_submit=True):
             note = st.text_area(
                 "What do you want fixed or changed on this screen?", height=100,
@@ -284,6 +330,7 @@ def show_dev_mode_panel(page_title: str):
                 save_dev_note(
                     st.session_state.dev_mode_page, note.strip(),
                     st.session_state.dev_mode_frozen_at, st.session_state.dev_mode_snapshot,
+                    annotated_image=annotated_image,
                 )
                 st.success("Saved — see it under Admin → Dev Notes.")
             else:
@@ -1379,6 +1426,7 @@ def _player_detail_dialog(row: dict):
             "What do you want fixed or changed on this card?", key=f"{card_note_key}_text",
             placeholder='e.g. "Show target share next to the season picker, not buried in Games"',
         )
+        card_annotated_image = _screenshot_annotation_widget(key_prefix=card_note_key)
         if st.button("💾 Save note", key=f"{card_note_key}_save"):
             if note.strip():
                 save_dev_note(
@@ -1391,6 +1439,7 @@ def _player_detail_dialog(row: dict):
                         "depth_rank": depth_rank,
                         "selected_season": selected_season,
                     },
+                    annotated_image=card_annotated_image,
                 )
                 st.success("Saved — see it under Admin → Dev Notes.")
             else:
@@ -1735,6 +1784,10 @@ def page_dev_notes():
                         set_dev_note_resolved(i, False)
                         st.rerun()
             st.write(n["note"])
+            if n.get("image_path"):
+                full_image_path = os.path.join(DEV_NOTES_DIR, n["image_path"])
+                if os.path.exists(full_image_path):
+                    st.image(full_image_path, caption="Drawn annotation")
             if n.get("page_state"):
                 with st.expander("Page state at the time"):
                     # Plain key/value lines instead of a collapsed JSON tree -- every

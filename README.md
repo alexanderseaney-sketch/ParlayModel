@@ -257,6 +257,53 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex wants Dev Mode to support drawing, not just text, to communicate intent
+  precisely. Honest technical reality first: Streamlit has no way to capture a
+  screenshot of itself from Python — there's no browser access. The real flow is
+  Alex takes his own screenshot (one keystroke on any OS) and uploads it, then draws
+  directly on top of it with a real canvas.
+  **Picked the wrong package first, caught it before shipping**: `streamlit-drawable-
+  canvas` (the well-known one) imports fine but crashes the moment it actually renders
+  — `AttributeError: module 'streamlit.elements.image' has no attribute
+  'image_to_url'`. It hasn't been updated in years and calls an internal Streamlit
+  function that no longer exists in the current version (1.61.1). Found this by
+  actually rendering it through `AppTest`, not by trusting that `pip install`
+  succeeding meant it worked. Searched for and found `streamlit-drawable-canvas-fix`,
+  a maintained fork built specifically to fix this exact break — same import path
+  (drop-in), verified it actually renders with a background image where the original
+  crashed.
+  **Built**: `_screenshot_annotation_widget()`, a shared helper (upload + canvas,
+  scaled to the uploaded image's own aspect ratio capped at 700px wide) used by both
+  Dev Mode entry points — the sidebar flow and the player-card-embedded one added last
+  round. Kept deliberately OUTSIDE any `st.form` wrapping the note text/submit button,
+  since custom components like this need to update on every stroke via their own
+  render cycle, which forms suppress until submission. `save_dev_note()` now accepts
+  an optional `annotated_image` (numpy array from the canvas) and saves it as a real
+  PNG under `dev_notes/images/`, storing the relative path in the JSONL entry rather
+  than inline — an annotated image is much bigger than everything else in a note, and
+  JSONL is meant to stay one line per record. Dev Notes viewer now shows the saved
+  image inline via `st.image()` when present.
+  **Tested thoroughly given the real technical risk here**: confirmed the canvas
+  renders without crashing via `AppTest` (drawing interaction itself — actual mouse
+  strokes — can't be simulated from this sandbox, same limitation as the dialog-
+  restore flow two rounds ago), and separately ran the full save round-trip with a
+  real RGBA numpy array shaped like actual `canvas_result.image_data` output — saved
+  to a real PNG, path recorded correctly, loaded back via PIL with correct dimensions
+  and mode. **Also caught a near-miss before it repeated**: `dev_notes/` is meant to
+  be tracked in git (same reasoning as the committed `data/raw/` files — Streamlit
+  Cloud has no persistent storage, so real notes need to survive a redeploy), so my
+  test note needed manual cleanup rather than being gitignored — checked `git status`
+  before staging instead of assuming, avoiding the same mistake as last time.
+- Blocked: real freehand drawing interaction (actual mouse/touch strokes on the
+  canvas) is unverified in a live browser — this sandbox can confirm the component
+  renders and the save path works, not that drawing itself feels right to use.
+- Next: worth a real check once deployed that `streamlit-drawable-canvas-fix` behaves
+  well on mobile/touch (Streamlit Cloud apps get used from phones), since the fork's
+  own maintenance history is thinner than the original's ever was before it broke.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex flagged that the sidebar Dev Mode button can't be clicked while on a player
   card — real root cause, not a bug in the button itself: player cards use `st.dialog`,
   which is a genuine Streamlit modal. Everything outside it, sidebar included, is

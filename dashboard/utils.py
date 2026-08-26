@@ -2,6 +2,7 @@
 import email.utils
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.parse
@@ -19,6 +20,7 @@ BET_LOG_DIR = os.path.join(ROOT_DIR, "bet_logs")
 BET_LOG_PATH = os.path.join(BET_LOG_DIR, "bets.csv")
 DEV_NOTES_DIR = os.path.join(ROOT_DIR, "dev_notes")
 DEV_NOTES_PATH = os.path.join(DEV_NOTES_DIR, "dev_notes.jsonl")
+DEV_NOTES_IMAGES_DIR = os.path.join(DEV_NOTES_DIR, "images")
 
 # app.py adds models/ to sys.path itself, but only AFTER its own `from utils import
 # (...)` line -- meaning if utils.py needed models/ only at that point, it'd already be
@@ -255,15 +257,20 @@ def append_bet(row: dict) -> None:
     df.to_csv(BET_LOG_PATH, index=False)
 
 
-def save_dev_note(page_title: str, note: str, frozen_at: str, page_state: dict) -> None:
-    """Appends one Dev Mode note -- the page it was left on, the note text, and a
+def save_dev_note(page_title: str, note: str, frozen_at: str, page_state: dict,
+                   annotated_image=None) -> None:
+    """Appends one Dev Mode note -- the page it was left on, the note text, a
     snapshot of that page's own filter/selection state captured at the exact moment
     Dev Mode was switched on (not when the note was saved), so it always describes
     what was actually on screen at that instant regardless of anything that happened
-    on the page while the note was being written. JSONL (one JSON object per line),
-    not CSV -- page_state is a nested dict of arbitrary widget values, not a flat row.
-    Appending a line is also safe against a half-written file the way a full CSV
-    rewrite wouldn't be."""
+    on the page while the note was being written, and optionally a drawn-on
+    screenshot (a numpy array from st_canvas -- Alex uploads his own screenshot since
+    Streamlit has no way to capture one itself, then draws on it) saved as a PNG file
+    alongside the note rather than inline in the JSONL, since an annotated image is
+    much larger than everything else in an entry and JSONL is meant to stay one-line-
+    per-record. JSONL (one JSON object per line), not CSV -- page_state is a nested
+    dict of arbitrary widget values, not a flat row. Appending a line is also safe
+    against a half-written file the way a full CSV rewrite wouldn't be."""
     os.makedirs(DEV_NOTES_DIR, exist_ok=True)
     safe_state = {}
     for k, v in page_state.items():
@@ -272,8 +279,21 @@ def save_dev_note(page_title: str, note: str, frozen_at: str, page_state: dict) 
             safe_state[k] = v
         except (TypeError, ValueError):
             safe_state[k] = repr(v)  # non-serializable widget internals -- keep a readable trace, not a crash
+
+    image_path = None
+    if annotated_image is not None:
+        os.makedirs(DEV_NOTES_IMAGES_DIR, exist_ok=True)
+        from PIL import Image
+        safe_page = re.sub(r"[^a-zA-Z0-9_-]+", "_", page_title)[:60]
+        safe_ts = re.sub(r"[^0-9]", "", frozen_at)[:14]
+        filename = f"{safe_ts}_{safe_page}.png"
+        image_path = os.path.join("images", filename)  # stored relative to DEV_NOTES_DIR
+        Image.fromarray(annotated_image.astype(np.uint8), "RGBA").save(
+            os.path.join(DEV_NOTES_IMAGES_DIR, filename)
+        )
+
     entry = {"timestamp": frozen_at, "page": page_title, "note": note,
-              "page_state": safe_state, "resolved": False}
+              "page_state": safe_state, "resolved": False, "image_path": image_path}
     with open(DEV_NOTES_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
