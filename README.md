@@ -257,6 +257,51 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex said the Current Slip tab's "Your win % estimate" slider shouldn't be
+  editable — it should show the fixed, real, computed probability that the actual
+  Underdog line hits. Removed the slider entirely, replaced with a read-only display
+  using the confidence badge already used elsewhere.
+  **Real wrinkle found before implementing**: legs can currently be added to the
+  slip even with no real model match at all (falls back to a hardcoded 0.55
+  placeholder) — displaying that as if it were "the fixed computed probability"
+  would be dishonest, not just cosmetic. Fixed properly: added a `has_model` flag
+  stored per leg at add-time, so the slip can tell a real model-backed probability
+  apart from the placeholder. Legs with a real match show the fixed probability
+  and confidence badge; legs without one honestly show "No model prediction for
+  this leg" instead of a fake number. The combined-slip probability math was
+  updated the same way — no-model legs are explicitly EXCLUDED from the combined
+  calculation (with a clear on-screen warning saying how many and why), instead of
+  silently blending a 0.55 placeholder into what's supposed to be a real number.
+  **Caught a real scoping bug while restructuring**: wrapping the combined-
+  probability section in a conditional (skip the math entirely when no legs have a
+  real model match) would have also accidentally gated the Stake/Send-to-Bet-Log/
+  Clear-slip actions behind having at least one model-backed leg — those aren't
+  "combined probability" actions, they operate on the whole slip regardless.
+  Restructured with explicit safe defaults so those three actions keep working in
+  every scenario, not just the common one.
+  **Caught a real testing gap, not just a code gap**: initial `AppTest` runs against
+  the full `app.py` all reported "no exception" across every scenario — but checking
+  which page actually rendered revealed `page_parlay_builder()` never executed at
+  all (`st.navigation` only runs the DEFAULT page's function; Parlay Builder isn't
+  the default, and `AppTest.switch_page()` only supports file-based pages, a
+  limitation hit and documented several times already). Those earlier "passing"
+  tests were verifying nothing. Built a proper standalone reproduction of the exact
+  new logic (using the real `correlation_adjusted_parlay_probability` from
+  `utils.py`, not mocked) and re-tested for real: confirmed zero sliders render in
+  any scenario, confirmed the "mixed" scenario's combined probability (62.0%)
+  exactly matches the single model-backed leg's own probability — direct proof the
+  no-model leg was actually excluded from the math, not just visually hidden — and
+  confirmed all four scenarios (mixed, all-model, all-no-model, empty slip) render
+  correctly with no exceptions.
+- Blocked: nothing — real fix, genuinely tested this time after catching that the
+  first testing attempt wasn't actually exercising the changed code.
+- Next: none needed for this specific change. Worth remembering broadly: any future
+  Parlay Builder testing needs the standalone-reproduction approach from the start,
+  not a full `app.py` AppTest run, since that page is never the default.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Finished what the last two entries flagged as pending — `generate_weekly_bet_
   slip.py` (the Weekly Bet Slip page's underlying script) was the third and last
   place still gating on `line_matches_proxy` and excluding "mismatched" props

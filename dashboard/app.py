@@ -712,6 +712,13 @@ def page_parlay_builder():
                                     "line": line_value,
                                     "underdog_multiplier": float(price) if pd.notna(price) else None,
                                     "my_prob": float(side_prob) if (has_model and side_prob is not None) else 0.55,
+                                    # Whether my_prob above is a real recomputed
+                                    # probability (against the real Underdog line) or
+                                    # just the 0.55 placeholder for a leg with no
+                                    # model match at all -- the slip display needs to
+                                    # know this so it never shows a placeholder as if
+                                    # it were a real, fixed, computed number.
+                                    "has_model": bool(has_model and side_prob is not None),
                                     # Live depth-chart team, not predictions' stale
                                     # recent_team -- this feeds the slip's same-team
                                     # correlation detection, so a wrong team here
@@ -763,76 +770,103 @@ def page_parlay_builder():
                     st.markdown(f"**{leg['player']}**")
                     st.markdown(f"{_pretty_stat(leg['stat'])} — **{str(leg['choice']).upper()} {leg['line']}**")
                 with prob_col:
-                    # Collapsed label + a caption above it instead -- smaller and less
-                    # visually heavy than Streamlit's default slider label, but (unlike
-                    # a fully hidden label) still says up front that this is YOUR
-                    # estimate feeding the fair-odds math, not the real betting odds --
-                    # a real user confusion this fixes: it looked like an editable
-                    # "odds" field with no clarifying label at all.
-                    st.caption("Your win % estimate")
-                    leg["my_prob"] = st.slider(
-                        "Your win % estimate", 0.0, 1.0, leg["my_prob"], 0.01,
-                        key=f"prob_{i}", label_visibility="collapsed",
-                    )
-                    fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
-                    ud_mult = leg["underdog_multiplier"]
-                    if ud_mult:
-                        st.caption(f"Underdog pays: {ud_mult}x (fixed)")
-                        st.caption(f"Your fair odds: {fair_mult:.2f}x")
-                        if fair_mult < float(ud_mult):
-                            st.badge("+EV", color="green")
+                    # Fixed display, not an editable slider anymore -- Alex doesn't
+                    # want this changeable, it should show the model's real computed
+                    # probability that the actual Underdog line hits (recomputed
+                    # against the real line, see recompute_probability_for_real_line
+                    # in utils.py), not an arbitrary user-adjustable guess.
+                    if leg.get("has_model"):
+                        st.caption("Model win probability (real Underdog line)")
+                        _confidence_badge(leg["my_prob"], abs(leg["my_prob"] - 0.5) * 2)
+                        fair_mult = 1 / leg["my_prob"] if leg["my_prob"] > 0 else float("inf")
+                        ud_mult = leg["underdog_multiplier"]
+                        if ud_mult:
+                            st.caption(f"Underdog pays: {ud_mult}x (fixed)")
+                            st.caption(f"Fair odds at this probability: {fair_mult:.2f}x")
+                            if fair_mult < float(ud_mult):
+                                st.badge("+EV", color="green")
+                            else:
+                                st.badge("-EV", color="red")
                         else:
-                            st.badge("-EV", color="red")
+                            st.caption(f"Fair odds: {fair_mult:.2f}x (Underdog odds unknown)")
                     else:
-                        st.caption(f"Your fair odds: {fair_mult:.2f}x (Underdog odds unknown)")
+                        # No real model prediction exists for this leg -- shown
+                        # honestly rather than displaying the 0.55 placeholder as if
+                        # it were a real, fixed, computed probability. Also excluded
+                        # from the combined-slip probability math below.
+                        st.caption("⚪ No model prediction for this leg")
+                        ud_mult = leg["underdog_multiplier"]
+                        if ud_mult:
+                            st.caption(f"Underdog pays: {ud_mult}x (fixed)")
                 if action_col.button("🗑️", key=f"rm_{i}", help="Remove this leg", width="stretch"):
                     st.session_state.slip.pop(i)
                     st.rerun()
 
         yard_divider("CORRELATION CHECK")
 
-        legs_for_corr = [
-            {"team": leg.get("team"), "position_prop": leg.get("position_prop"), "prob": leg["my_prob"]}
-            for leg in st.session_state.slip
-        ]
-        corr_result = correlation_adjusted_parlay_probability(legs_for_corr)
-        naive_prob = corr_result["naive_prob"]
-        adjusted_prob = corr_result["adjusted_prob"]
-        adjustments = corr_result["adjustments"]
-        combined_fair_mult = 1 / adjusted_prob if adjusted_prob > 0 else float("inf")
-
-        weak_legs = [leg for leg in st.session_state.slip if leg["underdog_multiplier"] and 1 / leg["my_prob"] >= float(leg["underdog_multiplier"])]
-
-        if adjustments:
-            st.info(
-                f"⚠️ **{len(adjustments)} correlated leg pair(s) detected** (same team, same "
-                "game) — the naive independence math would be wrong for this slip. Using "
-                "real measured correlations instead:"
-            )
-            for pos_prop_a, pos_prop_b, phi in adjustments:
-                direction = "raises" if phi > 0 else "lowers"
-                st.caption(f"　　{pos_prop_a} + {pos_prop_b}: correlation {phi:+.2f} — {direction} the true combined hit rate vs. treating them as independent")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Naive (independent) probability", f"{naive_prob * 100:.1f}%")
-            col2.metric("Correlation-adjusted probability", f"{adjusted_prob * 100:.1f}%",
-                        delta=f"{(adjusted_prob - naive_prob) * 100:+.1f}pt")
-            col3.metric("Legs without individual edge", len(weak_legs))
-        else:
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Combined true probability", f"{adjusted_prob * 100:.1f}%")
-            col2.metric("Your fair combined payout", f"{combined_fair_mult:.2f}x")
-            col3.metric("Legs without individual edge", len(weak_legs))
-
-        if weak_legs:
+        # Only legs with a real, model-backed probability go into the combined math
+        # -- including the 0.55 placeholder for a no-model leg would silently
+        # corrupt the "real" combined probability with a made-up number.
+        model_backed_legs = [leg for leg in st.session_state.slip if leg.get("has_model")]
+        n_no_model = len(st.session_state.slip) - len(model_backed_legs)
+        if n_no_model:
             st.warning(
-                f"{len(weak_legs)} leg(s) don't show positive edge on their own. Parlays "
-                "should only combine legs that are already independently +EV."
+                f"⚠️ {n_no_model} leg(s) in this slip have no real model prediction and are "
+                f"EXCLUDED from the combined probability below (a placeholder number would "
+                f"otherwise silently corrupt it). Remove them or wait for a model match."
             )
+
+        # Safe defaults so the Stake/Send-to-Bet-Log/Clear-slip actions below still
+        # work on the FULL slip (including no-model legs) regardless of whether
+        # there's anything to combine -- those aren't "combined probability"
+        # actions, they operate on individual logged bets.
+        adjustments, naive_prob, adjusted_prob, combined_fair_mult, weak_legs = [], 0.0, 0.0, float("inf"), []
+
+        if not model_backed_legs:
+            st.info("No legs with a real model prediction yet — nothing to combine.")
         else:
-            st.success("Every leg shows positive edge individually, based on the probabilities above.")
+            legs_for_corr = [
+                {"team": leg.get("team"), "position_prop": leg.get("position_prop"), "prob": leg["my_prob"]}
+                for leg in model_backed_legs
+            ]
+            corr_result = correlation_adjusted_parlay_probability(legs_for_corr)
+            naive_prob = corr_result["naive_prob"]
+            adjusted_prob = corr_result["adjusted_prob"]
+            adjustments = corr_result["adjustments"]
+            combined_fair_mult = 1 / adjusted_prob if adjusted_prob > 0 else float("inf")
+            weak_legs = [leg for leg in model_backed_legs if leg["underdog_multiplier"] and 1 / leg["my_prob"] >= float(leg["underdog_multiplier"])]
+
+            if adjustments:
+                st.info(
+                    f"⚠️ **{len(adjustments)} correlated leg pair(s) detected** (same team, same "
+                    "game) — the naive independence math would be wrong for this slip. Using "
+                    "real measured correlations instead:"
+                )
+                for pos_prop_a, pos_prop_b, phi in adjustments:
+                    direction = "raises" if phi > 0 else "lowers"
+                    st.caption(f"　　{pos_prop_a} + {pos_prop_b}: correlation {phi:+.2f} — {direction} the true combined hit rate vs. treating them as independent")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Naive (independent) probability", f"{naive_prob * 100:.1f}%")
+                col2.metric("Correlation-adjusted probability", f"{adjusted_prob * 100:.1f}%",
+                            delta=f"{(adjusted_prob - naive_prob) * 100:+.1f}pt")
+                col3.metric("Legs without individual edge", len(weak_legs))
+            else:
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Combined true probability", f"{adjusted_prob * 100:.1f}%")
+                col2.metric("Your fair combined payout", f"{combined_fair_mult:.2f}x")
+                col3.metric("Legs without individual edge", len(weak_legs))
+
+            if weak_legs:
+                st.warning(
+                    f"{len(weak_legs)} leg(s) don't show positive edge on their own. Parlays "
+                    "should only combine legs that are already independently +EV."
+                )
+            else:
+                st.success("Every leg shows positive edge individually, based on the probabilities above.")
 
         stake = st.number_input("Stake ($)", min_value=0.0, value=10.0, step=1.0)
-        st.write(f"Potential payout at your fair (correlation-adjusted) odds: **${stake * combined_fair_mult:.2f}**")
+        if model_backed_legs:
+            st.write(f"Potential payout at your fair (correlation-adjusted) odds: **${stake * combined_fair_mult:.2f}**")
 
         yard_divider("STAKE")
         st.caption(
