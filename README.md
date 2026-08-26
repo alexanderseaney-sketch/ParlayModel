@@ -257,6 +257,38 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex correctly called out that "line mismatch" shouldn't exist as a concept
+  anymore — last session's real-line recomputation fix only reached the player
+  card's combined section, and the Parlay Builder (the primary place legs actually
+  get added to a slip) still gated on `line_matches_proxy` and showed a "line
+  mismatch (proxy X)" warning instead of just recomputing. Applied the same fix
+  here: added `player_id` to the predictions merge (needed for the per-player std
+  lookup, wasn't there before), loaded `weekly_stats.csv` once for the tab, and
+  replaced the match/no-match gate with `recompute_probability_for_real_line()` +
+  `estimate_player_stat_std()` — every prop with a model prediction now gets its
+  probability recomputed against whatever Underdog's real posted line actually is,
+  rather than being shown/hidden based on how close that real line happened to sit
+  to our proxy. Removed the "line mismatch" badge entirely (dead code now — there's
+  nothing left to flag a mismatch about, since the number shown IS the real-line
+  number). Confidence for each side is now recomputed from the real-line
+  probability itself (distance from a coinflip) instead of reusing the model's
+  old proxy-based confidence value, since that answered a different question.
+  Removed the now-unused `line_matches_proxy` import from `app.py` — kept the
+  function itself in `utils.py`, since `generate_weekly_bet_slip.py` still uses it
+  (not touched this session, still pending, same as noted last time).
+  **Tested the exact new code path with real data**: simulated a case that would
+  previously have triggered a "line mismatch" warning (proxy 70.5, real Underdog
+  line 82.5 — a real WR's real historical variance) and confirmed it now produces a
+  sensible recomputed probability (0.556) instead of being flagged/hidden. Verified
+  the full app still loads with zero exceptions after the change.
+- Blocked: nothing — real fix, tested against the exact scenario it's meant to solve.
+- Next: `generate_weekly_bet_slip.py` is now the one remaining place still using
+  proxy-based `line_matches_proxy` gating instead of real-line recomputation — same
+  fix needed there for full consistency across all three places confidence gets shown.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex asked to make sure the Parlay Builder only shows/allows parlays actually
   available on Underdog. Investigated what "available" concretely means before
   guessing — checked whether the base props list itself was somehow including

@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from utils import (
-    EXPECTED_FILES, PULL_SCRIPTS, line_matches_proxy, BET_LOG_PATH,
+    EXPECTED_FILES, PULL_SCRIPTS, BET_LOG_PATH,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
@@ -452,6 +452,13 @@ def page_parlay_builder():
             ]
             st.metric("Players in this range right now", f"{len(qualifying)} of {len(predictions)}")
 
+        # Loaded once here, used below for real-line confidence recomputation --
+        # same fix as the player card's combined predictions/lines section: Alex
+        # doesn't want confidence based on our proxy line, he wants it based on
+        # whether the REAL Underdog number hits. Loaded outside the props loop
+        # since it's the same file for every row, not re-read per prop.
+        weekly_stats_for_std = load_csv_if_exists("weekly_stats.csv") if predictions is not None else None
+
         name_col = find_column(df, ["full_name", "player_name", "name"])
         stat_col = find_column(df, ["stat_name", "stat"])
         line_col = find_column(df, ["stat_value", "line", "value"])
@@ -539,7 +546,7 @@ def page_parlay_builder():
                 options_df = options_df.merge(
                     predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence",
                                   "stats_as_of_season", "stats_as_of_week", "recent_team", "position",
-                                  "prop_type", "proxy_line"]],
+                                  "prop_type", "proxy_line", "player_id"]],
                     left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
                     how="left",
                 )
@@ -598,23 +605,29 @@ def page_parlay_builder():
                 under_row = under_rows.iloc[0] if not under_rows.empty else None
                 any_row = over_row if over_row is not None else under_row
 
-                # Two real bugs fixed here 2026-08-15 (found while building the
-                # weekly bet-slip generator, see README):
-                # 1. predicted_prob_over was used directly regardless of which side
-                #    (over/under) this specific row actually is -- a confident UNDER
-                #    prediction was shown as if it endorsed the OVER row it happened
-                #    to be attached to. Now computed separately for each side below.
-                # 2. predicted_prob_over answers "beats OUR proxy line", not "beats
-                #    Underdog's posted line" -- only valid when those two numbers are
-                #    close (see line_matches_proxy in utils.py: percentage-based,
-                #    grain-specific for yardage/season/period stats since those
-                #    proxies are structurally noisier than weekly ones; absolute-
-                #    difference-based for TD/INT/sack counts, where percentage
-                #    divergence is the wrong metric against a small proxy).
+                # Real fix (2026-08-26): confidence is now based on whether the
+                # REAL Underdog number hits, not our proxy line -- there should
+                # never be a "line mismatch" warning anymore, because the model's
+                # proxy-based probability gets recomputed against the actual real
+                # line every time, the same way the player card's combined
+                # predictions/lines section already does. See
+                # recompute_probability_for_real_line()'s docstring in utils.py
+                # for the full reasoning (no historical archive of real past
+                # Underdog lines exists yet to retrain against, so this reuses
+                # each model's real, already-validated predictive signal and
+                # re-targets it at serving time using the player's own real
+                # week-to-week variance).
                 raw_prob_over = any_row.get("predicted_prob_over") if predictions is not None else None
                 proxy_line = any_row.get("proxy_line")
-                line_ok = pd.notna(proxy_line) and line_matches_proxy(line_value, proxy_line, stat_name)
-                has_model = pd.notna(raw_prob_over) and line_ok
+                recomputed_prob_over = None
+                if pd.notna(raw_prob_over) and pd.notna(proxy_line) and weekly_stats_for_std is not None:
+                    std = estimate_player_stat_std(
+                        any_row.get("player_id"), stat_name, weekly_stats_for_std, position=any_row.get("position"),
+                    )
+                    recomputed_prob_over = recompute_probability_for_real_line(
+                        raw_prob_over, proxy_line, line_value, std,
+                    )
+                has_model = recomputed_prob_over is not None
 
                 fbg_status = depth_status.get(normalize_name(player_name)) if depth_status is not None else None
 
@@ -661,19 +674,14 @@ def page_parlay_builder():
                                     with badges[b_i]:
                                         st.badge(f"stale: {int(stats_season)} wk{stats_week}", icon="⚠️", color="red")
                                     b_i += 1
-                        elif pd.notna(raw_prob_over) and not line_ok:
-                            with badges[b_i]:
-                                st.badge(f"line mismatch (proxy {proxy_line:.1f})", icon="⚠️", color="red",
-                                         help=f"Our proxy line ({proxy_line:.1f}) is too far from Underdog's real line ({line_value}) to trust this prediction for this specific bet.")
-                            b_i += 1
                         if fbg_status:
                             with badges[b_i]:
                                 st.badge(fbg_status, icon="🚑", color="red", help="Footballguys depth chart status, pulled today")
                             b_i += 1
 
                     side_specs = [
-                        ("OVER", "over", over_row, raw_prob_over if pd.notna(raw_prob_over) else None),
-                        ("UNDER", "under", under_row, 1 - raw_prob_over if pd.notna(raw_prob_over) else None),
+                        ("OVER", "over", over_row, recomputed_prob_over if recomputed_prob_over is not None else None),
+                        ("UNDER", "under", under_row, 1 - recomputed_prob_over if recomputed_prob_over is not None else None),
                     ]
                     side_cols = st.columns(2)
                     for side_col, (label, choice, side_row, side_prob) in zip(side_cols, side_specs):
@@ -683,7 +691,12 @@ def page_parlay_builder():
                                 continue
                             st.markdown(f"**{label}**")
                             if has_model and side_prob is not None:
-                                _confidence_badge(side_prob, any_row["confidence"])
+                                # Confidence recomputed from the real-line probability
+                                # itself (distance from a coinflip), not the model's
+                                # stored proxy-based confidence value -- that number
+                                # answered a different question (proxy line) than the
+                                # one now being displayed (real Underdog line).
+                                _confidence_badge(side_prob, abs(side_prob - 0.5) * 2)
                             else:
                                 st.caption("No model prediction")
                             price = side_row.get(mult_col) if mult_col else None
