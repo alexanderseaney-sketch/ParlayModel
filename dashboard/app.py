@@ -714,6 +714,33 @@ def page_parlay_builder():
             st.info("No legs added yet — head to the **➕ Add legs** tab, or generate suggestions on the **Weekly Bet Slip** page and send them here.")
             return
 
+        # Real Underdog platform rules, confirmed directly against their own site
+        # (underdogsports.com/games/pickem) and cross-checked against multiple
+        # independent guides, not assumed: entries need 2-8 total picks, AND at
+        # least 2 different real-world teams -- an entry built entirely from
+        # players on one team is rejected outright, regardless of how good the
+        # picks are. This tool had no check for that at all before now; you could
+        # build and "price" a same-team slip here that Underdog would never accept.
+        n_legs = len(st.session_state.slip)
+        slip_teams = {leg.get("team") for leg in st.session_state.slip if leg.get("team")}
+        n_teams_known = len(slip_teams)
+        n_legs_missing_team = sum(1 for leg in st.session_state.slip if not leg.get("team"))
+
+        if n_legs < 2:
+            st.warning(f"⚠️ Underdog entries need at least 2 picks — you have {n_legs}. Add another leg before this is a real, submittable entry.")
+        elif n_legs > 8:
+            st.warning(f"⚠️ Underdog entries max out at 8 picks — you have {n_legs}. Remove {n_legs - 8} to make this submittable.")
+        elif n_legs_missing_team:
+            st.info(f"ℹ️ Team unknown for {n_legs_missing_team} leg(s) (no live depth-chart match) — can't fully verify the 2-team rule below for this slip.")
+        elif n_teams_known < 2:
+            st.error(
+                f"🚫 **This entry wouldn't be accepted on Underdog** — all {n_legs} picks are from "
+                f"{next(iter(slip_teams)) if slip_teams else 'the same team'}. Underdog requires "
+                f"players from at least 2 different teams in every entry. Add a leg from another team."
+            )
+        else:
+            st.success(f"✅ {n_teams_known} teams, {n_legs} picks — meets Underdog's entry requirements.")
+
         for i, leg in enumerate(st.session_state.slip):
             with st.container(border=True):
                 photo_col, info_col, prob_col, action_col = st.columns([1, 3, 2, 1])

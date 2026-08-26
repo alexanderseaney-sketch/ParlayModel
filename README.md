@@ -257,6 +257,45 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex asked to make sure the Parlay Builder only shows/allows parlays actually
+  available on Underdog. Investigated what "available" concretely means before
+  guessing — checked whether the base props list itself was somehow including
+  stale/invalid data (a first theory: an initial test appeared to show 87% of props
+  failing to match a real current team, which would have been a serious bug — turned
+  out to be a mistake in my OWN test script, accidentally reusing the app's injury-
+  status-filtered lookup instead of the full-roster one it actually uses for team
+  matching; corrected the test and confirmed 100% of Game-type props DO map to a
+  real current team, so that theory was wrong, not the code).
+  **Found the real gap by checking Underdog's actual platform rules directly**
+  (their own site, underdogsports.com/games/pickem, cross-checked against several
+  independent guides — not assumed): **entries require players from at least 2
+  different real-world teams**, and are capped at 2-8 total picks. The Parlay
+  Builder had zero enforcement of this — you could build and "price" a slip made
+  entirely of same-team players, something Underdog would reject outright regardless
+  of how good the picks were individually.
+  **Fixed**: added a real-time eligibility check at the top of the Current Slip tab,
+  using `team` (already tracked per leg from the existing correlation-detection
+  work) to verify the slip actually meets Underdog's real rules — a clear error if
+  all legs share one team, a warning if outside the 2-8 leg range, and a note when
+  a leg's team can't be verified (no live depth-chart match) rather than silently
+  passing an unverifiable slip as valid.
+  **Tested all five real scenarios directly** (same-team violation, valid 2+-team
+  slip, too few legs, too many legs, unverifiable team) via a standalone
+  reproduction of the exact logic, since `AppTest` can't click through this app's
+  multipage tab structure — confirmed each one produces the correct message.
+- Blocked: nothing — real rule, verified against the actual platform, tested against
+  all real scenarios.
+- Next: this only covers the "different teams" and "leg count" rules specifically —
+  worth checking Underdog's rules for anything else worth validating (e.g., whether
+  certain prop-type combinations have their own restrictions) if more gaps like this
+  turn up. Also worth double-checking this rule still holds for Rivals-format
+  entries specifically if that format ever gets built out here, since the sources
+  describe it slightly differently (head-to-head player matchups) than standard
+  Higher/Lower picks.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex said he doesn't want confidence based on our proxy line — he wants it
   based on the real Underdog line. Checked first whether we could just retrain
   against real historical lines directly (the ideal fix): **confirmed there is no
