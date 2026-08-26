@@ -257,6 +257,45 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex flagged that the sidebar Dev Mode button can't be clicked while on a player
+  card — real root cause, not a bug in the button itself: player cards use `st.dialog`,
+  which is a genuine Streamlit modal. Everything outside it, sidebar included, is
+  actually inert while it's open, not just visually behind the overlay — confirmed this
+  is a platform constraint by checking how `st.dialog` works rather than assuming it
+  was fixable from the sidebar side. Since Alex specifically wants to leave notes about
+  how player cards should display, and that's exactly the content living inside the
+  dialog, **added a self-contained Dev Mode note form directly inside the dialog**
+  (`_player_detail_dialog`) instead of trying to route around the modal — an expander
+  at the bottom of the card with its own text area and save button, using the same
+  `save_dev_note()` already used by the sidebar flow. Notes are filed under
+  `"Player Card — {player_name}"` so they're distinguishable per player in the Dev
+  Notes list, with page_state capturing player name/team/position/depth_rank/selected
+  season — enough context to know exactly what was being looked at even without a
+  literal page to restore to.
+  **Caught and fixed a real bug while writing this**: `selected_season` is only
+  defined conditionally (inside an `if "recent_games" in detail or "snap_trend" in
+  detail:` block earlier in the function) — my first draft referenced it via
+  `"selected_season" in dir()`, a fragile pattern that doesn't reliably reflect local
+  variable state. Fixed by initializing `selected_season = None` before the
+  conditional block, so it's always safely defined by the time the note form needs it.
+  **Tested the actual save path directly** (dialogs can't be triggered interactively
+  via `AppTest`, same limitation noted for the multipage restore flow last round):
+  called `save_dev_note()` with the exact structure the dialog uses, confirmed it
+  saves and reads back correctly. Also confirmed the "Go there" restore button
+  (added last round) correctly stays hidden for these notes, since `"Player Card —
+  Josh Allen"` won't match any real nav page in `PAGE_BY_TITLE` — no crash, an honest
+  absence where restoration genuinely isn't possible for a dialog rather than a
+  broken button.
+- Blocked: same category of gap as the last two UI changes — couldn't visually verify
+  the expander actually renders correctly inside a real open dialog from this sandbox.
+- Next: worth a real check that the expander doesn't feel buried at the bottom of an
+  already-long card (injury report, predictions, Underdog lines, games, snap share,
+  news, and now this) — if it's easy to miss, moving it near the top might serve the
+  actual use case (leaving notes) better than tucking it after everything else.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Improved Dev Notes (the viewer for notes left via Dev Mode) three ways. (1)
   **"Go there" button** — the biggest gap: notes showed the frozen page state as
   read-only JSON with no way to actually get back to it. Built a `PAGE_BY_TITLE`

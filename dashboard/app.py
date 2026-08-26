@@ -1298,6 +1298,7 @@ def _player_detail_dialog(row: dict):
                                                   "stat_value": "Line", "american_price": "Price"})
             st.dataframe(props_df, hide_index=True, width="stretch")
 
+    selected_season = None
     if "recent_games" in detail or "snap_trend" in detail:
         # One season picker drives both tables below -- they're the same shape of
         # data (season/week rows about this player) and asking twice would be
@@ -1365,6 +1366,35 @@ def _player_detail_dialog(row: dict):
                 meta = " · ".join(str(b) for b in [n.get("source"), n.get("published")] if b)
                 if meta:
                     st.caption(meta)
+
+    # Dev Mode's sidebar button is genuinely unreachable here -- st.dialog is a true
+    # Streamlit modal, everything outside it (sidebar included) is inert while it's
+    # open, not just visually behind it. Rather than something that can't be worked
+    # around from inside the dialog, this gives the note-taking flow its own entry
+    # point scoped to the card itself, since Alex specifically wants to describe how
+    # player cards should display -- exactly the content that lives in here.
+    with st.expander("🛠️ Leave a note about this card"):
+        card_note_key = f"dev_note_{name_key}_{row.get('position', '')}_{depth_rank if depth_rank is not None else ''}"
+        note = st.text_area(
+            "What do you want fixed or changed on this card?", key=f"{card_note_key}_text",
+            placeholder='e.g. "Show target share next to the season picker, not buried in Games"',
+        )
+        if st.button("💾 Save note", key=f"{card_note_key}_save"):
+            if note.strip():
+                save_dev_note(
+                    f"Player Card — {player_name}", note.strip(),
+                    datetime.now(timezone.utc).isoformat(),
+                    {
+                        "player_name": player_name,
+                        "team": row.get("team_name") or row.get("team_abbr"),
+                        "position": row.get("position"),
+                        "depth_rank": depth_rank,
+                        "selected_season": selected_season,
+                    },
+                )
+                st.success("Saved — see it under Admin → Dev Notes.")
+            else:
+                st.error("Write a note before saving.")
 
 
 def _card_button(p: pd.Series, is_starter_card: bool):
