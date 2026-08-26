@@ -257,6 +257,42 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: One step further than last time — legs without a real model match couldn't
+  be silently included in slip math anymore, but they were still BROWSABLE and
+  addable in the first place. Alex wants them never shown as options at all.
+  Found the exact gap: the confidence-range pre-filter had `| options_df["confidence"]
+  .isna()` explicitly RE-INCLUDING no-prediction rows regardless of range, so they
+  reached the rendering loop every time. **Fixed at two layers of defense**:
+  (1) the pre-filter now excludes no-prediction rows unconditionally — including
+  when the user has an active search, since a real caught bug in my own first draft
+  of this fix would have let no-model props reappear when searching (fixed by
+  keeping the search bypass scoped to the confidence-RANGE exclusion only, never
+  the no-prediction one); (2) added a `continue` inside the per-group rendering
+  loop itself, right where `has_model` gets computed, as a second independent
+  safety net for the rarer case where an old prediction match existed but the
+  real-line recomputation itself still fails (e.g. no std estimate available) --
+  Alex wants a genuine model behind every visible leg, full stop, not just "usually."
+  Also handled the case where NO predictions exist at all (`current_predictions.py`
+  hasn't been run yet) — previously fell through to showing every raw Underdog prop
+  unfiltered; now shows nothing addable, with an accurate message explaining why
+  (updated the old message too, since it referenced a manual-probability fallback
+  that no longer exists after last session's slider removal).
+  **Tested the real logic three separate ways, not just "should work"**: (1) pure
+  pandas boolean-mask test confirming a no-prediction prop stays excluded in both
+  the default and search-active states, while a real low-confidence prediction
+  correctly gets revealed by search; (2) a full reproduction of the per-group loop
+  using the real `estimate_player_stat_std`/`recompute_probability_for_real_line`
+  functions with one genuine model-backed prop (Justin Jefferson, real data) and
+  one genuinely model-less prop, confirming only the real one rendered; (3) full
+  app load check, zero exceptions.
+- Blocked: nothing — real fix, tested at the logic level three different ways
+  given the now-familiar limitation that a full `app.py` `AppTest` run never
+  actually executes Parlay Builder's code (it isn't the default page).
+- Next: none needed for this specific change.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex said the Current Slip tab's "Your win % estimate" slider shouldn't be
   editable — it should show the fixed, real, computed probability that the actual
   Underdog line hits. Removed the slider entirely, replaced with a read-only display

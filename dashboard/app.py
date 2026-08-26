@@ -381,7 +381,8 @@ def page_parlay_builder():
         st.info(
             "No model predictions found yet — run `python3 models/current_predictions.py` "
             "to generate them (covers receiving yards, rushing yards, passing yards, and "
-            "receptions). Falling back to manual probability entry until then."
+            "receptions). No props can be added as legs until predictions exist — every "
+            "leg here needs a real model behind it, not a manual guess."
         )
 
     # Live depth-chart status (Q/PUP/IR/SUS/NFI/O), refreshed daily -- separate from
@@ -575,10 +576,28 @@ def page_parlay_builder():
                 unbettable_direction = ~both_sides & (own_side_prob < 0.5)
 
                 outside_range = ~options_df["confidence"].between(min_confidence, max_confidence) | unbettable_direction
-                if outside_range.any() and not narrowed:
-                    st.caption(f"{outside_range.sum()} props outside the confidence range are hidden. Search or widen the range to see them.")
-                options_df = options_df[~outside_range | options_df["confidence"].isna() | narrowed]
+                # No longer keeping confidence.isna() rows regardless of range --
+                # Alex wants ONLY legs with a real model behind them ever shown as
+                # addable options, so a prop with no prediction match at all should
+                # be filtered out here, not kept around for the user to see and add.
+                no_prediction = options_df["confidence"].isna()
+                n_hidden_range = (outside_range & ~no_prediction).sum()
+                n_hidden_no_model = no_prediction.sum()
+                if (n_hidden_range or n_hidden_no_model) and not narrowed:
+                    parts = []
+                    if n_hidden_range:
+                        parts.append(f"{n_hidden_range} outside the confidence range")
+                    if n_hidden_no_model:
+                        parts.append(f"{n_hidden_no_model} with no model prediction at all")
+                    st.caption(f"Hidden: {' and '.join(parts)}. Search or widen the range to see the confidence-range ones.")
+                options_df = options_df[~no_prediction & (~outside_range | narrowed)]
                 options_df = options_df.sort_values("confidence", ascending=False, na_position="last")
+            else:
+                # No predictions exist at all -- every prop would be a no-model
+                # prop, so there's nothing addable. Stop here rather than falling
+                # through to a loop that renders every raw Underdog prop as if it
+                # were a real option.
+                options_df = options_df.iloc[0:0]
 
             if not narrowed:
                 options_df = options_df.head(50)
@@ -628,6 +647,14 @@ def page_parlay_builder():
                         raw_prob_over, proxy_line, line_value, std,
                     )
                 has_model = recomputed_prob_over is not None
+                if not has_model:
+                    # Defense in depth -- the pre-filter above should already have
+                    # excluded every no-prediction row, but this catches the rarer
+                    # case where a match existed (old proxy-based confidence was
+                    # non-null) yet the real-line recomputation itself still failed
+                    # (e.g. no std estimate available). Alex wants ONLY legs with a
+                    # genuine model behind them ever shown as addable, full stop.
+                    continue
 
                 fbg_status = depth_status.get(normalize_name(player_name)) if depth_status is not None else None
 
