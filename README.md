@@ -257,6 +257,34 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Two player-card changes. (1) **Season selector now requires an explicit
+  choice** — previously `st.selectbox` defaulted to the most recent season and the
+  Games/Snap share tables rendered immediately on open. Added a "Select a season..."
+  placeholder as the default option; the combined table only renders once a real
+  season is picked. (2) **Merged snap share into the Games table** instead of a
+  separate section — same season/week grain as the game stats, so having them split
+  across two tables meant cross-referencing two tables to read one week's row.
+  Combined via `pd.merge(games, snaps[["week"] + pct_cols], on="week", how="left")`,
+  keeping the existing "only show columns with a non-zero value this season"
+  convention for both the game stats and the snap-share percentages.
+  **Tested the actual merge logic in isolation** (not just that the code compiles) —
+  real fake game+snap data confirmed the merge lands the right percentages on the
+  right week and correctly drops an all-zero column (defense_pct for the test WR).
+  Also tested all three edge cases directly: games-only (no snap data pulled),
+  snaps-only (no game data matched), and both-empty — confirmed each produces the
+  right shape without crashing, and confirmed the both-empty case is already safely
+  short-circuited by the existing "No data for this player" caption before reaching
+  the column-selection code, so it can't hit a KeyError on a columnless DataFrame.
+  Verified the full app still loads with zero exceptions after the change.
+- Blocked: nothing — real logic tested directly, not just "should work."
+- Next: none needed. If Alex wants the placeholder wording changed (e.g. auto-
+  selecting the most recent season that actually HAS data for players with sparse
+  history, rather than a blank placeholder for everyone), that's a quick follow-up
+  to the same selectbox line.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex asked whether the code needed cleanup. Checked rather than guessed:
   1. **Real gap found and fixed**: `scipy` was imported by `simulate_season_bankroll.py`
      but never listed in `requirements.txt`. Wasn't actually causing failures in

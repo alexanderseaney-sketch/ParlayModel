@@ -1225,48 +1225,60 @@ def _player_detail_dialog(row: dict):
 
     selected_season = None
     if "recent_games" in detail or "snap_trend" in detail:
-        # One season picker drives both tables below -- they're the same shape of
-        # data (season/week rows about this player) and asking twice would be
-        # redundant. weekly_stats.csv goes back to 2014, but the dialog used to
-        # just show the last 5 rows regardless of season with no way to see
-        # anything older or to tell at a glance which season a "recent" game was
-        # even from -- Alex asked to be able to pick the season directly instead.
-        # Cast to plain Python int, not numpy.int64 -- keeps it out of the display
-        # strings below (no int() wrapping needed) and avoids numpy types leaking
-        # into widget options generally.
+        # One season picker drives the combined table below. weekly_stats.csv goes
+        # back to 2014, but the dialog used to just show the last 5 rows regardless
+        # of season with no way to see anything older -- Alex asked to pick the
+        # season directly instead. Also: requires an explicit choice now (a "Select a
+        # season..." placeholder, not defaulting to the most recent one) -- the table
+        # doesn't render at all until a real season is picked, rather than always
+        # showing something immediately.
         seasons = set()
         if "recent_games" in detail:
             seasons |= set(detail["recent_games"]["season"].unique())
         if "snap_trend" in detail:
             seasons |= set(detail["snap_trend"]["season"].unique())
-        season_options = sorted((int(s) for s in seasons), reverse=True)
-        selected_season = st.selectbox("Season", season_options, key=f"season_{name_key}")
+        # Cast to plain Python int, not numpy.int64 -- keeps it out of the display
+        # strings below and avoids numpy types leaking into widget options generally.
+        season_options = ["Select a season..."] + sorted((int(s) for s in seasons), reverse=True)
+        picked = st.selectbox("Season", season_options, key=f"season_{name_key}")
+        selected_season = picked if picked != "Select a season..." else None
 
-    if "recent_games" in detail:
+    if selected_season is not None and ("recent_games" in detail or "snap_trend" in detail):
         with st.container(border=True):
             st.markdown(f"**Games — {selected_season}**")
-            games = detail["recent_games"]
-            games = games[games["season"] == selected_season]
-            if games.empty:
-                st.caption(f"No {selected_season} games in this data.")
+            games = detail.get("recent_games")
+            games = games[games["season"] == selected_season] if games is not None else pd.DataFrame()
+
+            snaps = detail.get("snap_trend")
+            snaps = snaps[snaps["season"] == selected_season] if snaps is not None else pd.DataFrame()
+
+            if games.empty and snaps.empty:
+                st.caption(f"No {selected_season} data for this player.")
             else:
+                # Snap share merged in as columns on the same table, rather than a
+                # separate section -- it's the same season/week grain as the game
+                # stats, so splitting it into its own table just made you cross-
+                # reference two tables for one week instead of reading one row.
+                pct_cols = [c for c in ["offense_pct", "defense_pct", "st_pct"]
+                            if snaps is not None and c in snaps.columns and snaps[c].fillna(0).ne(0).any()]
+                if not games.empty:
+                    combined = games
+                    if not snaps.empty and pct_cols:
+                        combined = combined.merge(
+                            snaps[["week"] + pct_cols], on="week", how="left",
+                        )
+                elif not snaps.empty:
+                    combined = snaps
+                else:
+                    combined = pd.DataFrame()
+
                 stat_cols = ["passing_yards", "rushing_yards", "receptions", "receiving_yards",
                              "passing_tds", "rushing_tds", "receiving_tds", "fantasy_points_ppr"]
-                cols = ["week", "opponent_team"] + [c for c in stat_cols if c in games.columns and games[c].fillna(0).ne(0).any()]
-                st.dataframe(games[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
-
-    if "snap_trend" in detail:
-        with st.container(border=True):
-            st.markdown(f"**Snap share — {selected_season}**")
-            snaps = detail["snap_trend"]
-            snaps = snaps[snaps["season"] == selected_season]
-            if snaps.empty:
-                st.caption(f"No {selected_season} snap data in this data.")
-            else:
-                pct_cols = [c for c in ["offense_pct", "defense_pct", "st_pct"]
-                            if c in snaps.columns and snaps[c].fillna(0).ne(0).any()]
-                cols = [c for c in ["week", "opponent"] if c in snaps.columns] + pct_cols
-                st.dataframe(snaps[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
+                opponent_col = "opponent_team" if "opponent_team" in combined.columns else "opponent"
+                cols = (["week"] + ([opponent_col] if opponent_col in combined.columns else [])
+                        + [c for c in stat_cols if c in combined.columns and combined[c].fillna(0).ne(0).any()]
+                        + [c for c in pct_cols if c in combined.columns])
+                st.dataframe(combined[cols].rename(columns=_pretty_col), hide_index=True, width="stretch")
 
     if not detail:
         st.caption("No model/stats/market data matched for this player yet.")
