@@ -257,6 +257,61 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex clarified he doesn't want the upload-a-screenshot flow — he wants to draw
+  directly on the LIVE page itself, visible only while Dev Mode is on. Real technical
+  fork before building anything: Streamlit custom components (st_canvas included)
+  always render inside a sandboxed iframe, and making that iframe float transparently
+  over already-rendered content (rather than sitting in normal document flow like
+  every other widget) needs real CSS positioning — something this sandbox cannot
+  visually verify without a live browser, unlike everything else built in this
+  project so far. Presented the honest tradeoff directly (the real overlay, higher
+  risk / needs live fixing, vs. a more robust inline "mark this section" alternative)
+  rather than picking one silently. **Alex chose to try the real overlay and test it
+  live himself once deployed** — proceeding on that basis, not claiming this is done.
+  **Built on genuinely solid ground where solid ground exists**: `st.container(key=...)`
+  is documented, real Streamlit behavior — confirmed directly in Streamlit's own
+  source docstrings (not guessed) that it applies a stable `st-key-{key}` CSS class to
+  the container's wrapping div. `.st-key-{prefix} iframe` reliably targets this
+  specific canvas's iframe as a result — a real selector, not a guess at undocumented
+  internal DOM structure the way targeting by iframe title or position would be.
+  `_live_overlay_drawing_widget()`: a transparent (`background_color=""`), outline-
+  only (`fill_color="rgba(255,0,0,0)"`) canvas, CSS-forced to `position: fixed`,
+  100vw/100vh, z-index 999998, red freehand pen. Since that overlay now covers the
+  ENTIRE viewport including the sidebar, the note-writing panel (text area + save
+  button) needed its own elevated floating panel (`st.container(key="dev_mode_note_
+  panel")`, z-index 999999, fixed bottom-right) to remain clickable above the
+  transparent drawing layer — otherwise it would be visually present but
+  unclickable underneath it.
+  **What's genuinely unverified, stated plainly rather than downplayed**: whether the
+  canvas's internal coordinate system (baked in at the height/width passed to
+  st_canvas: 2200×1600, picked to cover a scrolled page) stays visually aligned once
+  CSS stretches the iframe to 100vw/100vh — a mismatch here would mean a stroke lands
+  at a different position than where the mouse actually was. Also unverified: does
+  the transparent iframe actually let the real page show through in a live browser,
+  and does the floating note panel visually sit where intended without covering
+  something important.
+  **Tested everything that's actually testable without a browser**: full app load
+  with Dev Mode off (unaffected, unchanged), Dev Mode toggled on (overlay + floating
+  panel render without exceptions), and the complete save flow end-to-end (typed a
+  real note, clicked save, confirmed it was written correctly to `dev_notes.jsonl`).
+  Kept the existing player-card screenshot-upload flow unchanged — dialogs are small
+  modal contexts where a full-viewport fixed-position overlay behaves differently
+  and less predictably than on a normal page, so the two Dev Mode entry points now
+  deliberately use different approaches suited to their different contexts.
+- Blocked: the actual visual behavior (transparency, positioning, coordinate
+  alignment) is unverified by design — Alex is testing this live per his own request,
+  not treating this as finished.
+- Next: if the coordinate alignment is off (strokes not landing where the mouse was),
+  the fix is matching the height/width passed to st_canvas more closely to actual
+  common viewport dimensions rather than the current fixed 2200×1600 guess, or
+  investigating whether the component supports a scale-independent coordinate mode.
+  If the overlay approach doesn't pan out after live testing, the inline "mark this
+  section" alternative from the original conversation is still there as a fallback
+  with much higher confidence of working correctly.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex wants Dev Mode to support drawing, not just text, to communicate intent
   precisely. Honest technical reality first: Streamlit has no way to capture a
   screenshot of itself from Python — there's no browser access. The real flow is

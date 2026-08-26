@@ -259,6 +259,62 @@ def _screenshot_annotation_widget(key_prefix: str):
     return canvas_result.image_data
 
 
+def _live_overlay_drawing_widget(key_prefix: str):
+    """The overlay Alex actually asked for: draw directly on the live page itself,
+    only while Dev Mode is on -- not a separate uploaded image. Real technical
+    reality worth being upfront about: Streamlit custom components (st_canvas
+    included) always render inside a sandboxed iframe. Making that iframe float
+    transparently over the already-rendered page underneath it, rather than sitting
+    in normal document flow like every other widget on this page, needs real CSS
+    positioning -- something this sandbox cannot visually verify without a live
+    browser, unlike everything else built in this project so far.
+
+    The one part of this that IS on solid ground: `st.container(key=...)` is a
+    documented Streamlit feature (confirmed directly in Streamlit's own source
+    docstrings, not guessed) that applies a stable `st-key-{key}` CSS class to that
+    container's wrapping div -- so `.st-key-{prefix} iframe` reliably targets this
+    specific canvas's iframe, not a guess at internal/undocumented DOM structure the
+    way targeting by iframe title or position would be.
+
+    What's genuinely unverified: whether the iframe's internal canvas coordinate
+    system (baked in at the height/width passed to st_canvas) stays visually aligned
+    once CSS stretches the iframe itself to 100vw/100vh -- if there's a mismatch, a
+    stroke drawn at one screen position could land at a different coordinate than
+    where the mouse actually was. This needs a real, live check.
+    """
+    overlay_key = f"{key_prefix}_overlay"
+    st.markdown(f"""
+    <style>
+    .st-key-{overlay_key} {{
+        position: fixed !important;
+        top: 0; left: 0; width: 0; height: 0; overflow: visible;
+    }}
+    .st-key-{overlay_key} iframe {{
+        position: fixed !important;
+        top: 0 !important; left: 0 !important;
+        width: 100vw !important; height: 100vh !important;
+        z-index: 999998 !important;
+        background: transparent !important;
+        pointer-events: auto !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    with st.container(key=overlay_key):
+        canvas_result = st_canvas(
+            fill_color="rgba(255, 0, 0, 0)",  # transparent fill -- outline only, not solid shapes
+            stroke_width=4,
+            stroke_color="#FF3B30",
+            background_color="",  # transparent -- the real page shows through underneath
+            height=2200,   # generous fixed size so the drawable area covers a scrolled page;
+            width=1600,    # CSS then stretches the iframe to the actual viewport (see caveat above)
+            drawing_mode="freedraw",
+            key=f"{key_prefix}_canvas",
+            display_toolbar=False,
+        )
+    return canvas_result.image_data if canvas_result is not None else None
+
+
 def show_dev_mode_panel(page_title: str):
     """Freeze-and-annotate tool: lets Alex flag something on whatever screen he's
     looking at with a plain-English note, paired with a snapshot of THIS page's own
@@ -309,16 +365,38 @@ def show_dev_mode_panel(page_title: str):
     if not st.session_state.dev_mode:
         return
 
+    annotated_image = _live_overlay_drawing_widget(key_prefix="dev_mode_sidebar")
+
+    # The note panel needs its OWN higher z-index than the canvas overlay (999998) --
+    # otherwise it would be visually present but unclickable underneath the
+    # transparent drawing layer, since that layer captures pointer events across the
+    # full viewport by design. Floated bottom-right rather than left in normal flow,
+    # since normal flow no longer means anything once the overlay above takes the
+    # whole page out of the usual layout.
+    panel_key = "dev_mode_note_panel"
+    st.markdown(f"""
+    <style>
+    .st-key-{panel_key} {{
+        position: fixed !important;
+        bottom: 20px; right: 20px;
+        width: 380px; max-height: 75vh; overflow-y: auto;
+        z-index: 999999 !important;
+        background: #141920;
+        border: 1px solid rgba(212, 169, 74, 0.5);
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
     frozen_at_display = st.session_state.dev_mode_frozen_at[:16].replace("T", " ")
-    with st.container(border=True):
+    with st.container(key=panel_key):
         st.warning(
             f"🔒 **DEV MODE — frozen on \"{st.session_state.dev_mode_page}\"** at "
-            f"{frozen_at_display} UTC. Only the state at the moment you clicked Dev "
-            f"Mode is saved with your note — anything you click on this page now "
-            f"won't change what gets recorded."
+            f"{frozen_at_display} UTC. Draw directly on the page behind this panel, "
+            f"then describe it below."
         )
-        annotated_image = _screenshot_annotation_widget(key_prefix="dev_mode_sidebar")
-
         with st.form("dev_note_form", clear_on_submit=True):
             note = st.text_area(
                 "What do you want fixed or changed on this screen?", height=100,
