@@ -29,116 +29,22 @@ st.set_page_config(page_title="ParlayModel", page_icon="🏈", layout="wide")
 
 # Applied on every page (including the password gate itself) rather than per-page --
 # a consistent look shouldn't depend on which page happened to inject it first.
-# Selectors below were verified against the actual rendered DOM (Streamlit 1.61.1),
-# not guessed from memory -- data-testid/class names are internal and do shift
-# between versions. div[data-testid="stVerticalBlock"] in particular is intentionally
-# broad: Streamlit only applies a visible border/radius to it when a container was
-# actually created with border=True, so styling every instance is a safe no-op on
-# the many plain (unbordered) ones used just for layout.
 #
-# Design direction: a film-room / scouting-terminal feel grounded in NFL broadcast
-# graphics, not a generic dark SaaS dashboard reskin. Three deliberate type roles
-# (condensed broadcast display, clean body, mono for anything numeric -- odds,
-# confidence scores, stat tables) instead of one font on headers only. A gold "yard
-# marker" divider as the one signature element, used sparingly. Sharper 4px corners
-# throughout instead of the rounded-everywhere SaaS-card default.
-_GLOBAL_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+# Design direction lives in dashboard/theme.py: the Nocturne design system -- a quiet,
+# compact dark interface on a near-neutral blue-grey ground, Inter at weight 500,
+# JetBrains Mono for anything numeric (odds, confidence, stakes, tables), outlined
+# actions instead of filled ones, and a single blurple accent used as a line and a
+# glow rather than a flood. All the .pm-* class names this file emits are still
+# defined there, so no page markup changes.
+from theme import inject_theme, stat_band  # noqa: E402
 
-:root {
-    --pm-radius: 4px;
-    --pm-border: rgba(212, 169, 74, 0.18);
-    --pm-surface: #141920;
-    --pm-text: #E8ECEF;
-    --pm-muted: #7C8894;
-    --pm-gold: #D4A94A;
-}
-
-html, body, [class*="css"] {
-    font-family: 'IBM Plex Sans', sans-serif;
-}
-
-h1, h2, h3 {
-    font-family: 'Oswald', sans-serif !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.01em;
-    text-transform: uppercase;
-}
-
-h1 { border-bottom: 2px solid var(--pm-gold); padding-bottom: 0.4rem; }
-
-/* Numeric/data surfaces read like a real stat sheet, not decorative UI chrome */
-div[data-testid="stMetricValue"],
-div[data-testid="stDataFrame"],
-code, pre {
-    font-family: 'IBM Plex Mono', monospace !important;
-}
-
-div[data-testid="stMetricLabel"] {
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-size: 0.75rem !important;
-    color: var(--pm-muted) !important;
-}
-
-.block-container {
-    padding-top: 2.5rem !important;
-}
-
-div[data-testid="stVerticalBlock"] {
-    border-radius: var(--pm-radius) !important;
-    border-color: var(--pm-border) !important;
-}
-
-div[data-testid^="stBaseButton-"] {
-    border-radius: var(--pm-radius) !important;
-    font-family: 'IBM Plex Sans', sans-serif !important;
-    font-weight: 500 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-size: 0.85rem !important;
-}
-
-section[data-testid="stSidebar"] {
-    border-right: 1px solid var(--pm-border);
-}
-
-/* Signature element: a "yard marker" divider -- gold hash ticks instead of a plain
-   hairline, used between major sections instead of st.divider()'s generic rule. */
-.pm-yard-divider {
-    display: flex; align-items: center; gap: 6px; margin: 1.75rem 0 1.25rem 0;
-}
-.pm-yard-divider::before, .pm-yard-divider::after {
-    content: ""; flex: 1; height: 1px; background: var(--pm-border);
-}
-.pm-yard-divider span {
-    color: var(--pm-gold); font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase;
-    opacity: 0.75;
-}
-
-.pm-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
-            display: block; margin: 4px auto; border: 2px solid var(--pm-border); }
-.pm-photo-placeholder { width: 64px; height: 64px; border-radius: 50%; background: var(--pm-surface);
-            color: var(--pm-text); display: flex; align-items: center; justify-content: center;
-            margin: 4px auto; font-weight: 600; font-size: 20px; border: 2px solid var(--pm-border); }
-.pm-pos-pill { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-            font-weight: 600; opacity: 0.75; color: var(--pm-gold);
-            text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
-.pm-dialog-photo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
-            display: block; border: 2px solid var(--pm-border); }
-.pm-dialog-photo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: var(--pm-surface);
-            color: var(--pm-text); display: flex; align-items: center; justify-content: center;
-            font-weight: 600; font-size: 28px; border: 2px solid var(--pm-border); }
-</style>
-"""
-st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+inject_theme()
 
 
 def yard_divider(label: str):
-    """The signature section divider -- a gold hash-marked rule with a small caps
-    label, instead of Streamlit's plain st.divider(). Use between major sections."""
+    """The signature section divider -- a flush-left label followed by a rule that
+    fades to transparent at its end, instead of Streamlit's plain st.divider().
+    Use between major sections."""
     st.markdown(f'<div class="pm-yard-divider"><span>{label}</span></div>', unsafe_allow_html=True)
 
 
@@ -435,10 +341,13 @@ def page_weekly_bet_slip():
                     st.toast(f"Added to Parlay Builder ({len(c['leg_details'])} leg(s))", icon="✅")
 
     total = sum(c["suggested_stake"] for c in result["allocated"])
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total suggested", f"${total:.2f}")
-    col2.metric("Of budget", f"${result['budget']:.2f}")
-    col3.metric("Legs in your slip now", len(st.session_state.slip))
+    # The one saturated field the design system allows per page -- these three
+    # numbers are the page's answer, so they get it rather than a metric row.
+    stat_band([
+        ("Total suggested", f"${total:.2f}"),
+        ("Of budget", f"${result['budget']:.2f}"),
+        ("Legs in your slip now", str(len(st.session_state.slip))),
+    ])
     if total < result["budget"] - 0.01:
         st.caption(f"${result['budget'] - total:.2f} intentionally unallocated — not enough qualifying "
                    "+EV opportunities to use the full budget this week. That's fine; forcing it isn't.")

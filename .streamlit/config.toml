@@ -1,7 +1,17 @@
+# Nocturne theme for ParlayModel — Streamlit's own theming layer.
+# Everything here is presentation only; no app logic depends on it.
 [theme]
 base = "dark"
-primaryColor = "#D4A94A"
-backgroundColor = "#0B0E11"
-secondaryBackgroundColor = "#141920"
-textColor = "#E8ECEF"
+primaryColor = "#9184d9"            # accent — outlined buttons, sliders, focus
+backgroundColor = "#161826"         # --color-bg
+secondaryBackgroundColor = "#232532" # --color-surface (sidebar, inputs, cards)
+textColor = "#e9e9ed"               # --color-text
 font = "sans serif"
+
+# Streamlit 1.45+ only. Harmless on older versions (unknown keys are ignored),
+# delete if your version warns.
+baseRadius = "8px"                  # --radius-md
+borderColor = "#292b31"             # --color-neutral-900, the hairline edge
+linkColor = "#d2cefd"               # --color-accent-300
+codeFont = "monospace"
+showWidgetBorder = true

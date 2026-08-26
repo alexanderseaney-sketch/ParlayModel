@@ -257,6 +257,53 @@ before starting work to see what the other side left you.*
 ---
 
 **2026-08-26 — [work]**
+- Did: Alex used a different tool (an external design/theming assistant, judging by
+  the artifacts) to produce a full "Nocturne" reskin — a dark blue-grey/blurple
+  design system replacing the earlier gold/broadcast-terminal theme — and uploaded
+  the result as a zip since that tool could read the repo but not push to it. Applied
+  it here rather than trusting the tool's own summary blindly:
+  - **Verified freshness first**: the zip's own `github.md` claimed a sync at
+    2026-08-26T22:12:15Z; checked that against this session's actual commit
+    timestamps (latest was 18:39:09Z that same day) — confirmed the external tool's
+    clone was genuinely made after today's work (Dev Mode removal, opponent_team fix,
+    combined predictions/lines section), not a stale snapshot that would have
+    silently reverted any of it.
+  - **Diffed the incoming app.py against the real repo's before touching anything**
+    — the line-count claim in the tool's own chat summary ("1596 lines") didn't quite
+    match either file (1599 incoming vs. 1690 current), which turned out to be
+    explained entirely by moving ~90 lines of inline CSS out into the new
+    `theme.py` — the actual diff was scoped exactly as claimed: the old inline
+    `_GLOBAL_CSS` block swapped for `inject_theme()`, one metric row swapped for the
+    new `stat_band()`, and the yard-divider docstring updated to match the new visual
+    style. Nothing else in the file's 1690/1599 lines differs.
+  - **Cross-checked every `.pm-*` CSS class the real app.py actually uses** against
+    what the new `theme.py` defines — exact match, confirming the claim that "no page
+    markup has to change" was actually true, not just asserted.
+  - **Found and fixed a real bug in the incoming file before it would have crashed**:
+    `theme.py`'s own module docstring contained a literal example of the OLD CSS
+    block, including its literal `"""` triple-quote — which closed the docstring
+    early and caused a genuine `SyntaxError` importing the file. Fixed by rewording
+    the docstring to describe the change without embedding literal triple-quotes.
+  - **Skipped the extra files** the zip also contained (`_ds/` design-system tooling,
+    `.thumbnail`, `ParlayModel.dc.html`, `support.js`, `github.md`) — none of those
+    were part of the three files the handoff actually named, and copying tooling
+    artifacts from whatever platform produced this into the actual repo would just
+    be clutter with no function here.
+  - Tested `inject_theme()` and the new `stat_band()` directly in isolation (not just
+    "should work") before trusting them, then confirmed the full app loads with zero
+    exceptions on its default page (Weekly Bet Slip — where `stat_band` is actually
+    used) after applying all three real files.
+- Blocked: same category of gap as every previous visual/CSS change in this project —
+  couldn't take an actual screenshot to confirm the Nocturne theme looks right from
+  this sandbox. Functionally verified (loads clean, no exceptions, all classes
+  resolve); visually unverified. Worth a real look once deployed.
+- Next: if anything looks off visually once Alex checks it live, the theme's own
+  docstring says exactly where to look — Streamlit-version-specific `data-testid`
+  selectors in `theme.py`, not the token values, which stay valid across versions.
+
+---
+
+**2026-08-26 — [work]**
 - Did: Alex sent a screenshot — every row in a player's 2025 "Games" table showed
   "None" for Opponent Team. Traced to the real, exact root cause rather than guessing:
   `models/pbp_derived_weekly_stats.py` (built earlier to derive 2025 weekly stats
