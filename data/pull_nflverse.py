@@ -232,6 +232,21 @@ def pull_players():
     return df
 
 
+def pull_weekly_rosters(years):
+    """Week-by-week official rosters (53-man active, practice squad, IR/PUP/etc.),
+    keyed on gsis_id so it joins cleanly to weekly_stats / players. nflverse batches
+    these roughly daily, so on a roster-churn day (final cutdowns, waivers, PS
+    formation) it lags the team-controlled feed in data/pull_nfl_rosters.py by up to
+    a day -- this is the canonical, ID-bearing fallback, not the fast source. Has a
+    `status` column (ACT / RES / CUT / ...) and `status_description_abbr`; the roster
+    gate in models/current_predictions.py takes the latest week present per player."""
+    df = _pull_per_year(lambda y: nfl.import_weekly_rosters([y]), years, "weekly_rosters")
+    key_cols = ["season", "week", "player_id"]
+    validate(df, "weekly_rosters", key_cols=key_cols, warn_null_cols=["status"])
+    save(df, "weekly_rosters.csv", key_cols)
+    return df
+
+
 def main():
     parser = argparse.ArgumentParser(description="Pull and validate nflverse data")
     parser.add_argument("--years", nargs="+", type=int, required=True)
@@ -248,6 +263,7 @@ def main():
         ("injuries", lambda: pull_injuries(args.years)),
         ("snap_counts", lambda: pull_snap_counts(args.years)),
         ("players", lambda: pull_players()),
+        ("weekly_rosters", lambda: pull_weekly_rosters(args.years)),
     ]
     if not args.skip_pbp:
         pulls.insert(1, ("pbp", lambda: pull_pbp(args.years)))

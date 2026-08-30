@@ -222,6 +222,8 @@ EXPECTED_FILES = {
     "injuries.csv": "data/pull_nflverse.py",
     "snap_counts.csv": "data/pull_nflverse.py",
     "players.csv": "data/pull_nflverse.py",
+    "weekly_rosters.csv": "data/pull_nflverse.py",
+    "nfl_rosters.csv": "data/pull_nfl_rosters.py",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",
     "footballguys_depth.csv": "data/pull_footballguys_depth.py",
@@ -253,7 +255,8 @@ def _default_pull_years(lookback: int = 3) -> list[str]:
 # running, so it's guaranteed to have every package in requirements.txt installed,
 # on both local dev and Streamlit Cloud's container.
 PULL_SCRIPTS = {
-    "nflverse (schedules + stats + NGS + injuries + snaps)": [sys.executable, "data/pull_nflverse.py", "--years", *_default_pull_years(), "--skip-pbp"],
+    "nflverse (schedules + stats + NGS + injuries + snaps + rosters)": [sys.executable, "data/pull_nflverse.py", "--years", *_default_pull_years(), "--skip-pbp"],
+    "Official team-site rosters (all 32 clubs)": [sys.executable, "data/pull_nfl_rosters.py"],
     "SB Nation team news": [sys.executable, "data/pull_sbnation_news.py"],
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
     "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],

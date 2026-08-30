@@ -53,32 +53,77 @@ RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "current_player_predictions.csv")
 
 
+def _roster_from_team_sites() -> frozenset:
+    """data/pull_nfl_rosters.py -- each club's own team-site roster page. A
+    roster_status starting with "Active" is the 53-man roster (incl. Active/PUP,
+    Active/NFI). Fastest source to reflect cutdowns/waivers (team-controlled feed)."""
+    df = pd.read_csv(os.path.join(RAW_DIR, "nfl_rosters.csv"))
+    df = df[df["roster_status"].fillna("").str.startswith("Active")]
+    return frozenset(df["player"].dropna().apply(normalize_name))
+
+
+def _roster_from_weekly_rosters() -> frozenset:
+    """data/pull_nflverse.py's weekly_rosters.csv -- canonical, gsis_id-bearing, but
+    nflverse batches ~daily so it trails the team pages on a churn day. Take the
+    latest week present, active players only."""
+    df = pd.read_csv(os.path.join(RAW_DIR, "weekly_rosters.csv"), low_memory=False)
+    df = df[df["season"] == df["season"].max()]
+    df = df[df["week"] == df["week"].max()]
+    df = df[df["status"] == "ACT"]
+    return frozenset(df["player_name"].dropna().apply(normalize_name))
+
+
+def _roster_from_footballguys() -> frozenset:
+    """data/pull_footballguys_depth.py -- a projected depth chart, not an official
+    roster, but it's the source this gate originally shipped on. Last-resort."""
+    df = pd.read_csv(os.path.join(RAW_DIR, "footballguys_depth.csv"))
+    return frozenset(df["player_name"].dropna().apply(normalize_name))
+
+
 @functools.lru_cache(maxsize=1)
 def _current_roster_names() -> frozenset | None:
-    """Normalized names of every player on the current Footballguys depth-chart pull
-    -- the only source this project has for "is this person actually on an NFL
-    roster right now," as opposed to just having a player_id that once appeared in
-    weekly_stats.csv. Real bug found 2026-08-23: score_prop() below used to take
-    each player_id's single most recent game ever, no matter how old, and score it
-    against their old team's next game -- so a player_id last seen in weekly_stats
-    2014 got scored as a live prop for whichever team currently holds that old team
-    slot. Confirmed 63.1% of all 18279 predictions were "stale" (pre-2025), and of
-    those, 90% (2476 of 2756 unique players) don't appear on any current depth chart
-    at all -- e.g. DeMarco Murray, Torrey Smith, long retired. The other 10% are
-    real current players in a genuine lull (e.g. Brandon Aiyuk, injured most of
-    2024) and should keep showing their real stale-data badge, not be silently
-    dropped -- this filters by ROSTER membership, not by how recent stats_as_of is.
-    Cached (lru_cache, not a module-level constant) since score_prop() is called
-    once per prop_type (~28 times) in build_current_predictions() -- reads the file
-    once instead of 28 times. Returns None (rather than an empty set, which would
-    silently exclude everyone) if the depth-chart pull hasn't run yet, so callers
-    can choose to skip the filter entirely rather than mistake "no data" for "empty
-    roster."""
-    path = os.path.join(RAW_DIR, "footballguys_depth.csv")
-    if not os.path.exists(path):
-        return None
-    depth = pd.read_csv(path)
-    return frozenset(depth["player_name"].apply(normalize_name))
+    """Normalized names of every player on a current NFL active roster -- the check
+    for "is this person actually in the league right now," as opposed to just having
+    a player_id that once appeared in weekly_stats.csv. Real bug found 2026-08-23:
+    score_prop() below used to take each player_id's single most recent game ever, no
+    matter how old, and score it against their old team's next game -- so a player_id
+    last seen in weekly_stats 2014 got scored as a live prop for whichever team
+    currently holds that old team slot. Confirmed 63.1% of all 18279 predictions were
+    "stale" (pre-2025), and of those, 90% (2476 of 2756 unique players) don't appear
+    on any current roster at all -- e.g. DeMarco Murray, Torrey Smith, long retired.
+    The other 10% are real current players in a genuine lull (e.g. Brandon Aiyuk,
+    injured most of 2024) and should keep showing their real stale-data badge, not be
+    silently dropped -- this filters by ROSTER membership, not by how recent
+    stats_as_of is.
+
+    Tries three sources in falling order of how fast they reflect a roster move
+    (added 2026-08-30, after the final-cutdowns showed Footballguys alone wasn't
+    enough): the 32 club team-site roster pages first, nflverse's weekly rosters
+    next, the Footballguys depth chart last. First one that loads a non-empty set
+    wins.
+
+    Cached (lru_cache, not a module-level constant) since score_prop() is called once
+    per prop_type (~28 times) in build_current_predictions() -- reads a file once
+    instead of 28 times. Returns None (rather than an empty set, which would silently
+    exclude everyone) if no roster source has been pulled yet, so callers can skip the
+    filter entirely rather than mistake "no data" for "empty roster."""
+    for label, loader in (
+        ("team-sites", _roster_from_team_sites),
+        ("weekly_rosters", _roster_from_weekly_rosters),
+        ("footballguys", _roster_from_footballguys),
+    ):
+        try:
+            names = loader()
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            print(f"[roster] {label} source unreadable ({e}) -- trying next.")
+            continue
+        if names:
+            print(f"[roster] using {label} ({len(names)} active players).")
+            return names
+    print("[roster] no roster source available -- roster filter skipped.")
+    return None
 
 
 def _next_game_lookup(schedules: pd.DataFrame) -> pd.DataFrame:

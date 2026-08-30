@@ -22,6 +22,8 @@ data/raw/*
 !data/raw/sbnation_news.csv
 !data/raw/nbcsports_news.csv
 !data/raw/footballguys_depth.csv
+!data/raw/nfl_rosters.csv
+!data/raw/weekly_rosters.csv
 !data/raw/underdog_props.csv
 !data/raw/weather_forecast.csv
 data/processed/*
