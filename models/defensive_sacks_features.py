@@ -85,7 +85,6 @@ def build_sacks_dataset(min_week: int = 4) -> pd.DataFrame:
     plus team pass-rush context, same no-leakage discipline as every other prop
     (shift(1) before any rolling average)."""
     log = _build_defender_game_log()
-    log = log[log["plays_on_defense"] >= MIN_PLAYS_TO_QUALIFY].copy()
 
     players = pd.read_csv(os.path.join(RAW_DIR, "players.csv"), low_memory=False)
     players = players.rename(columns={"gsis_id": "player_id", "display_name": "player_display_name"})
@@ -93,6 +92,13 @@ def build_sacks_dataset(min_week: int = 4) -> pd.DataFrame:
     log = log[log["position"].isin(DEFENSIVE_POSITIONS)].copy()
 
     log = log.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
+    # Deliberately NOT pre-filtered to plays_on_defense >= MIN_PLAYS_TO_QUALIFY here --
+    # same bug as player_prop_features.py's receiving-yards dataset (fixed 2026-08-23):
+    # filtering token/garbage-time appearances out before this rolling average meant a
+    # defender's own baseline silently excluded those games, not just this week's label.
+    # Applied below instead, after the rolling features (and team_sacks, which should
+    # count every recorded sack regardless of any individual defender's snap count) are
+    # computed.
     for col in ["sacks", "plays_on_defense"]:
         log[f"{col}_rolling"] = (
             log.groupby(["player_id", "season"])[col]
@@ -120,6 +126,10 @@ def build_sacks_dataset(min_week: int = 4) -> pd.DataFrame:
                      on=["defteam", "season", "week"], how="left")
 
     log = log[log["week"] >= min_week].reset_index(drop=True)
+
+    # Applied here, after every rolling/merge step above, not on the raw defender log --
+    # see the matching comment where the rolling loop is first built.
+    log = log[log["plays_on_defense"] >= MIN_PLAYS_TO_QUALIFY].reset_index(drop=True)
 
     log["proxy_line"] = log["sacks_rolling"]
     log["over_proxy_line"] = (log["sacks"] > log["proxy_line"]).astype(int)

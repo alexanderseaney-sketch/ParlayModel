@@ -20,12 +20,16 @@ def build_passing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
     qb = weekly[weekly["position"] == "QB"].copy()
-    qb = qb[qb["attempts"] >= MIN_ATTEMPTS_TO_QUALIFY]
 
     keep_cols = ["player_id", "player_display_name", "position", "recent_team", "season", "week",
                  "attempts", "passing_yards", "passing_tds", "interceptions"]
     qb = qb[keep_cols].sort_values(["player_id", "season", "week"]).reset_index(drop=True)
 
+    # Deliberately NOT pre-filtered to attempts >= MIN_ATTEMPTS_TO_QUALIFY here -- same
+    # bug as player_prop_features.py's receiving-yards dataset (fixed 2026-08-23):
+    # filtering low-attempt games out before this rolling average meant a QB's own
+    # baseline silently excluded their mop-up/emergency games, not just this week's
+    # label. Applied below instead, after the rolling features are computed.
     for col in ["passing_yards", "attempts", "passing_tds", "interceptions"]:
         qb[f"{col}_rolling"] = (
             qb.groupby(["player_id", "season"])[col]
@@ -77,6 +81,10 @@ def build_passing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     )
 
     qb = qb[qb["week"] >= min_week].reset_index(drop=True)
+
+    # Applied here, after every rolling/merge step above, not on the raw weekly log --
+    # see the matching comment where qb is first built.
+    qb = qb[qb["attempts"] >= MIN_ATTEMPTS_TO_QUALIFY].reset_index(drop=True)
 
     qb["proxy_line"] = qb["passing_yards_rolling"]
     qb["over_proxy_line"] = (qb["passing_yards"] > qb["proxy_line"]).astype(int)

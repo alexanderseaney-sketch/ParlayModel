@@ -40,15 +40,17 @@ def build_rush_rec_tds_dataset(min_week: int = 4) -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
     skill = weekly[weekly["position"].isin(["RB", "WR", "TE", "QB"])].copy()
-    skill["touches"] = skill["carries"] + skill["targets"]
-    skill = skill[skill["touches"] >= MIN_TOUCHES_TO_QUALIFY]
-
     skill["rush_rec_tds"] = skill["rushing_tds"] + skill["receiving_tds"]
 
     keep_cols = ["player_id", "player_display_name", "position", "recent_team", "season", "week",
                  "carries", "targets", "rushing_yards", "receiving_yards", "rush_rec_tds"]
     skill = skill[keep_cols].sort_values(["player_id", "season", "week"]).reset_index(drop=True)
 
+    # Deliberately NOT pre-filtered to touches (carries + targets) >= MIN_TOUCHES_TO_QUALIFY
+    # here -- same bug as player_prop_features.py's receiving-yards dataset (fixed
+    # 2026-08-23): filtering low-touch games out before this rolling average meant a
+    # player's own baseline silently excluded their cold/inactive games, not just this
+    # week's label. Applied below instead, after the rolling features are computed.
     for col in ["rush_rec_tds", "carries", "targets"]:
         skill[f"{col}_rolling"] = (
             skill.groupby(["player_id", "season"])[col]
@@ -105,6 +107,10 @@ def build_rush_rec_tds_dataset(min_week: int = 4) -> pd.DataFrame:
     skill["red_zone_share_rolling"] = skill["red_zone_share_rolling"].fillna(0.0)
 
     skill = skill[skill["week"] >= min_week].reset_index(drop=True)
+
+    # Applied here, after every rolling/merge step above, not on the raw weekly log --
+    # see the matching comment where skill is first built.
+    skill = skill[(skill["carries"] + skill["targets"]) >= MIN_TOUCHES_TO_QUALIFY].reset_index(drop=True)
 
     skill["proxy_line"] = PROXY_LINE
     skill["over_proxy_line"] = (skill["rush_rec_tds"] >= 1).astype(int)
