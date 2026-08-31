@@ -77,3 +77,39 @@ def project_points(stats: dict, scoring: str = "ppr") -> float:
         + receptions * rec_pt
         + (g("rush_rec_tds") + g("rush_rec_tds_qb")) * RUSH_TD
     )
+
+
+def project_breakdown(stats: dict, scoring: str = "ppr") -> list[dict]:
+    """Itemised version of project_points: one row per scoring category that this
+    player actually projects for, with the projected stat value and the fantasy
+    points it contributes. Rows with a zero projected value are dropped so a QB
+    card doesn't show empty receiving lines."""
+    def g(k):
+        v = stats.get(k)
+        return float(v) if v is not None and pd.notna(v) else 0.0
+    rec_pt = RECEPTION_PT[scoring]
+
+    pass_yd = g("passing_yards")
+    pass_td = g("passing_tds")
+    ints = g("passing_ints")
+    rush_yd = g("rushing_yards") + g("rushing_yards_qb")
+    rec_yd = g("receiving_yards") + g("receiving_yards_rb")
+    tds = g("rush_rec_tds") + g("rush_rec_tds_qb")
+    receptions = g("receptions")
+    rec_estimated = False
+    if receptions == 0 and g("receiving_yards_rb") > 0:
+        receptions = g("receiving_yards_rb") / 7.5
+        rec_estimated = True
+
+    items = [
+        ("Passing yards", pass_yd, pass_yd * PASS_YD, f"{PASS_YD} pt/yd"),
+        ("Passing TDs", pass_td, pass_td * PASS_TD, f"{PASS_TD:g} pt each"),
+        ("Interceptions", ints, ints * INTERCEPTION, f"{INTERCEPTION:g} pt each"),
+        ("Rushing yards", rush_yd, rush_yd * RUSH_YD, f"{RUSH_YD} pt/yd"),
+        ("Receiving yards", rec_yd, rec_yd * REC_YD, f"{REC_YD} pt/yd"),
+        ("Receptions" + (" (est.)" if rec_estimated else ""), receptions,
+         receptions * rec_pt, f"{rec_pt:g} pt each"),
+        ("Rush + rec TDs", tds, tds * RUSH_TD, f"{RUSH_TD:g} pt each"),
+    ]
+    return [{"category": c, "projected": round(v, 1), "points": round(p, 1), "rule": rule}
+            for c, v, p, rule in items if abs(v) > 1e-9]
