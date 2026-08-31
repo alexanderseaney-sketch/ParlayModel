@@ -1585,6 +1585,55 @@ def _render_coaching_staff(team_abbr: str):
         )
 
 
+_SPOTRAC_STATUS = {"IR": "Injured Reserve", "PUP": "Reserve/PUP", "NFI": "Reserve/NFI",
+                   "SUS": "Suspended", "NR": "Reserve/Did not report", "RET": "Reserve/Retired",
+                   "EXE": "Commissioner exempt"}
+
+
+def _render_contracts(team_abbr: str):
+    """Team salary-cap sheet from Spotrac: active roster by cap hit, plus reserve
+    lists with the injury/reason and their dead-cap exposure."""
+    sc = load_csv_if_exists("spotrac_contracts.csv")
+    if sc is None or team_abbr not in set(sc["team_abbr"]):
+        st.caption("Contracts not pulled yet — run **Spotrac contracts + IR** on the "
+                   "Run Data Pulls page.")
+        return
+    t = sc[sc["team_abbr"] == team_abbr].copy()
+
+    def money(v):
+        return "—" if pd.isna(v) else f"${v / 1e6:.1f}M"
+
+    active = t[t["roster_status"] == "Active"].sort_values("cap_hit", ascending=False)
+    top = st.columns(3)
+    top[0].metric("Players (Spotrac active)", len(active))
+    top[1].metric("Top-51 cap hit", money(active["cap_hit"].nlargest(51).sum()))
+    top[2].metric("Biggest cap hit", f"{active.iloc[0]['player']} · {money(active.iloc[0]['cap_hit'])}"
+                  if len(active) else "—")
+    if len(active) > 60:
+        st.caption("⚠️ Spotrac hasn't trimmed this team to the 53 yet — active list still shows "
+                   "the offseason roster.")
+
+    show = active[["player", "position", "age", "cap_hit", "cap_pct", "cash_total", "fa_year"]].copy()
+    for c in ("cap_hit", "cash_total"):
+        show[c] = show[c].map(money)
+    show["cap_pct"] = show["cap_pct"].map(lambda v: "—" if pd.isna(v) else f"{v:.1f}%")
+    show["fa_year"] = show["fa_year"].map(lambda v: "—" if pd.isna(v) else str(int(v)))
+    show.columns = ["Player", "Pos", "Age", "Cap hit", "% of cap", "Cash total", "Free agent"]
+    st.dataframe(show, hide_index=True, width="stretch", height=460)
+
+    reserve = t[t["roster_status"] != "Active"]
+    for status in sorted(reserve["roster_status"].unique()):
+        grp = reserve[reserve["roster_status"] == status]
+        st.markdown(f"**{_SPOTRAC_STATUS.get(status, status)}** ({len(grp)})")
+        r = grp[["player", "position", "reason", "cap_hit", "dead_cap"]].copy()
+        r["cap_hit"] = r["cap_hit"].map(money)
+        r["dead_cap"] = r["dead_cap"].map(money)
+        r.columns = ["Player", "Pos", "Reason", "Cap hit", "Dead cap"]
+        st.dataframe(r, hide_index=True, width="stretch")
+    st.caption("Source: Spotrac. Cap % is share of the league salary cap. Dead cap is what "
+               "stays on the books if the player is released.")
+
+
 def _render_reserve_lists(team_abbr: str):
     """Practice squad + every reserve designation (IR, PUP, NFI, suspended, ...),
     straight from the club team-site roster pull. The formation tabs only show the
@@ -1624,8 +1673,8 @@ def page_depth_charts():
         "their depth chart, not a template. Click any player for their injury "
         "status, model predictions, current Underdog lines, and recent games. "
         "Starters/backups: Footballguys (status tags Q/PUP/IR/SUS/NFI/O). Practice "
-        "squad & reserve: club team sites. Coaching staff: Wikipedia. Scheme "
-        "tendencies: play-by-play."
+        "squad & reserve: club team sites. Contracts & IR reasons: Spotrac. "
+        "Coaching staff: Wikipedia. Scheme tendencies: play-by-play."
     )
     df = load_csv_if_exists("footballguys_depth.csv")
 
@@ -1644,7 +1693,8 @@ def page_depth_charts():
     with st.expander("Team identity — scheme & personnel", expanded=False):
         _render_team_identity(team_abbr_std)
 
-    tabs = st.tabs(["Offense", "Defense", "Special Teams", "Practice Squad & Reserve", "Coaching Staff"])
+    tabs = st.tabs(["Offense", "Defense", "Special Teams", "Practice Squad & Reserve",
+                    "Contracts", "Coaching Staff"])
     with tabs[0]:
         cat_df = team_df[team_df["category"] == "offense"]
         if cat_df.empty:
@@ -1666,6 +1716,8 @@ def page_depth_charts():
     with tabs[3]:
         _render_reserve_lists(team_abbr_std)
     with tabs[4]:
+        _render_contracts(team_abbr_std)
+    with tabs[5]:
         _render_coaching_staff(team_abbr_std)
 
 

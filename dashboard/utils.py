@@ -223,6 +223,7 @@ EXPECTED_FILES = {
     "players.csv": "data/pull_nflverse.py",
     "weekly_rosters.csv": "data/pull_nflverse.py",
     "nfl_rosters.csv": "data/pull_nfl_rosters.py",
+    "spotrac_contracts.csv": "data/pull_spotrac.py",
     "coaching_staff.csv": "data/pull_coaching_staff.py",
     "team_scheme_tendencies.csv": "models/build_team_scheme_tendencies.py (derived from pbp.csv)",
     "coach_history.csv": "models/build_coach_history.py (derived from pbp.csv)",
@@ -260,6 +261,7 @@ def _default_pull_years(lookback: int = 3) -> list[str]:
 PULL_SCRIPTS = {
     "nflverse (schedules + stats + NGS + injuries + snaps + rosters)": [sys.executable, "data/pull_nflverse.py", "--years", *_default_pull_years(), "--skip-pbp"],
     "Official team-site rosters (all 32 clubs)": [sys.executable, "data/pull_nfl_rosters.py"],
+    "Spotrac contracts + IR (all 32 clubs)": [sys.executable, "data/pull_spotrac.py"],
     "Coaching staff (Wikipedia)": [sys.executable, "data/pull_coaching_staff.py"],
     "Team scheme tendencies (from pbp)": [sys.executable, "models/build_team_scheme_tendencies.py"],
     "Coach history (from pbp)": [sys.executable, "models/build_coach_history.py"],

@@ -40,6 +40,25 @@ FLEX = ["RB", "WR", "TE"]
 BOOM = {"QB": 25, "RB": 20, "WR": 20, "TE": 15}
 BUST = {"QB": 12, "RB": 6, "WR": 6, "TE": 4}
 
+_STATUS_LABELS = {"IR": "Injured Reserve", "PUP": "Reserve/PUP", "NFI": "Reserve/NFI",
+                  "SUS": "Suspended", "NR": "Reserve/Did not report", "RET": "Reserve/Retired",
+                  "EXE": "Commissioner exempt", "PS": "Practice squad"}
+
+
+def _spotrac_row(name: str, team: str):
+    """This player's row from spotrac_contracts.csv (contract + reserve status),
+    matched on normalized name within the team. None if not pulled / not found."""
+    sc = load_csv_if_exists("spotrac_contracts.csv")
+    if sc is None:
+        return None
+    key = normalize_name(name)
+    m = sc[(sc["team_abbr"] == team) & (sc["player"].apply(normalize_name) == key)]
+    if m.empty:
+        return None
+    # a player can appear on both Active and a reserve list -- prefer the reserve one
+    non_active = m[m["roster_status"] != "Active"]
+    return (non_active if not non_active.empty else m).iloc[0]
+
 
 def _pred_mtime() -> float:
     return os.path.getmtime(CURRENT_PREDICTIONS_PATH) if os.path.exists(CURRENT_PREDICTIONS_PATH) else 0.0
@@ -412,6 +431,21 @@ def _render_player_card(scoring: str):
                     + f"  ·  Week {int(p['week'])} vs **{p['opp']}**")
         st.markdown(f"**{position}{int(p['pos_rank'])}** of {n_pos}  ·  Tier {int(p['tier'])}  "
                     f"·  #{int(p['overall_rank'])} overall (QB/RB/WR/TE)")
+        sp = _spotrac_row(name, team)
+        if sp is not None:
+            if sp["roster_status"] != "Active":
+                st.warning(f"Spotrac: **{_STATUS_LABELS.get(sp['roster_status'], sp['roster_status'])}**"
+                           + (f" — {sp['reason'].title()}" if isinstance(sp.get("reason"), str) else ""))
+            bits = []
+            if pd.notna(sp.get("cap_hit")):
+                bits.append(f"Cap hit **${sp['cap_hit'] / 1e6:.1f}M**"
+                            + (f" ({sp['cap_pct']:.1f}% of cap)" if pd.notna(sp.get("cap_pct")) else ""))
+            if pd.notna(sp.get("fa_year")):
+                bits.append(f"free agent **{int(sp['fa_year'])}**")
+            if pd.notna(sp.get("age")):
+                bits.append(f"age {int(sp['age'])}")
+            if bits:
+                st.caption("Contract (Spotrac): " + "  ·  ".join(bits))
 
     st.divider()
 
