@@ -226,6 +226,7 @@ EXPECTED_FILES = {
     "coaching_staff.csv": "data/pull_coaching_staff.py",
     "team_scheme_tendencies.csv": "models/build_team_scheme_tendencies.py (derived from pbp.csv)",
     "coach_history.csv": "models/build_coach_history.py (derived from pbp.csv)",
+    "fantasy_matchups.csv": "models/build_fantasy_matchups.py (from weekly_stats.csv)",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",
     "footballguys_depth.csv": "data/pull_footballguys_depth.py",
@@ -262,6 +263,7 @@ PULL_SCRIPTS = {
     "Coaching staff (Wikipedia)": [sys.executable, "data/pull_coaching_staff.py"],
     "Team scheme tendencies (from pbp)": [sys.executable, "models/build_team_scheme_tendencies.py"],
     "Coach history (from pbp)": [sys.executable, "models/build_coach_history.py"],
+    "Fantasy matchups (from weekly stats)": [sys.executable, "models/build_fantasy_matchups.py"],
     "SB Nation team news": [sys.executable, "data/pull_sbnation_news.py"],
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
     "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],
@@ -624,11 +626,12 @@ def data_freshness_check() -> dict:
     missing, stale, ok = [], [], []
     for filename in EXPECTED_FILES:
         # pbp.csv: skipped by default. weather_forecast.csv: legitimately empty most
-        # of the time. coaching_staff.csv / team_scheme_tendencies.csv /
-        # coach_history.csv: change on the timescale of coordinator hires and whole
-        # seasons, not days -- a 24h "stale" flag on them would just be permanent noise.
+        # of the time. The derived team/coach/fantasy CSVs are rebuilt on their own
+        # cadence (coordinator hires, whole seasons, weekly games) -- a 24h "stale"
+        # flag on them would just be permanent noise.
         if filename in ("pbp.csv", "weather_forecast.csv", "coaching_staff.csv",
-                        "team_scheme_tendencies.csv", "coach_history.csv"):
+                        "team_scheme_tendencies.csv", "coach_history.csv",
+                        "fantasy_matchups.csv"):
             continue
         status = file_status(filename)
         if not status["exists"]:

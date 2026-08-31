@@ -27,6 +27,7 @@ data/raw/*
 !data/raw/coaching_staff.csv
 !data/raw/team_scheme_tendencies.csv
 !data/raw/coach_history.csv
+!data/raw/fantasy_matchups.csv
 !data/raw/underdog_props.csv
 !data/raw/weather_forecast.csv
 data/processed/*
