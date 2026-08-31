@@ -19,10 +19,12 @@ Usage:
     python models/build_fantasy_matchups.py
 """
 import os
+import sys
 
 import pandas as pd
 
-from fantasy_scoring import fantasy_points_from_weekly
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
+from fantasy_scoring import fantasy_points_from_weekly  # noqa: E402
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 WEEKLY_PATH = os.path.join(RAW_DIR, "weekly_stats.csv")

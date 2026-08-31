@@ -4,7 +4,7 @@ matchups, and boom/bust profiles. Own module (like compare.py) -- app.py imports
 page_fantasy() and registers it.
 
 Projections roll up the prop model's own proxy_line per stat (its trailing rolling
-average for that player) into fantasy points -- see models/fantasy_scoring.py. The
+average for that player) into fantasy points -- see dashboard/fantasy_scoring.py. The
 "lean" column is the model's average P(over) across that player's props: a real
 signal for which way the model expects them to break from that baseline, kept
 separate from the projection itself rather than baked in.

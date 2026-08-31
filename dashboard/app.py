@@ -21,7 +21,10 @@ from utils import (
     estimate_player_stat_std, recompute_probability_for_real_line,
 )
 
-_MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+# abspath first: Streamlit can hand this module a relative __file__, which would
+# make dirname("") -> "" and the models path resolve against the wrong directory.
+_MODELS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models"))
 if _MODELS_DIR not in sys.path:  # Streamlit re-executes this file on every rerun
     sys.path.insert(0, _MODELS_DIR)
 from generate_weekly_bet_slip import (  # noqa: E402
