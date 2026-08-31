@@ -1,6 +1,5 @@
 """Shared helpers for the ParlayModel dashboard."""
 import email.utils
-import json
 import os
 import subprocess
 import sys
@@ -335,10 +334,17 @@ def append_bet(row: dict) -> None:
 CURRENT_PREDICTIONS_PATH = os.path.join(ROOT_DIR, "models", "current_player_predictions.csv")
 
 
+@st.cache_data(show_spinner=False)
+def _read_current_predictions(_mtime: float) -> pd.DataFrame:
+    """Same cache pattern as load_csv() -- _mtime keys the read; the Run Data Pulls
+    / freshness-refresh flows call st.cache_data.clear() after regenerating."""
+    return pd.read_csv(CURRENT_PREDICTIONS_PATH)
+
+
 def load_current_predictions() -> pd.DataFrame | None:
     if not os.path.exists(CURRENT_PREDICTIONS_PATH):
         return None
-    return pd.read_csv(CURRENT_PREDICTIONS_PATH)
+    return _read_current_predictions(os.path.getmtime(CURRENT_PREDICTIONS_PATH))
 
 
 def normalize_name(name: str) -> str:
@@ -351,13 +357,6 @@ def normalize_name(name: str) -> str:
         if n.endswith(suffix):
             n = n[: -len(suffix)]
     return n.replace(".", "").replace("'", "").strip()
-
-
-
-    """Converts American odds to implied probability (0-1)."""
-    if odds > 0:
-        return 100 / (odds + 100)
-    return -odds / (-odds + 100)
 
 
 def find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -373,6 +372,15 @@ def find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
 LEG_CORRELATIONS_PATH = os.path.join(ROOT_DIR, "models", "parlay_leg_correlations.csv")
 
 
+@st.cache_data(show_spinner=False)
+def _read_leg_correlations(_mtime: float) -> dict[frozenset, float]:
+    df = pd.read_csv(LEG_CORRELATIONS_PATH)
+    return {
+        frozenset([row["position_prop_a"], row["position_prop_b"]]): row["phi"]
+        for _, row in df.iterrows()
+    }
+
+
 def load_leg_correlations() -> dict[frozenset, float]:
     """Real, empirically-measured correlations between same-team same-game prop pairs
     (models/analyze_parlay_correlations.py, 2019-2024 data) -- e.g. QB passing yards
@@ -380,14 +388,13 @@ def load_leg_correlations() -> dict[frozenset, float]:
     heavy and run-heavy game scripts trade off), while QB passing yards and WR
     receiving yards are measurably POSITIVELY correlated. Only pairs with |phi| >= 0.05
     are in this file -- weaker measured correlations were judged noise, not signal, at
-    these sample sizes (see the analysis script for the full breakdown including nulls)."""
+    these sample sizes (see the analysis script for the full breakdown including nulls).
+
+    Cached on file mtime: correlation_adjusted_parlay_probability() calls this once per
+    candidate parlay, which is dozens of times in one Parlay Builder rerun."""
     if not os.path.exists(LEG_CORRELATIONS_PATH):
         return {}
-    df = pd.read_csv(LEG_CORRELATIONS_PATH)
-    return {
-        frozenset([row["position_prop_a"], row["position_prop_b"]]): row["phi"]
-        for _, row in df.iterrows()
-    }
+    return _read_leg_correlations(os.path.getmtime(LEG_CORRELATIONS_PATH))
 
 
 def correlation_adjusted_parlay_probability(legs: list[dict]) -> dict:

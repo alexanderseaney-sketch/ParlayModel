@@ -6,7 +6,7 @@ Run with:
 """
 import os
 import sys
-from datetime import datetime, date, timezone
+from datetime import datetime, date
 
 import pandas as pd
 import streamlit as st
@@ -21,7 +21,9 @@ from utils import (
     estimate_player_stat_std, recompute_probability_for_real_line,
 )
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "models"))
+_MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+if _MODELS_DIR not in sys.path:  # Streamlit re-executes this file on every rerun
+    sys.path.insert(0, _MODELS_DIR)
 from generate_weekly_bet_slip import (  # noqa: E402
     load_matched_props, build_single_leg_candidates, build_parlay_candidates, allocate_budget,
 )
