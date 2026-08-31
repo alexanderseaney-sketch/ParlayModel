@@ -38,6 +38,7 @@ st.set_page_config(page_title="ParlayModel", page_icon="🏈", layout="wide")
 # glow rather than a flood. All the .pm-* class names this file emits are still
 # defined there, so no page markup changes.
 from theme import inject_theme, stat_band  # noqa: E402
+from compare import page_compare  # noqa: E402
 
 inject_theme()
 
@@ -1842,6 +1843,7 @@ PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon=
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
 PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon="💰")
 PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈")
+PAGE_COMPARE = st.Page(page_compare, title="Compare", icon="⚖️")
 PAGE_NFL_STATS = st.Page(page_nfl_stats, title="NFL Stats", icon="📊")
 PAGE_SBNATION_NEWS = st.Page(page_sbnation_news, title="SB Nation News", icon="📰")
 PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
@@ -1850,7 +1852,7 @@ PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
 
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
-    "Research": [PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_NFL_STATS,
+    "Research": [PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
     "Admin": [PAGE_OVERVIEW, PAGE_RUN_PULLS],
 })
