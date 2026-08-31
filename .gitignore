@@ -24,6 +24,8 @@ data/raw/*
 !data/raw/footballguys_depth.csv
 !data/raw/nfl_rosters.csv
 !data/raw/weekly_rosters.csv
+!data/raw/coaching_staff.csv
+!data/raw/team_scheme_tendencies.csv
 !data/raw/underdog_props.csv
 !data/raw/weather_forecast.csv
 data/processed/*

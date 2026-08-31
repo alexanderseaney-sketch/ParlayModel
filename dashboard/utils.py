@@ -224,6 +224,8 @@ EXPECTED_FILES = {
     "players.csv": "data/pull_nflverse.py",
     "weekly_rosters.csv": "data/pull_nflverse.py",
     "nfl_rosters.csv": "data/pull_nfl_rosters.py",
+    "coaching_staff.csv": "data/pull_coaching_staff.py",
+    "team_scheme_tendencies.csv": "models/build_team_scheme_tendencies.py (derived from pbp.csv)",
     "sbnation_news.csv": "data/pull_sbnation_news.py",
     "nbcsports_news.csv": "data/pull_nbcsports_news.py",
     "footballguys_depth.csv": "data/pull_footballguys_depth.py",
@@ -257,6 +259,8 @@ def _default_pull_years(lookback: int = 3) -> list[str]:
 PULL_SCRIPTS = {
     "nflverse (schedules + stats + NGS + injuries + snaps + rosters)": [sys.executable, "data/pull_nflverse.py", "--years", *_default_pull_years(), "--skip-pbp"],
     "Official team-site rosters (all 32 clubs)": [sys.executable, "data/pull_nfl_rosters.py"],
+    "Coaching staff (Wikipedia)": [sys.executable, "data/pull_coaching_staff.py"],
+    "Team scheme tendencies (from pbp)": [sys.executable, "models/build_team_scheme_tendencies.py"],
     "SB Nation team news": [sys.executable, "data/pull_sbnation_news.py"],
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
     "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],
@@ -610,7 +614,12 @@ def data_freshness_check() -> dict:
     not source code) and never ships with the deployment itself."""
     missing, stale, ok = [], [], []
     for filename in EXPECTED_FILES:
-        if filename in ("pbp.csv", "weather_forecast.csv"):
+        # pbp.csv: skipped by default. weather_forecast.csv: legitimately empty most
+        # of the time. coaching_staff.csv / team_scheme_tendencies.csv: change on the
+        # timescale of coordinator hires and whole seasons, not days -- a 24h "stale"
+        # flag on them would just be permanent noise.
+        if filename in ("pbp.csv", "weather_forecast.csv",
+                        "coaching_staff.csv", "team_scheme_tendencies.csv"):
             continue
         status = file_status(filename)
         if not status["exists"]:

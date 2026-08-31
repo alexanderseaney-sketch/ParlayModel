@@ -1485,6 +1485,133 @@ def _grouped_formation(cat_df: pd.DataFrame, groups: list, photo_map: dict):
         _formation_row(row, cat_df, photo_map)
 
 
+# footballguys_depth.csv is the only file in the project that abbreviates the Rams
+# "LAR"; pbp / rosters / coaching_staff / scheme_tendencies all use "LA". The Depth
+# Charts team picker is driven by footballguys, so normalize before joining the rest.
+_DEPTH_ABBR_ALIASES = {"LAR": "LA"}
+
+STAFF_GROUP_ORDER = [
+    ("head_coach", "Head Coach"),
+    ("offense", "Offensive Staff"),
+    ("defense", "Defensive Staff"),
+    ("special_teams", "Special Teams"),
+    ("strength", "Strength & Conditioning"),
+    ("front_office", "Football Front Office"),
+    ("other", "Other"),
+]
+
+
+def _identity_metric(row: pd.Series, col: str, suffix: str = "%", digits: int = 0) -> str:
+    v = row.get(col)
+    if v is None or pd.isna(v):
+        return "—"
+    return f"{v:.{digits}f}{suffix}"
+
+
+def _render_team_identity(team_abbr: str):
+    """Current HC/OC/DC (from the coaching-staff pull) + a scheme descriptor and
+    the tendencies it's built from (play-by-play)."""
+    ident = load_csv_if_exists("team_scheme_tendencies.csv")
+    if ident is None or team_abbr not in set(ident["team_abbr"]):
+        st.caption(
+            "Scheme tendencies not built yet — run **Team scheme tendencies (from pbp)** "
+            "on the Run Data Pulls page (needs `pbp.csv`)."
+        )
+        return
+    row = ident[ident["team_abbr"] == team_abbr].iloc[0]
+    hc, oc, dc = (row.get(k) or "" for k in ("hc_name", "oc_name", "dc_name"))
+    if hc:
+        st.markdown(f"**Head coach:** {hc}")
+
+    off_col, def_col = st.columns(2)
+    with off_col:
+        if oc:
+            st.markdown(f"**Offense** &nbsp;·&nbsp; OC: {oc}")
+        st.caption(row.get("off_identity") or "—")
+        c = st.columns(2)
+        c[0].metric("Neutral pass rate", _identity_metric(row, "off_pass_rate_neutral"))
+        c[1].metric("Pass over expected", _identity_metric(row, "off_proe", suffix="", digits=1))
+        c = st.columns(3)
+        c[0].metric("11 personnel", _identity_metric(row, "off_11_pct"))
+        c[1].metric("12 personnel", _identity_metric(row, "off_12_pct"))
+        c[2].metric("21 personnel", _identity_metric(row, "off_21_pct"))
+        c = st.columns(3)
+        c[0].metric("Shotgun", _identity_metric(row, "off_shotgun_pct"))
+        c[1].metric("Under center", _identity_metric(row, "off_under_center_pct"))
+        c[2].metric("Pistol", _identity_metric(row, "off_pistol_pct"))
+    with def_col:
+        if dc:
+            st.markdown(f"**Defense** &nbsp;·&nbsp; DC: {dc}")
+        st.caption(row.get("def_identity") or "—")
+        c = st.columns(2)
+        c[0].metric("Blitz rate", _identity_metric(row, "def_blitz_pct"))
+        c[1].metric("Box avg", _identity_metric(row, "def_box_avg", suffix="", digits=1))
+        c = st.columns(3)
+        c[0].metric("Base (4 DB)", _identity_metric(row, "def_base_pct"))
+        c[1].metric("Nickel", _identity_metric(row, "def_nickel_pct"))
+        c[2].metric("Dime+", _identity_metric(row, "def_dime_pct"))
+        c = st.columns(2)
+        c[0].metric("Man coverage", _identity_metric(row, "def_man_pct"))
+        c[1].metric("Most-used coverage", row.get("def_top_coverage") or "—")
+
+    st.caption(
+        f"HC/OC/DC from the coaching-staff pull. Tendencies + the one-line scheme "
+        f"read are computed from {row['derived_from_seasons']} regular-season "
+        f"play-by-play (personnel ~90% charted, coverage ~45%)."
+    )
+
+
+def _render_coaching_staff(team_abbr: str):
+    staff = load_csv_if_exists("coaching_staff.csv")
+    if staff is None or team_abbr not in set(staff["team_abbr"]):
+        st.caption(
+            "Coaching staff not pulled yet — run **Coaching staff (Wikipedia)** on the "
+            "Run Data Pulls page."
+        )
+        return
+    team_staff = staff[staff["team_abbr"] == team_abbr]
+    for key, label in STAFF_GROUP_ORDER:
+        grp = team_staff[team_staff["group"] == key]
+        if grp.empty:
+            continue
+        st.markdown(f"**{label}**")
+        st.dataframe(
+            grp[["title", "name"]].rename(columns={"title": "Title", "name": "Name"}),
+            hide_index=True, use_container_width=True,
+        )
+
+
+def _render_reserve_lists(team_abbr: str):
+    """Practice squad + every reserve designation (IR, PUP, NFI, suspended, ...),
+    straight from the club team-site roster pull. The formation tabs only show the
+    Active 53; this is everyone else who's technically on the team."""
+    ros = load_csv_if_exists("nfl_rosters.csv")
+    if ros is None or team_abbr not in set(ros["team_abbr"]):
+        st.caption(
+            "Team-site roster not pulled yet — run **Official team-site rosters** on the "
+            "Run Data Pulls page."
+        )
+        return
+    team_ros = ros[ros["team_abbr"] == team_abbr]
+    non_active = team_ros[~team_ros["roster_status"].fillna("").str.startswith("Active")]
+    if non_active.empty:
+        st.caption(
+            "No practice squad or reserve players listed yet — the practice squad forms "
+            "after the waiver period, usually the day after final cutdowns."
+        )
+        return
+
+    def _status_sort(s: str):
+        return (0, s) if str(s).startswith("Practice Squad") else (1, str(s))
+
+    cols = [c for c in ["player", "pos", "jersey", "experience", "college"] if c in non_active.columns]
+    rename = {"player": "Player", "pos": "Pos", "jersey": "#", "experience": "Exp", "college": "College"}
+    for status in sorted(non_active["roster_status"].dropna().unique(), key=_status_sort):
+        grp = non_active[non_active["roster_status"] == status]
+        st.markdown(f"**{status}** ({len(grp)})")
+        st.dataframe(grp[cols].rename(columns=rename), hide_index=True, use_container_width=True)
+
+
 def page_depth_charts():
     st.title("🏈 Team Depth Charts")
     st.caption(
@@ -1492,8 +1619,9 @@ def page_depth_charts():
         "table -- a 3-4 team's line is 3 wide because that's what's actually on "
         "their depth chart, not a template. Click any player for their injury "
         "status, model predictions, current Underdog lines, and recent games. "
-        "Source: Footballguys, with structured status tags (Q/PUP/IR/SUS/NFI/O) "
-        "that update faster than the official injury report."
+        "Starters/backups: Footballguys (status tags Q/PUP/IR/SUS/NFI/O). Practice "
+        "squad & reserve: club team sites. Coaching staff: Wikipedia. Scheme "
+        "tendencies: play-by-play."
     )
     df = load_csv_if_exists("footballguys_depth.csv")
 
@@ -1507,8 +1635,12 @@ def page_depth_charts():
     chosen_team_name = st.selectbox("Team", team_names.index)
     team_abbr = team_names[chosen_team_name]
     team_df = df[df["team_abbr"] == team_abbr]
+    team_abbr_std = _DEPTH_ABBR_ALIASES.get(team_abbr, team_abbr)
 
-    tabs = st.tabs(["Offense", "Defense", "Special Teams"])
+    with st.expander("Team identity — scheme & personnel", expanded=False):
+        _render_team_identity(team_abbr_std)
+
+    tabs = st.tabs(["Offense", "Defense", "Special Teams", "Practice Squad & Reserve", "Coaching Staff"])
     with tabs[0]:
         cat_df = team_df[team_df["category"] == "offense"]
         if cat_df.empty:
@@ -1527,6 +1659,10 @@ def page_depth_charts():
             st.caption("No data pulled for this unit.")
         else:
             _grouped_formation(cat_df, SPECIAL_TEAMS_GROUPS, photo_map)
+    with tabs[3]:
+        _render_reserve_lists(team_abbr_std)
+    with tabs[4]:
+        _render_coaching_staff(team_abbr_std)
 
 
 UNDERDOG_DISPLAY_COLUMNS = [
