@@ -23,6 +23,7 @@ from utils import (
 )
 from fantasy_scoring import (
     SCORING_LABELS, project_points, project_breakdown, fantasy_points_from_weekly,
+    project_season_points,
 )
 
 GAME_PROPS = ["passing_yards", "passing_tds", "passing_ints", "rushing_yards",
@@ -581,18 +582,240 @@ def _render_player_card(scoring: str):
                        "32 = softest), from this season's fantasy points allowed.")
 
 
+# -------------------------------------------------------------- draft: season
+
+SEASON_STATS = ["season_pass_yards", "season_pass_tds", "season_rush_yards",
+                "season_rush_tds", "season_receiving_yards", "season_rec_tds"]
+# starters per position for a default 12-team league; FLEX split 45/45/10 RB/WR/TE
+DEFAULT_STARTERS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1}
+_TIER_GAP = {"QB": 18, "RB": 22, "WR": 20, "TE": 14}
+
+
+def _bye_weeks() -> dict:
+    """team_abbr -> bye week, from the upcoming season's schedule (the week 1-18
+    the team has no game)."""
+    s = load_csv_if_exists("schedules.csv")
+    if s is None:
+        return {}
+    s = s[s["season"] == s["season"].max()]
+    played = {}
+    for t in set(s["home_team"]) | set(s["away_team"]):
+        wks = set(s[(s["home_team"] == t) | (s["away_team"] == t)]["week"])
+        bye = [w for w in range(1, 19) if w not in wks]
+        played[t] = bye[0] if bye else None
+    return played
+
+
+@st.cache_data(show_spinner=False)
+def _draft_pool(_ud_mtime: float, _ros_mtime: float, scoring: str) -> pd.DataFrame:
+    ud = load_csv_if_exists("underdog_props.csv")
+    if ud is None:
+        return pd.DataFrame()
+    s = ud[ud["stat_name"].isin(SEASON_STATS) & (ud["choice"].str.lower() == "over")]
+    if s.empty:
+        return pd.DataFrame()
+    wide = s.pivot_table(index="full_name", columns="stat_name", values="stat_value", aggfunc="first")
+    pos = (s.sort_values("stat_name").groupby("full_name")["position_name"].first()
+           if "position_name" in s.columns
+           else s.groupby("full_name")["position_display_name"].first())
+
+    rosters = load_csv_if_exists("nfl_rosters.csv")
+    team_by, status_by = {}, {}
+    if rosters is not None:
+        rn = rosters.assign(_k=rosters["player"].apply(normalize_name))
+        team_by = rn.drop_duplicates("_k").set_index("_k")["team_abbr"].to_dict()
+        status_by = rn.drop_duplicates("_k").set_index("_k")["roster_status"].to_dict()
+    byes = _bye_weeks()
+
+    rows = []
+    for name, r in wide.iterrows():
+        position = str(pos.get(name, "")).upper()
+        if position not in POSITIONS:
+            continue
+        proj = project_season_points(r.to_dict(), position, scoring)
+        k = normalize_name(name)
+        team = team_by.get(k, "")
+        status = status_by.get(k, "")
+        rows.append({
+            "player": name, "position": position, "team": team,
+            "bye": byes.get(team), "proj": proj["points"],
+            "status": "" if str(status).startswith(("Active", "nan")) or not status else status,
+            "pass_yd": r.get("season_pass_yards"), "rush_yd": r.get("season_rush_yards"),
+            "rec_yd": r.get("season_receiving_yards"), "rec": proj["rec_est"],
+            "pass_td": r.get("season_pass_tds"), "rush_td": r.get("season_rush_tds"),
+            "rec_td": r.get("season_rec_tds"),
+        })
+    df = pd.DataFrame(rows).sort_values("proj", ascending=False).reset_index(drop=True)
+    df["pos_rank"] = df.groupby("position")["proj"].rank(method="first", ascending=False).astype(int)
+    return df
+
+
+def _add_vbd(df: pd.DataFrame, teams: int, starters: dict) -> pd.DataFrame:
+    """Value over replacement: replacement = the projected points of the player at
+    the last-startable slot for their position (starters + a share of FLEX)."""
+    flex_split = {"RB": 0.45, "WR": 0.45, "TE": 0.10}
+    df = df.copy()
+    repl = {}
+    for pos in POSITIONS:
+        pool = df[df["position"] == pos]["proj"].tolist()
+        n_start = starters.get(pos, 0) + starters.get("FLEX", 0) * flex_split.get(pos, 0)
+        idx = max(0, min(len(pool) - 1, round(teams * n_start) - 1)) if pool else 0
+        repl[pos] = pool[idx] if pool else 0.0
+    df["vbd"] = (df["proj"] - df["position"].map(repl)).round(1)
+    return df.sort_values("vbd", ascending=False).reset_index(drop=True)
+
+
+def _tier(sub: pd.Series, gap: float) -> list:
+    tiers, t, prev = [], 1, None
+    for v in sub:
+        if prev is not None and prev - v >= gap:
+            t += 1
+        tiers.append(t)
+        prev = v
+    return tiers
+
+
+def _draft_table(scoring: str, teams: int, starters: dict) -> pd.DataFrame:
+    df = _draft_pool(_mtime(RAW_DIR, "underdog_props.csv"), _mtime(RAW_DIR, "nfl_rosters.csv"), scoring)
+    if df.empty:
+        return df
+    df = _add_vbd(df, teams, starters)
+    df["tier"] = 0
+    for pos in POSITIONS:
+        m = df["position"] == pos
+        df.loc[m, "tier"] = _tier(df.loc[m].sort_values("proj", ascending=False)["proj"], _TIER_GAP[pos])
+    df["overall"] = range(1, len(df) + 1)
+    return df
+
+
+def _mtime(d: str, name: str) -> float:
+    p = os.path.join(d, name)
+    return os.path.getmtime(p) if os.path.exists(p) else 0.0
+
+
+def _league_settings():
+    with st.expander("League settings"):
+        c = st.columns(6)
+        teams = c[0].number_input("Teams", 4, 20, 12, key="ff_lg_teams")
+        starters = {
+            "QB": c[1].number_input("QB", 0, 3, 1, key="ff_lg_qb"),
+            "RB": c[2].number_input("RB", 0, 5, 2, key="ff_lg_rb"),
+            "WR": c[3].number_input("WR", 0, 6, 2, key="ff_lg_wr"),
+            "TE": c[4].number_input("TE", 0, 3, 1, key="ff_lg_te"),
+            "FLEX": c[5].number_input("FLEX", 0, 4, 1, key="ff_lg_flex"),
+        }
+    return int(teams), {k: int(v) for k, v in starters.items()}
+
+
+def _render_rankings(scoring: str, teams: int, starters: dict):
+    df = _draft_table(scoring, teams, starters)
+    if df.empty:
+        st.warning("No Underdog season-long O/U lines pulled yet — run **Underdog pick'em props** "
+                   "in Run Data Pulls.")
+        return
+    pos = st.radio("Position", ["All"] + POSITIONS, horizontal=True, key="ff_rank_pos")
+    view = df if pos == "All" else df[df["position"] == pos]
+    view = view.sort_values("vbd", ascending=False)
+
+    st.caption(f"{SCORING_LABELS[scoring]} · projected **full-season** points from Underdog's "
+               f"season-long O/U lines (the market's implied totals). **VBD** = points above the "
+               f"last startable player at the position in a {teams}-team league — sort by this, "
+               f"not raw points. Receptions & QB INTs are estimated (no Underdog market).")
+
+    show = view.assign(
+        Pos=lambda d: d["position"] + d["pos_rank"].astype(str),
+        Bye=lambda d: d["bye"].map(lambda b: "" if pd.isna(b) else str(int(b))),
+    )[["overall", "Pos", "tier", "player", "team", "Bye", "proj", "vbd", "status",
+       "pass_yd", "rush_yd", "rec_yd", "rec", "rush_td", "rec_td"]]
+    show.columns = ["#", "Pos", "Tier", "Player", "Team", "Bye", "Proj", "VBD", "Status",
+                    "PaYd", "RuYd", "ReYd", "Rec", "RuTD", "ReTD"]
+    st.dataframe(show, hide_index=True, width="stretch", height=620,
+                 column_config={"VBD": st.column_config.NumberColumn("VBD", format="%.0f")})
+
+
+def _render_draft_board(scoring: str, teams: int, starters: dict):
+    df = _draft_table(scoring, teams, starters)
+    if df.empty:
+        st.warning("No Underdog season-long O/U lines pulled yet.")
+        return
+    names = df["player"].tolist()
+    c1, c2, c3 = st.columns([4, 4, 1])
+    taken = c1.multiselect("Off the board (drafted by anyone)", names, key="draft_taken")
+    # keep My picks a subset of what's off the board -- set before that widget renders
+    st.session_state["draft_mine"] = [m for m in st.session_state.get("draft_mine", []) if m in taken]
+    mine = c2.multiselect("My picks (from the off-the-board list)", taken, key="draft_mine")
+    if c3.button("Reset", width="stretch"):
+        st.session_state["draft_taken"] = []
+        st.session_state["draft_mine"] = []
+        st.rerun()
+
+    avail = df[~df["player"].isin(taken)]
+
+    st.subheader("Best available")
+    top = avail.head(12).assign(Pos=lambda d: d["position"] + d["pos_rank"].astype(str))
+    st.dataframe(
+        top[["overall", "Pos", "tier", "player", "team", "bye", "proj", "vbd"]].rename(
+            columns={"overall": "#", "tier": "Tier", "player": "Player", "team": "Team",
+                     "bye": "Bye", "proj": "Proj", "vbd": "VBD"}),
+        hide_index=True, width="stretch")
+
+    st.subheader("Best available by position")
+    cols = st.columns(4)
+    for col, p in zip(cols, POSITIONS):
+        sub = avail[avail["position"] == p].head(5)
+        with col:
+            st.markdown(f"**{p}**")
+            for _, r in sub.iterrows():
+                cliff = "  ⚠️" if (avail[(avail.position == p) & (avail.tier == r.tier)].shape[0] <= 2) else ""
+                st.caption(f"{r.player} · {r.proj:.0f} · T{r.tier}{cliff}")
+
+    if mine:
+        st.subheader("My roster")
+        roster = df[df["player"].isin(mine)]
+        counts = roster["position"].value_counts().to_dict()
+        need = [p for p in POSITIONS
+                if counts.get(p, 0) < starters.get(p, 0)]
+        rc = st.columns(4)
+        for col, p in zip(rc, POSITIONS):
+            col.metric(p, f"{counts.get(p, 0)} / {starters.get(p, 0)}")
+        st.caption(("Still need a starter at: **" + ", ".join(need) + "**") if need
+                   else "Starting lineup filled — draft upside / depth.")
+        st.dataframe(
+            roster.sort_values("overall").assign(Pos=lambda d: d["position"] + d["pos_rank"].astype(str))[
+                ["overall", "Pos", "player", "team", "bye", "proj", "vbd"]].rename(
+                columns={"overall": "#", "player": "Player", "team": "Team", "bye": "Bye",
+                         "proj": "Proj", "vbd": "VBD"}),
+            hide_index=True, width="stretch")
+
+
 # ----------------------------------------------------------------------- page
 
 def page_fantasy():
     st.title("🏆 Fantasy")
+    label = st.radio("Scoring", ["PPR", "Half-PPR"], horizontal=True, key="ff_scoring")
+    scoring = "ppr" if label == "PPR" else "half"
+
+    mode = st.radio("Mode", ["In-season", "Draft prep"], horizontal=True, key="ff_mode",
+                    label_visibility="collapsed")
+
+    if mode == "Draft prep":
+        st.caption(
+            "Full-season value-based rankings and a live draft board, built from Underdog's "
+            "season-long O/U lines (the market's implied season totals)."
+        )
+        teams, starters = _league_settings()
+        d_rank, d_board = st.tabs(["Rankings / cheat sheet", "Draft board"])
+        with d_rank:
+            _render_rankings(scoring, teams, starters)
+        with d_board:
+            _render_draft_board(scoring, teams, starters)
+        return
+
     st.caption(
         "Weekly projections, start/sit, defense-vs-position matchups, and boom/bust. "
         "Projections roll up the prop model's per-stat trailing averages; matchups and "
         "boom/bust come from weekly box scores."
     )
-    label = st.radio("Scoring", ["PPR", "Half-PPR"], horizontal=True, key="ff_scoring")
-    scoring = "ppr" if label == "PPR" else "half"
-
     tabs = st.tabs(["Player Card", "Projections", "Start / Sit", "Matchups", "Boom / Bust"])
     with tabs[0]:
         _render_player_card(scoring)

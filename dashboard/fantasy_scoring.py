@@ -113,3 +113,47 @@ def project_breakdown(stats: dict, scoring: str = "ppr") -> list[dict]:
     ]
     return [{"category": c, "projected": round(v, 1), "points": round(p, 1), "rule": rule}
             for c, v, p, rule in items if abs(v) > 1e-9]
+
+
+# yards per reception used to back a season reception estimate out of an Underdog
+# season receiving-yards O/U (Underdog has no season-receptions market). Rough
+# position averages, 2023-24.
+_SEASON_YPC = {"WR": 12.5, "TE": 10.0, "RB": 7.8, "QB": 10.0}
+
+
+def project_season_points(stats: dict, position: str, scoring: str = "ppr") -> dict:
+    """Projected FULL-SEASON fantasy points from Underdog's season-long O/U lines
+    (the market's implied season totals), keyed by stat_name:
+    season_pass_yards / season_pass_tds / season_rush_yards / season_rush_tds /
+    season_receiving_yards / season_rec_tds. Receptions are estimated from
+    season_receiving_yards at a position yards-per-catch; interceptions aren't on
+    Underdog's board so a starting-QB flat -10 is applied to season_pass_yards
+    holders. Returns {'points', 'breakdown': [(label, value, points)], 'rec_est'}."""
+    def g(k):
+        v = stats.get(k)
+        return float(v) if v is not None and pd.notna(v) else 0.0
+    rec_pt = RECEPTION_PT[scoring]
+
+    pass_yd, pass_td = g("season_pass_yards"), g("season_pass_tds")
+    rush_yd, rush_td = g("season_rush_yards"), g("season_rush_tds")
+    rec_yd, rec_td = g("season_receiving_yards"), g("season_rec_tds")
+    rec_est = rec_yd / _SEASON_YPC.get(position, 11.0) if rec_yd else 0.0
+    ints = -10.0 if pass_yd > 500 else 0.0  # ~ -10 FP of INTs for a full-time starter
+
+    rows = [
+        ("Passing yards", pass_yd, pass_yd * PASS_YD),
+        ("Passing TDs", pass_td, pass_td * PASS_TD),
+        ("Interceptions (est.)", ints / INTERCEPTION if ints else 0.0, ints),
+        ("Rushing yards", rush_yd, rush_yd * RUSH_YD),
+        ("Rushing TDs", rush_td, rush_td * RUSH_TD),
+        ("Receiving yards", rec_yd, rec_yd * REC_YD),
+        ("Receiving TDs", rec_td, rec_td * REC_TD),
+        ("Receptions (est.)", rec_est, rec_est * rec_pt),
+    ]
+    total = sum(p for _, _, p in rows)
+    return {
+        "points": round(total, 1),
+        "rec_est": round(rec_est, 1),
+        "breakdown": [{"category": c, "projected": round(v, 1), "points": round(p, 1)}
+                      for c, v, p in rows if abs(p) > 1e-9],
+    }
