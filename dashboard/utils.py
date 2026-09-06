@@ -1,6 +1,7 @@
 """Shared helpers for the ParlayModel dashboard."""
 import email.utils
 import os
+import re
 import subprocess
 import sys
 import urllib.parse
@@ -355,6 +356,42 @@ def load_current_predictions() -> pd.DataFrame | None:
 # "receptions". Every other stat_name the model emits already matches Underdog's.
 _UNDERDOG_TO_MODEL_STAT = {"receiving_rec": "receptions"}
 
+_PERIOD_STAT_RE = re.compile(r"^period_|_each_(half|quarter)$")
+
+
+def prop_scope(stat_name: str) -> str:
+    """game (single full game) | period (a quarter/half split) | season (full-season
+    total). Used to default the Parlay Builder to single-game legs -- season and
+    period props are a different bet shape and price very differently."""
+    s = str(stat_name)
+    if s.startswith("season_") or s == "regular_season_games_started":
+        return "season"
+    if _PERIOD_STAT_RE.search(s):
+        return "period"
+    return "game"
+
+
+# Below these single-game lines a prop is a "does this benchwarmer touch the ball"
+# question, not a real projection -- the model's confidence there is trivially
+# extreme (a deep backup at 99% over 3.5 rushing yards) and the payout is tiny.
+# Filtered by default in the Parlay Builder; a stat not listed has no floor.
+MIN_MEANINGFUL_LINE = {
+    "rushing_yds": 24.5,
+    "receiving_yds": 19.5,
+    "receiving_rec": 2.5,
+    "passing_yds": 149.5,
+    "sacks": 1.5,
+}
+
+
+def is_low_noise_line(stat_name: str, line) -> bool:
+    """True when this game prop's line is below MIN_MEANINGFUL_LINE for its stat."""
+    floor = MIN_MEANINGFUL_LINE.get(str(stat_name))
+    try:
+        return floor is not None and float(line) < floor
+    except (TypeError, ValueError):
+        return False
+
 # stat_name -> weekly_stats.csv column to estimate week-to-week variance from, for
 # recomputing a proxy-line probability against the real Underdog line. Anything not
 # here (TDs, defensive sacks, season / period totals) has no continuous per-game
@@ -381,6 +418,7 @@ def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
     biddable: every row is a prop Underdog is actually offering right now."""
     board = props.copy()
     board["_k"] = board["full_name"].apply(normalize_name)
+    board["scope"] = board["stat_name"].map(prop_scope)
 
     if predictions is not None and not predictions.empty:
         p = predictions.copy()

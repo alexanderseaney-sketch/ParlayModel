@@ -19,7 +19,7 @@ from utils import (
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
     pretty_stat_name, load_line_movement,
     estimate_player_stat_std, recompute_probability_for_real_line,
-    score_underdog_board,
+    score_underdog_board, is_low_noise_line,
 )
 
 # abspath first: Streamlit can hand this module a relative __file__, which would
@@ -459,12 +459,28 @@ def page_parlay_builder():
             "Confidence range to show", 0.0, 1.0, (0.4, 1.0), 0.05,
             help="0 = coinflips included. 0.4 historically ~78% accurate. Drag both ends to isolate a band instead of just a floor.",
         )
-        model_only = st.toggle(
-            "Model-backed only", value=True,
-            help="On: only Underdog props a trained model covers. Off: also show the "
-                 "rest of Underdog's board (receiving_long, tackles, passing_att, ...) "
-                 "with no confidence.",
-        )
+        opt_a, opt_b, opt_c = st.columns([2, 2, 3])
+        with opt_a:
+            scope_choice = st.segmented_control(
+                "Prop scope", ["Game", "Period", "Season", "All"], default="Game",
+                help="Season-long and quarter/half props are a different bet shape "
+                     "and price very differently -- default is single-game legs.",
+            ) or "Game"
+        with opt_b:
+            model_only = st.toggle(
+                "Model-backed only", value=True,
+                help="On: only Underdog props a trained model covers. Off: also show "
+                     "the rest of Underdog's board (receiving_long, tackles, "
+                     "passing_att, ...) with no confidence.",
+            )
+        with opt_c:
+            meaningful_only = st.toggle(
+                "Meaningful lines only", value=True,
+                help="Hide game props with a trivially low line (rushing < 24.5, "
+                     "receiving < 19.5, receptions < 2.5, ...) -- those are "
+                     "'does this benchwarmer touch the ball' questions where the "
+                     "model's 99%-confident is noise and the payout is tiny.",
+            )
 
         weekly_stats_for_std = load_csv_if_exists("weekly_stats.csv")
 
@@ -539,6 +555,8 @@ def page_parlay_builder():
             st.metric("Underdog props on the board", f"{n_props}  ·  {n_modeled} model-backed")
 
             options_df = board[board[name_col].astype(str).str.contains(search, case=False, na=False)] if search else board
+            if scope_choice != "All":
+                options_df = options_df[options_df["scope"] == scope_choice.lower()]
             if prop_type_filter:
                 options_df = options_df[options_df[stat_col].isin(prop_type_filter)]
             if team_filter:
@@ -558,13 +576,19 @@ def page_parlay_builder():
             has_model = options_df["has_model"].astype(bool)
             unbettable = ~both_sides & has_model & (options_df["side_prob"].fillna(1.0) < 0.5)
             in_range = options_df["confidence"].between(min_confidence, max_confidence)
+            low_line = options_df.apply(
+                lambda r: is_low_noise_line(r[stat_col], r[line_col]), axis=1
+            ) if len(options_df) else pd.Series(dtype=bool)
 
-            n_out_range = int((has_model & ~in_range & ~unbettable).sum())
-            n_no_model = int((~has_model).sum())
+            n_out_range = int((has_model & ~in_range & ~unbettable & ~low_line).sum())
+            n_no_model = int((~has_model & ~low_line).sum())
+            n_low = int(low_line.sum()) if meaningful_only else 0
 
             keep = ~unbettable
             if model_only:
                 keep = keep & has_model
+            if meaningful_only:
+                keep = keep & ~low_line
             keep = keep & (in_range | ~has_model | narrowed)
             options_df = options_df[keep]
 
@@ -572,6 +596,8 @@ def page_parlay_builder():
                 parts = []
                 if n_out_range:
                     parts.append(f"{n_out_range} outside the confidence range")
+                if n_low:
+                    parts.append(f"{n_low} with a trivially low line")
                 if n_no_model and model_only:
                     parts.append(f"{n_no_model} with no model (toggle **Model-backed only** off to show)")
                 if parts:
