@@ -41,6 +41,11 @@ FLEX = ["RB", "WR", "TE"]
 BOOM = {"QB": 25, "RB": 20, "WR": 20, "TE": 15}
 BUST = {"QB": 12, "RB": 6, "WR": 6, "TE": 4}
 
+# projection drop (fantasy points) that starts a new tier -- weekly scale for the
+# in-season Projections tab, full-season scale for the draft board.
+_WEEKLY_TIER_GAP = {"QB": 3.0, "RB": 2.5, "WR": 2.5, "TE": 2.0}
+_SEASON_TIER_GAP = {"QB": 18, "RB": 22, "WR": 20, "TE": 14}
+
 _STATUS_LABELS = {"IR": "Injured Reserve", "PUP": "Reserve/PUP", "NFI": "Reserve/NFI",
                   "SUS": "Suspended", "NR": "Reserve/Did not report", "RET": "Reserve/Retired",
                   "EXE": "Commissioner exempt", "PS": "Practice squad"}
@@ -113,24 +118,15 @@ def _projections(pred_mtime: float, scoring: str) -> pd.DataFrame:
         out["receptions"].notna(), out["receiving_yards_rb"] / 7.5).round(1)
     out["td"] = out[["rush_rec_tds", "rush_rec_tds_qb"]].sum(axis=1, min_count=1)
 
-    out = out.sort_values("proj", ascending=False).reset_index()  # keep player_id as a column
+    out = out[out["proj"] > 0].sort_values("proj", ascending=False).reset_index()  # keep player_id
     out["pos_rank"] = out.groupby("position")["proj"].rank(method="first", ascending=False).astype(int)
     out["overall_rank"] = range(1, len(out) + 1)   # across all QB/RB/WR/TE
-    out["tier"] = out.groupby("position", group_keys=False)["proj"].apply(
-        lambda s: pd.Series(_tiers(s), index=s.index))
+    out["tier"] = 0
+    for pos in POSITIONS:
+        m = out["position"] == pos
+        out.loc[m, "tier"] = _tier(
+            out.loc[m].sort_values("proj", ascending=False)["proj"], _WEEKLY_TIER_GAP[pos])
     return out
-
-
-def _tiers(proj: pd.Series) -> list:
-    """New tier whenever the drop from the previous player is >= 1.5 fantasy points --
-    a rough but readable way to show where the cliffs are within a position."""
-    tiers, t, prev = [], 1, None
-    for v in proj:
-        if prev is not None and prev - v >= 1.5:
-            t += 1
-        tiers.append(t)
-        prev = v
-    return tiers
 
 
 def _render_projections(scoring: str):
@@ -149,7 +145,7 @@ def _render_projections(scoring: str):
         view = df[df["position"] == pos]
     view = view.sort_values("proj", ascending=False).copy()
     view["Tier"] = view["tier"]
-    view["Model"] = view["lean"].map(_lean_score)
+    view["Model"] = pd.array([_lean_score(v) for v in view["lean"]], dtype="Int64")
 
     wk = int(df["week"].mode().iloc[0]) if not df["week"].mode().empty else "?"
     st.caption(f"{SCORING_LABELS[scoring]} · projected points for week {wk} · rolled up from "
@@ -588,7 +584,39 @@ SEASON_STATS = ["season_pass_yards", "season_pass_tds", "season_rush_yards",
                 "season_rush_tds", "season_receiving_yards", "season_rec_tds"]
 # starters per position for a default 12-team league; FLEX split 45/45/10 RB/WR/TE
 DEFAULT_STARTERS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1}
-_TIER_GAP = {"QB": 18, "RB": 22, "WR": 20, "TE": 14}
+
+# Underdog only prices season-long O/U on ~150 notable players. Past that the prop
+# model's own season projections (its trailing per-game rate carried to a full
+# season) fill the board so a 12-team draft has enough depth. The model runs a bit
+# hot vs the market, so its points are scaled by the per-position median ratio of
+# (market projection / model projection) over players priced by both. QB is left
+# market-only: the model has no season passing line, so a QB's model season row is
+# rushing-only and useless.
+_MODEL_SEASON_PROPS = ["season_rush_yards", "season_rush_tds",
+                       "season_receiving_yards", "season_rec_tds"]
+_MODEL_SCALE = {"RB": 0.79, "WR": 1.00, "TE": 0.88}
+
+
+def _clean_status(s) -> str:
+    s = str(s).strip()
+    # blank out the "he's fine" states -- only reserve / PS / suspended etc. is worth
+    # flagging on a draft board. "ACT"/"DEV" are raw codes a couple of team sites emit.
+    return "" if not s or s in ("nan", "ACT", "DEV") or s.startswith("Active") else s
+
+
+def _roster_lookup() -> tuple[dict, dict]:
+    """normalized name -> team_abbr / roster_status from nfl_rosters.csv, keeping
+    the Active row when a name collides across teams (e.g. a star and a practice-
+    squad player who share a name)."""
+    ros = load_csv_if_exists("nfl_rosters.csv")
+    if ros is None:
+        return {}, {}
+    rn = ros.assign(
+        _k=ros["player"].apply(normalize_name),
+        _act=ros["roster_status"].fillna("").str.startswith("Active"),
+    ).sort_values("_act", ascending=False).drop_duplicates("_k")
+    return (rn.set_index("_k")["team_abbr"].to_dict(),
+            rn.set_index("_k")["roster_status"].to_dict())
 
 
 def _bye_weeks() -> dict:
@@ -606,8 +634,12 @@ def _bye_weeks() -> dict:
     return played
 
 
+def _num(v) -> float:
+    return float(v) if v is not None and pd.notna(v) else float("nan")
+
+
 @st.cache_data(show_spinner=False)
-def _draft_pool(_ud_mtime: float, _ros_mtime: float, scoring: str) -> pd.DataFrame:
+def _draft_pool(_ud_mtime: float, _ros_mtime: float, _pred_mtime: float, scoring: str) -> pd.DataFrame:
     ud = load_csv_if_exists("underdog_props.csv")
     if ud is None:
         return pd.DataFrame()
@@ -615,37 +647,67 @@ def _draft_pool(_ud_mtime: float, _ros_mtime: float, scoring: str) -> pd.DataFra
     if s.empty:
         return pd.DataFrame()
     wide = s.pivot_table(index="full_name", columns="stat_name", values="stat_value", aggfunc="first")
-    pos = (s.sort_values("stat_name").groupby("full_name")["position_name"].first()
-           if "position_name" in s.columns
-           else s.groupby("full_name")["position_display_name"].first())
+    ud_pos = (s.sort_values("stat_name").groupby("full_name")["position_name"].first()
+              if "position_name" in s.columns
+              else s.groupby("full_name")["position_display_name"].first())
 
-    rosters = load_csv_if_exists("nfl_rosters.csv")
-    team_by, status_by = {}, {}
-    if rosters is not None:
-        rn = rosters.assign(_k=rosters["player"].apply(normalize_name))
-        team_by = rn.drop_duplicates("_k").set_index("_k")["team_abbr"].to_dict()
-        status_by = rn.drop_duplicates("_k").set_index("_k")["roster_status"].to_dict()
+    team_by, status_by = _roster_lookup()
     byes = _bye_weeks()
 
-    rows = []
+    def _row(name, get, position, source, team):
+        d = {k: _num(get(k)) for k in SEASON_STATS}
+        if source == "model":
+            # pull the model's (slightly hot) season line onto the market scale so
+            # its points, reception estimate and shown yardage are all consistent.
+            f = _MODEL_SCALE.get(position, 1.0)
+            d = {k: (v * f if pd.notna(v) else v) for k, v in d.items()}
+        pr = project_season_points(d, position, scoring)
+        return {
+            "player": name, "position": position, "team": team or "",
+            "bye": byes.get(team or ""), "proj": round(pr["points"], 1), "source": source,
+            "status": _clean_status(status_by.get(normalize_name(name), "")),
+            "pass_yd": d["season_pass_yards"], "rush_yd": d["season_rush_yards"],
+            "rec_yd": d["season_receiving_yards"], "rec": pr["rec_est"],
+            "pass_td": d["season_pass_tds"], "rush_td": d["season_rush_tds"],
+            "rec_td": d["season_rec_tds"],
+        }
+
+    rows, seen = [], set()
     for name, r in wide.iterrows():
-        position = str(pos.get(name, "")).upper()
+        position = str(ud_pos.get(name, "")).upper()
         if position not in POSITIONS:
             continue
-        proj = project_season_points(r.to_dict(), position, scoring)
-        k = normalize_name(name)
-        team = team_by.get(k, "")
-        status = status_by.get(k, "")
-        rows.append({
-            "player": name, "position": position, "team": team,
-            "bye": byes.get(team), "proj": proj["points"],
-            "status": "" if str(status).startswith(("Active", "nan")) or not status else status,
-            "pass_yd": r.get("season_pass_yards"), "rush_yd": r.get("season_rush_yards"),
-            "rec_yd": r.get("season_receiving_yards"), "rec": proj["rec_est"],
-            "pass_td": r.get("season_pass_tds"), "rush_td": r.get("season_rush_tds"),
-            "rec_td": r.get("season_rec_tds"),
-        })
-    df = pd.DataFrame(rows).sort_values("proj", ascending=False).reset_index(drop=True)
+        seen.add(normalize_name(name))
+        rows.append(_row(name, r.get, position, "market", team_by.get(normalize_name(name), "")))
+
+    # depth past Underdog's board, from the prop model's own season projections
+    preds = load_current_predictions()
+    if preds is not None:
+        ms = preds[preds["prop_type"].isin(_MODEL_SEASON_PROPS)]
+        if not ms.empty:
+            mw = ms.pivot_table(index="player_display_name", columns="prop_type",
+                                values="proxy_line", aggfunc="first")
+            mmeta = ms.groupby("player_display_name").agg(
+                position=("position", "first"), team=("recent_team", "first"))
+            for name, r in mw.iterrows():
+                if normalize_name(name) in seen:
+                    continue
+                position = str(mmeta.loc[name, "position"]).upper()
+                if position not in _MODEL_SCALE:            # QB model season = rushing only
+                    continue
+                seen.add(normalize_name(name))
+                team = mmeta.loc[name, "team"] or team_by.get(normalize_name(name), "")
+                rows.append(_row(name, r.get, position, "model", team))
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    for c in ("pass_yd", "rush_yd", "rec_yd", "pass_td", "rush_td", "rec_td"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    # keep every market-priced player; drop model-only depth below ~3 pts/game so the
+    # board isn't padded with camp bodies the model gave a token projection.
+    keep = (df["source"] == "market") | (df["proj"] >= 50)
+    df = df[keep & (df["proj"] > 0)].sort_values("proj", ascending=False).reset_index(drop=True)
     df["pos_rank"] = df.groupby("position")["proj"].rank(method="first", ascending=False).astype(int)
     return df
 
@@ -682,14 +744,16 @@ def _tier(sub: pd.Series, gap: float) -> list:
 
 
 def _draft_table(scoring: str, teams: int, starters: dict) -> pd.DataFrame:
-    df = _draft_pool(_mtime(RAW_DIR, "underdog_props.csv"), _mtime(RAW_DIR, "nfl_rosters.csv"), scoring)
+    df = _draft_pool(_mtime(RAW_DIR, "underdog_props.csv"), _mtime(RAW_DIR, "nfl_rosters.csv"),
+                     _pred_mtime(), scoring)
     if df.empty:
         return df
     df = _add_vbd(df, teams, starters)
     df["tier"] = 0
     for pos in POSITIONS:
         m = df["position"] == pos
-        df.loc[m, "tier"] = _tier(df.loc[m].sort_values("proj", ascending=False)["proj"], _TIER_GAP[pos])
+        df.loc[m, "tier"] = _tier(df.loc[m].sort_values("proj", ascending=False)["proj"],
+                                  _SEASON_TIER_GAP[pos])
     df["overall"] = range(1, len(df) + 1)
     return df
 
@@ -723,17 +787,21 @@ def _render_rankings(scoring: str, teams: int, starters: dict):
     view = df if pos == "All" else df[df["position"] == pos]
     view = view.sort_values("vbd", ascending=False)
 
-    st.caption(f"{SCORING_LABELS[scoring]} · projected **full-season** points from Underdog's "
-               f"season-long O/U lines (the market's implied totals). **VBD** = points above the "
-               f"last startable player at the position in a {teams}-team league — sort by this, "
-               f"not raw points. Receptions & QB INTs are estimated (no Underdog market).")
+    n_model = int((df["source"] == "model").sum())
+    st.caption(f"{SCORING_LABELS[scoring]} · projected **full-season** points. **VBD** = points "
+               f"above the last startable player at the position in a {teams}-team league — sort "
+               f"by this, not raw points. **Src**: *mkt* = Underdog's season O/U line (the market's "
+               f"implied total); *mdl* = the prop model's own season projection, scaled to the "
+               f"market, for the {n_model} skill players Underdog doesn't price. Receptions & QB "
+               f"INTs are estimated (no Underdog market).")
 
     show = view.assign(
         Pos=lambda d: d["position"] + d["pos_rank"].astype(str),
         Bye=lambda d: d["bye"].map(lambda b: "" if pd.isna(b) else str(int(b))),
-    )[["overall", "Pos", "tier", "player", "team", "Bye", "proj", "vbd", "status",
+        Src=lambda d: d["source"].map({"market": "mkt", "model": "mdl"}),
+    )[["overall", "Pos", "tier", "player", "team", "Bye", "proj", "vbd", "Src", "status",
        "pass_yd", "rush_yd", "rec_yd", "rec", "rush_td", "rec_td"]]
-    show.columns = ["#", "Pos", "Tier", "Player", "Team", "Bye", "Proj", "VBD", "Status",
+    show.columns = ["#", "Pos", "Tier", "Player", "Team", "Bye", "Proj", "VBD", "Src", "Status",
                     "PaYd", "RuYd", "ReYd", "Rec", "RuTD", "ReTD"]
     st.dataframe(show, hide_index=True, width="stretch", height=620,
                  column_config={"VBD": st.column_config.NumberColumn("VBD", format="%.0f")})
@@ -758,22 +826,34 @@ def _render_draft_board(scoring: str, teams: int, starters: dict):
     avail = df[~df["player"].isin(taken)]
 
     st.subheader("Best available")
-    top = avail.head(12).assign(Pos=lambda d: d["position"] + d["pos_rank"].astype(str))
+    top = avail.head(12).assign(
+        Pos=lambda d: d["position"] + d["pos_rank"].astype(str),
+        Src=lambda d: d["source"].map({"market": "mkt", "model": "mdl"}))
     st.dataframe(
-        top[["overall", "Pos", "tier", "player", "team", "bye", "proj", "vbd"]].rename(
+        top[["overall", "Pos", "tier", "player", "team", "bye", "proj", "vbd", "Src"]].rename(
             columns={"overall": "#", "tier": "Tier", "player": "Player", "team": "Team",
                      "bye": "Bye", "proj": "Proj", "vbd": "VBD"}),
         hide_index=True, width="stretch")
 
     st.subheader("Best available by position")
+    st.caption("Top 5 left at each spot. The header counts how many are still on the "
+               "board in that position's current-best tier — a low number means the next "
+               "pick there is a real step down. *mdl* = model projection (past Underdog's board).")
     cols = st.columns(4)
     for col, p in zip(cols, POSITIONS):
-        sub = avail[avail["position"] == p].head(5)
+        pos_avail = avail[avail["position"] == p]
+        sub = pos_avail.head(5)
         with col:
-            st.markdown(f"**{p}**")
+            if sub.empty:
+                st.markdown(f"**{p}** — none left")
+                continue
+            best_tier = int(sub.iloc[0]["tier"])
+            in_tier = int((pos_avail["tier"] == best_tier).sum())
+            flag = " ⚠️" if in_tier <= 2 else ""
+            st.markdown(f"**{p}** · {in_tier} left in T{best_tier}{flag}")
             for _, r in sub.iterrows():
-                cliff = "  ⚠️" if (avail[(avail.position == p) & (avail.tier == r.tier)].shape[0] <= 2) else ""
-                st.caption(f"{r.player} · {r.proj:.0f} · T{r.tier}{cliff}")
+                src = "" if r.source == "market" else " ·mdl"
+                st.caption(f"{r.player} · {r.proj:.0f} · T{int(r.tier)}{src}")
 
     if mine:
         st.subheader("My roster")
@@ -806,8 +886,10 @@ def page_fantasy():
 
     if mode == "Draft prep":
         st.caption(
-            "Full-season value-based rankings and a live draft board, built from Underdog's "
-            "season-long O/U lines (the market's implied season totals)."
+            "Full-season value-based rankings and a live draft board. Projections come from "
+            "Underdog's season-long O/U lines (the market's implied totals) where they exist, "
+            "and from the prop model's own scaled season projection for skill players past "
+            "Underdog's board."
         )
         teams, starters = _league_settings()
         d_rank, d_board = st.tabs(["Rankings / cheat sheet", "Draft board"])

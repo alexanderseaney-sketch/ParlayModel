@@ -127,8 +127,8 @@ def project_season_points(stats: dict, position: str, scoring: str = "ppr") -> d
     season_pass_yards / season_pass_tds / season_rush_yards / season_rush_tds /
     season_receiving_yards / season_rec_tds. Receptions are estimated from
     season_receiving_yards at a position yards-per-catch; interceptions aren't on
-    Underdog's board so a starting-QB flat -10 is applied to season_pass_yards
-    holders. Returns {'points', 'breakdown': [(label, value, points)], 'rec_est'}."""
+    Underdog's board so they're estimated from passing volume (~1 INT per 450
+    pass yards, league average). Returns {'points', 'breakdown', 'rec_est'}."""
     def g(k):
         v = stats.get(k)
         return float(v) if v is not None and pd.notna(v) else 0.0
@@ -138,12 +138,14 @@ def project_season_points(stats: dict, position: str, scoring: str = "ppr") -> d
     rush_yd, rush_td = g("season_rush_yards"), g("season_rush_tds")
     rec_yd, rec_td = g("season_receiving_yards"), g("season_rec_tds")
     rec_est = rec_yd / _SEASON_YPC.get(position, 11.0) if rec_yd else 0.0
-    ints = -10.0 if pass_yd > 500 else 0.0  # ~ -10 FP of INTs for a full-time starter
+    # ~1 INT per 450 pass yards is roughly the modern league average; scales the
+    # penalty with volume instead of a flat hit that under-dings high-volume passers.
+    int_est = pass_yd / 450.0 if pass_yd > 800 else 0.0
 
     rows = [
         ("Passing yards", pass_yd, pass_yd * PASS_YD),
         ("Passing TDs", pass_td, pass_td * PASS_TD),
-        ("Interceptions (est.)", ints / INTERCEPTION if ints else 0.0, ints),
+        ("Interceptions (est.)", int_est, int_est * INTERCEPTION),
         ("Rushing yards", rush_yd, rush_yd * RUSH_YD),
         ("Rushing TDs", rush_td, rush_td * RUSH_TD),
         ("Receiving yards", rec_yd, rec_yd * REC_YD),
