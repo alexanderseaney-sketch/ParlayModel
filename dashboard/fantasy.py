@@ -26,6 +26,11 @@ from fantasy_scoring import (
     project_season_points,
 )
 
+try:
+    import yahoo_fantasy as yf
+except Exception:  # noqa: BLE001 -- the page must still load if the optional module can't import
+    yf = None
+
 GAME_PROPS = ["passing_yards", "passing_tds", "passing_ints", "rushing_yards",
               "rushing_yards_qb", "receiving_yards", "receiving_yards_rb",
               "receptions", "rush_rec_tds", "rush_rec_tds_qb"]
@@ -763,8 +768,19 @@ def _mtime(d: str, name: str) -> float:
     return os.path.getmtime(p) if os.path.exists(p) else 0.0
 
 
-def _league_settings():
-    with st.expander("League settings"):
+def _league_settings(lsettings: dict | None = None):
+    """Draft-board league shape. Pre-filled from a connected Yahoo league when
+    there is one (still editable), otherwise a standard 12-team default."""
+    if lsettings and st.session_state.get("_ff_lg_seeded") != lsettings.get("name"):
+        s = lsettings["starters"]
+        st.session_state.update({
+            "ff_lg_teams": int(lsettings.get("num_teams") or 12),
+            "ff_lg_qb": s["QB"], "ff_lg_rb": s["RB"], "ff_lg_wr": s["WR"],
+            "ff_lg_te": s["TE"], "ff_lg_flex": s["FLEX"],
+            "_ff_lg_seeded": lsettings.get("name"),
+        })
+    src = " · pre-filled from your Yahoo league" if lsettings else ""
+    with st.expander("League settings" + src):
         c = st.columns(6)
         teams = c[0].number_input("Teams", 4, 20, 12, key="ff_lg_teams")
         starters = {
@@ -807,12 +823,63 @@ def _render_rankings(scoring: str, teams: int, starters: dict):
                  column_config={"VBD": st.column_config.NumberColumn("VBD", format="%.0f")})
 
 
-def _render_draft_board(scoring: str, teams: int, starters: dict):
+def _sync_yahoo_draft(league_key: str, board: pd.DataFrame) -> None:
+    """Pull the Yahoo draft results and flip matching board rows to 'off the board'
+    (and 'my picks' for the connected team). Silently skips players not on our board
+    (kickers, DST, deep picks Underdog never priced)."""
+    try:
+        dr = yf.draft_results(league_key)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Couldn't read draft results: {e}")
+        return
+    if dr.empty:
+        st.warning("This Yahoo league hasn't drafted yet (no draft results).")
+        return
+
+    dr["yahoo_id"] = dr["player_key"].str.split(".").str[-1]
+    bridge = load_csv_if_exists("player_ids.csv")
+    name_by_yid: dict[str, str] = {}
+    if bridge is not None and "yahoo_id" in bridge.columns:
+        b = bridge.dropna(subset=["yahoo_id"]).copy()
+        b["yahoo_id"] = b["yahoo_id"].astype(str).str.replace(r"\.0$", "", regex=True)
+        name_by_yid = dict(zip(b["yahoo_id"], b["name"]))
+
+    board_by_norm = {normalize_name(p): p for p in board["player"]}
+    try:
+        my_tk = yf.my_team_key(league_key)
+    except Exception:  # noqa: BLE001
+        my_tk = None
+
+    taken, mine, unmatched = [], [], 0
+    for _, r in dr.iterrows():
+        nm = name_by_yid.get(r["yahoo_id"])
+        hit = board_by_norm.get(normalize_name(nm)) if nm else None
+        if not hit:
+            unmatched += 1
+            continue
+        taken.append(hit)
+        if my_tk and r["team_key"] == my_tk:
+            mine.append(hit)
+
+    st.session_state["draft_taken"] = sorted(set(taken))
+    st.session_state["draft_mine"] = sorted(set(mine))
+    st.toast(f"Synced {len(set(taken))} drafted players from Yahoo"
+             + (f" · {len(set(mine))} yours" if mine else "")
+             + (f" · {unmatched} off-board picks skipped" if unmatched else ""))
+    st.rerun()
+
+
+def _render_draft_board(scoring: str, teams: int, starters: dict, league_key: str | None = None):
     df = _draft_table(scoring, teams, starters)
     if df.empty:
         st.warning("No Underdog season-long O/U lines pulled yet.")
         return
     names = df["player"].tolist()
+
+    if league_key and yf is not None:
+        if st.button("↻ Sync drafted players from Yahoo", key="ff_draft_sync"):
+            _sync_yahoo_draft(league_key, df)
+
     c1, c2, c3 = st.columns([4, 4, 1])
     taken = c1.multiselect("Off the board (drafted by anyone)", names, key="draft_taken")
     # keep My picks a subset of what's off the board -- set before that widget renders
@@ -874,10 +941,230 @@ def _render_draft_board(scoring: str, teams: int, starters: dict):
             hide_index=True, width="stretch")
 
 
+# ------------------------------------------------------------------ yahoo league
+
+_STARTER_SLOTS = {"QB", "RB", "WR", "TE", "W/R/T", "W/R", "R/W/T", "Q/W/R/T", "FLEX"}
+_FLEX_ELIGIBLE = {"RB", "WR", "TE"}
+
+
+def _next_week() -> int | None:
+    df = load_current_predictions()
+    if df is None or "next_week" not in df.columns or df["next_week"].dropna().empty:
+        return None
+    return int(df["next_week"].dropna().mode().iloc[0])
+
+
+def _proj_lookup(proj: pd.DataFrame) -> dict:
+    """Our weekly projection keyed by both nflverse player_id and normalized name,
+    so an external roster joins by id first, name second."""
+    d: dict = {}
+    for r in proj.itertuples():
+        rec = {"proj": r.proj, "opp": r.opp, "pos_rank": int(r.pos_rank),
+               "tier": int(r.tier), "lean": r.lean, "our_pos": r.position}
+        d[("id", r.player_id)] = rec
+        d.setdefault(("nm", normalize_name(r.player)), rec)
+    return d
+
+
+def _attach_proj(ext: pd.DataFrame, proj: pd.DataFrame) -> pd.DataFrame:
+    look = _proj_lookup(proj)
+    recs = []
+    for row in ext.itertuples():
+        rec = look.get(("id", getattr(row, "gsis_id", None))) or \
+            look.get(("nm", getattr(row, "norm_name", ""))) or {}
+        recs.append(rec)
+    add = pd.DataFrame(recs, index=ext.index)
+    for c in ("proj", "opp", "pos_rank", "tier", "lean", "our_pos"):
+        if c not in add.columns:
+            add[c] = pd.NA
+    return pd.concat([ext, add], axis=1)
+
+
+def _optimal_lineup(m: pd.DataFrame, starters: dict) -> set:
+    """Greedy best lineup: fill each dedicated slot then FLEX with the highest-
+    projected eligible players. Returns the set of chosen row indices."""
+    chosen: set = set()
+    pool = m.dropna(subset=["proj"]).sort_values("proj", ascending=False)
+    for pos in ("QB", "RB", "WR", "TE"):
+        picks = pool[(pool["position"] == pos) & (~pool.index.isin(chosen))].head(starters.get(pos, 0))
+        chosen.update(picks.index)
+    flex_n = starters.get("FLEX", 0)
+    if flex_n:
+        flex = pool[(pool["position"].isin(_FLEX_ELIGIBLE)) & (~pool.index.isin(chosen))].head(flex_n)
+        chosen.update(flex.index)
+    return chosen
+
+
+def _yahoo_panel() -> tuple[str | None, dict | None]:
+    """Connect / league-picker UI. Returns (league_key, league_settings) once a
+    league is chosen, else (None, None). Silent when Yahoo isn't configured."""
+    if yf is None or not yf.configured():
+        return None, None
+
+    yf.handle_oauth_redirect()
+    err = st.session_state.get("yahoo_auth_error")
+
+    with st.expander("🟣 Yahoo league" + ("" if yf.connected() else " — not connected"),
+                     expanded=not yf.connected()):
+        if err:
+            st.error(err)
+        if not yf.connected():
+            st.markdown(
+                f"[**Authorize with Yahoo →**]({yf.authorize_url()})  \n"
+                "Approve access, and Yahoo will send you back here connected."
+            )
+            return None, None
+
+        st.link_button("Yahoo account", "https://football.fantasysports.yahoo.com/", disabled=True)
+        try:
+            lg = yf.leagues()
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't list your leagues: {e}")
+            return None, None
+        if lg.empty:
+            st.warning("Connected, but no NFL leagues found on this Yahoo account for the current season.")
+            _disconnect_button()
+            return None, None
+
+        names = {f'{r["name"]}  ·  {r["num_teams"]}-team  ·  {r["season"]}': r["league_key"]
+                 for _, r in lg.iterrows()}
+        pick = st.selectbox("League", list(names), key="ff_yh_league_pick")
+        league_key = names[pick]
+        st.session_state["yahoo_league_key"] = league_key
+
+        try:
+            settings = yf.league_settings(league_key)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't read league settings: {e}")
+            _disconnect_button()
+            return league_key, None
+
+        s = settings["starters"]
+        st.caption(
+            f'**{settings["name"]}** · {settings["num_teams"]} teams · '
+            f'{SCORING_LABELS.get(settings["scoring"], settings["scoring"])} '
+            f'({settings["reception_point"]:g} pt/rec) · starters '
+            f'QB {s["QB"]} / RB {s["RB"]} / WR {s["WR"]} / TE {s["TE"]} / FLEX {s["FLEX"]}'
+        )
+
+        if not yf._secret("yahoo_refresh_token"):
+            tok = st.session_state.get("yahoo_token", {})
+            if tok.get("refresh_token"):
+                st.info("To stay connected across restarts, add this to **App settings → Secrets**:")
+                st.code(f'yahoo_refresh_token = "{tok["refresh_token"]}"', language="toml")
+        _disconnect_button()
+        return league_key, settings
+
+
+def _disconnect_button() -> None:
+    if st.button("Disconnect Yahoo", key="ff_yh_disconnect"):
+        yf.disconnect()
+        st.rerun()
+
+
+def _render_my_team(scoring: str, league_key: str | None, starters: dict | None):
+    if yf is None or not league_key:
+        st.info("Connect a Yahoo league in the panel above to load your team here.")
+        return
+    week = _next_week()
+    try:
+        roster = yf.my_roster(league_key, week)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Couldn't load your roster: {e}")
+        return
+    if roster.empty:
+        st.warning("Yahoo returned an empty roster.")
+        return
+
+    proj = _projections(_pred_mtime(), scoring)
+    m = _attach_proj(roster, proj)
+    # trust our detected position where we matched, else Yahoo's
+    m["position"] = m["our_pos"].where(m["our_pos"].notna(), m["position"].str.upper())
+    m["is_starter_now"] = ~m["slot"].isin(["BN", "IR", "NA"])
+
+    use_starters = starters or DEFAULT_STARTERS
+    best = _optimal_lineup(m, use_starters)
+    m["best_xi"] = m.index.isin(best)
+
+    wk_txt = f"Week {week}" if week else "this week"
+    st.caption(f"{SCORING_LABELS[scoring]} · {wk_txt}. **Best XI** is the highest-projected legal "
+               f"lineup from your roster; rows where it disagrees with your current Yahoo slot are "
+               f"flagged. Projections are the prop model's weekly roll-up.")
+
+    show = m.assign(
+        Proj=m["proj"].round(1),
+        Matchup=m["opp"].where(m["opp"].notna(), "—"),
+        Now=m["slot"].replace({"W/R/T": "FLEX"}),
+        Best=m["best_xi"].map({True: "✅ start", False: "bench"}),
+        Move=[("⬆️ start" if b and not n else "⬇️ sit" if n and not b else "")
+              for b, n in zip(m["best_xi"], m["is_starter_now"])],
+    ).sort_values(["best_xi", "proj"], ascending=[False, False])
+
+    cols = ["name", "position", "team", "Now", "Best", "Move", "Proj", "Matchup", "status"]
+    st.dataframe(
+        show[cols].rename(columns={"name": "Player", "position": "Pos", "team": "Team",
+                                   "status": "Inj"}),
+        hide_index=True, width="stretch", height=560)
+
+    moves = show[show["Move"] != ""]
+    if not moves.empty:
+        lines = []
+        for _, r in moves[moves["Move"] == "⬆️ start"].iterrows():
+            lines.append(f"**Start {r['name']}** ({r['Proj']:.1f})")
+        for _, r in moves[moves["Move"] == "⬇️ sit"].iterrows():
+            lines.append(f"sit {r['name']} ({r['Proj']:.1f})")
+        st.markdown("**Suggested moves:** " + " · ".join(lines))
+    else:
+        st.success("Your current Yahoo lineup already matches the best projected XI.")
+
+
+def _render_waivers(scoring: str, league_key: str | None):
+    if yf is None or not league_key:
+        st.info("Connect a Yahoo league in the panel above to see free agents.")
+        return
+    pos = st.radio("Position", ["All", "QB", "RB", "WR", "TE"], horizontal=True, key="ff_wv_pos")
+    try:
+        fa = yf.free_agents(league_key, None if pos == "All" else pos, count=75)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Couldn't load free agents: {e}")
+        return
+    if fa.empty:
+        st.info("No free agents returned for that filter.")
+        return
+
+    proj = _projections(_pred_mtime(), scoring)
+    m = _attach_proj(fa, proj)
+    ros = _draft_table(scoring, (league_key and 12) or 12, DEFAULT_STARTERS)
+    ros_by = {}
+    if not ros.empty:
+        ros_by = {normalize_name(p): v for p, v in zip(ros["player"], ros["proj"])}
+    m["ros"] = m["name"].map(lambda n: ros_by.get(normalize_name(n)))
+    m = m[m["proj"].notna() | m["ros"].notna()].copy()
+    m = m.sort_values("proj", ascending=False, na_position="last")
+
+    week = _next_week()
+    st.caption(f"{SCORING_LABELS[scoring]} · free agents in your league, ranked by our "
+               f"{'Week ' + str(week) if week else 'weekly'} projection. **ROS** = our rest-of-"
+               f"season full-season projection (draft-board scale) for context.")
+    show = m.head(40).assign(
+        Proj=m["proj"].round(1), ROS=m["ros"].round(0),
+        Matchup=m["opp"].where(m["opp"].notna(), "—"),
+    )[["name", "position", "team", "Proj", "Matchup", "ROS", "status"]]
+    st.dataframe(
+        show.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "status": "Inj"}),
+        hide_index=True, width="stretch", height=560)
+
+
 # ----------------------------------------------------------------------- page
 
 def page_fantasy():
     st.title("🏆 Fantasy")
+
+    league_key, lsettings = _yahoo_panel()
+    if lsettings and st.session_state.get("_ff_scoring_seeded") != league_key:
+        st.session_state["ff_scoring"] = "PPR" if lsettings["scoring"] == "ppr" else "Half-PPR"
+        st.session_state["_ff_scoring_seeded"] = league_key
+
     label = st.radio("Scoring", ["PPR", "Half-PPR"], horizontal=True, key="ff_scoring")
     scoring = "ppr" if label == "PPR" else "half"
 
@@ -891,12 +1178,12 @@ def page_fantasy():
             "and from the prop model's own scaled season projection for skill players past "
             "Underdog's board."
         )
-        teams, starters = _league_settings()
+        teams, starters = _league_settings(lsettings)
         d_rank, d_board = st.tabs(["Rankings / cheat sheet", "Draft board"])
         with d_rank:
             _render_rankings(scoring, teams, starters)
         with d_board:
-            _render_draft_board(scoring, teams, starters)
+            _render_draft_board(scoring, teams, starters, league_key)
         return
 
     st.caption(
@@ -904,14 +1191,21 @@ def page_fantasy():
         "Projections roll up the prop model's per-stat trailing averages; matchups and "
         "boom/bust come from weekly box scores."
     )
-    tabs = st.tabs(["Player Card", "Projections", "Start / Sit", "Matchups", "Boom / Bust"])
-    with tabs[0]:
+    base = ["Player Card", "Projections", "Start / Sit", "Matchups", "Boom / Bust"]
+    names = (["My Team", "Waivers"] + base) if league_key else base
+    tabs = dict(zip(names, st.tabs(names)))
+    if league_key:
+        with tabs["My Team"]:
+            _render_my_team(scoring, league_key, (lsettings or {}).get("starters"))
+        with tabs["Waivers"]:
+            _render_waivers(scoring, league_key)
+    with tabs["Player Card"]:
         _render_player_card(scoring)
-    with tabs[1]:
+    with tabs["Projections"]:
         _render_projections(scoring)
-    with tabs[2]:
+    with tabs["Start / Sit"]:
         _render_start_sit(scoring)
-    with tabs[3]:
+    with tabs["Matchups"]:
         _render_matchups(scoring)
-    with tabs[4]:
+    with tabs["Boom / Bust"]:
         _render_boom_bust(scoring)
