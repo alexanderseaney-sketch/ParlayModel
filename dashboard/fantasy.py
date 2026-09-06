@@ -666,10 +666,16 @@ def _add_vbd(df: pd.DataFrame, teams: int, starters: dict) -> pd.DataFrame:
 
 
 def _tier(sub: pd.Series, gap: float) -> list:
-    tiers, t, prev = [], 1, None
+    """Tier the (descending) projections: a new tier starts either on a single
+    cliff between adjacent players >= gap, or once the running drop from the
+    current tier's top player exceeds gap (so a smooth bleed still forms tiers)."""
+    tiers, t, prev, top = [], 1, None, None
     for v in sub:
-        if prev is not None and prev - v >= gap:
+        if prev is not None and (prev - v >= gap or top - v >= gap):
             t += 1
+            top = v
+        if top is None:
+            top = v
         tiers.append(t)
         prev = v
     return tiers
