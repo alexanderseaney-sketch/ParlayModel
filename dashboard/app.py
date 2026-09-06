@@ -19,6 +19,7 @@ from utils import (
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
     pretty_stat_name, load_line_movement,
     estimate_player_stat_std, recompute_probability_for_real_line,
+    score_underdog_board,
 )
 
 # abspath first: Streamlit can hand this module a relative __file__, which would
@@ -438,6 +439,13 @@ def page_parlay_builder():
     tab_slip, tab_add = st.tabs([f"📋 Current slip ({len(st.session_state.slip)})", "➕ Add legs"])
 
     with tab_add:
+        # Everything addable here IS a prop Underdog is offering right now --
+        # score_underdog_board() below starts from underdog_props.csv, not from the
+        # model's full prediction grid (which covers ~3300 player/stat combos
+        # Underdog isn't even offering this week). Each row gets the model's
+        # probability recomputed against the REAL Underdog line where a continuous
+        # weekly stat exists to estimate variance from, otherwise its stored
+        # proxy-line probability.
         st.subheader("Confidence filter")
         st.caption(
             "There's nothing wrong with being confident — validated testing showed roughly "
@@ -446,26 +454,19 @@ def page_parlay_builder():
         )
         # A range, not just a floor -- a floor-only filter can't isolate a middle
         # band (e.g. "show me the 0.4-0.7 picks, not the >0.7 ones I've already
-        # bet"). Defaults to [0.4, 1.0] so the out-of-the-box behavior matches the
-        # old minimum-only slider exactly (everything from the validated 0.4
-        # threshold up).
+        # bet"). Defaults to [0.4, 1.0].
         min_confidence, max_confidence = st.slider(
             "Confidence range to show", 0.0, 1.0, (0.4, 1.0), 0.05,
             help="0 = coinflips included. 0.4 historically ~78% accurate. Drag both ends to isolate a band instead of just a floor.",
         )
+        model_only = st.toggle(
+            "Model-backed only", value=True,
+            help="On: only Underdog props a trained model covers. Off: also show the "
+                 "rest of Underdog's board (receiving_long, tackles, passing_att, ...) "
+                 "with no confidence.",
+        )
 
-        if predictions is not None:
-            qualifying = predictions[
-                predictions["confidence"].between(min_confidence, max_confidence)
-            ]
-            st.metric("Players in this range right now", f"{len(qualifying)} of {len(predictions)}")
-
-        # Loaded once here, used below for real-line confidence recomputation --
-        # same fix as the player card's combined predictions/lines section: Alex
-        # doesn't want confidence based on our proxy line, he wants it based on
-        # whether the REAL Underdog number hits. Loaded outside the props loop
-        # since it's the same file for every row, not re-read per prop.
-        weekly_stats_for_std = load_csv_if_exists("weekly_stats.csv") if predictions is not None else None
+        weekly_stats_for_std = load_csv_if_exists("weekly_stats.csv")
 
         name_col = find_column(df, ["full_name", "player_name", "name"])
         stat_col = find_column(df, ["stat_name", "stat"])
@@ -527,16 +528,17 @@ def page_parlay_builder():
                     week_filter = []
                     st.caption("Week filter needs schedules.csv.")
 
-            # No .head(50) here anymore -- it used to truncate BEFORE the predictions
-            # merge below, so the default (unfiltered) view was just whatever order
-            # the raw CSV happens to be in. Underdog's pull is dominated by season-
-            # long novelty props (win totals, "games started") the model was never
-            # built to cover, so real model data could end up completely absent from
-            # the visible list even though it was working correctly (confirmed
-            # 2026-08-16: 1483 real predictions existed the whole time, just buried
-            # past the default cutoff). Truncation now happens after sorting further
-            # down, once matched props are guaranteed to be at the front.
-            options_df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)] if search else df
+            # THE Underdog board, one row per offered prop option, with the model
+            # attached and its probability recomputed against the real line where a
+            # weekly stat exists to estimate variance from. This is the source of
+            # truth for what's biddable -- no more phantom props from the model's
+            # full prediction grid that Underdog isn't offering.
+            board = score_underdog_board(df, predictions, weekly_stats_for_std)
+            n_props = board.drop_duplicates([name_col, stat_col, line_col]).shape[0]
+            n_modeled = board[board["has_model"]].drop_duplicates([name_col, stat_col, line_col]).shape[0]
+            st.metric("Underdog props on the board", f"{n_props}  ·  {n_modeled} model-backed")
+
+            options_df = board[board[name_col].astype(str).str.contains(search, case=False, na=False)] if search else board
             if prop_type_filter:
                 options_df = options_df[options_df[stat_col].isin(prop_type_filter)]
             if team_filter:
@@ -545,66 +547,37 @@ def page_parlay_builder():
                 options_df = options_df[options_df["_week"].isin(week_filter)]
             narrowed = bool(search) or bool(prop_type_filter) or bool(team_filter) or bool(week_filter)
 
-            if predictions is not None:
-                options_df = options_df.copy()
-                options_df["_match_key"] = options_df[name_col].apply(normalize_name)
-                # Match on player AND stat type -- name-only matching would attach e.g.
-                # a receiving-yards prediction to that same player's rushing-yards prop
-                # now that current_predictions.py covers four different prop types.
-                options_df = options_df.merge(
-                    predictions[["_match_key", "stat_name", "predicted_prob_over", "confidence",
-                                  "stats_as_of_season", "stats_as_of_week", "recent_team", "position",
-                                  "prop_type", "proxy_line", "player_id"]],
-                    left_on=["_match_key", stat_col], right_on=["_match_key", "stat_name"],
-                    how="left",
-                )
-                # "confidence" is symmetric (distance from a coinflip, either
-                # direction) -- correct for a two-sided market, since a confident
-                # UNDER means the UNDER row is real and biddable. But some prop
-                # types (anytime-TD style: rush_rec_tds, period_first_touchdown_
-                # scored, etc.) are one-sided -- Underdog only ever offers OVER,
-                # there's no UNDER row to bet. For those, high confidence can mean
-                # "very sure this WON'T happen," which isn't a real, actionable
-                # signal since the only offered side is the one the model doesn't
-                # like. Bug found live 2026-08-23: a 0.65-0.80 range was showing a
-                # player at "OVER 10% confident / UNDER not offered" -- it passed
-                # because confidence (~0.8, symmetric) was in range, even though
-                # the only biddable side was a bad 10% bet. Checked from the real
-                # data (does the opposite choice actually exist for this player/
-                # stat/line), not a hardcoded list of "which stat types are
-                # one-sided" -- more robust if Underdog's own market structure
-                # varies by player/week in ways a fixed list would miss.
-                both_sides = options_df.groupby([name_col, stat_col, line_col])[choice_col].transform(
-                    lambda s: set(s.astype(str).str.lower()) >= {"over", "under"}
-                ).astype(bool)  # transform returns object dtype here, not bool -- ~ on it raises TypeError
-                choice_lower = options_df[choice_col].astype(str).str.lower()
-                own_side_prob = options_df["predicted_prob_over"].where(
-                    choice_lower != "under", 1 - options_df["predicted_prob_over"])
-                unbettable_direction = ~both_sides & (own_side_prob < 0.5)
+            options_df = options_df.copy()
+            # One-sided markets (anytime-TD style): Underdog only offers OVER, so a
+            # high symmetric confidence can just mean "very sure this WON'T happen" --
+            # not biddable. Drop rows whose only offered side is the one the model
+            # dislikes. Read from the data, not a hardcoded stat-type list.
+            both_sides = options_df.groupby([name_col, stat_col, line_col])[choice_col].transform(
+                lambda s: set(s.astype(str).str.lower()) >= {"over", "under"}
+            ).astype(bool)
+            has_model = options_df["has_model"].astype(bool)
+            unbettable = ~both_sides & has_model & (options_df["side_prob"].fillna(1.0) < 0.5)
+            in_range = options_df["confidence"].between(min_confidence, max_confidence)
 
-                outside_range = ~options_df["confidence"].between(min_confidence, max_confidence) | unbettable_direction
-                # No longer keeping confidence.isna() rows regardless of range --
-                # Alex wants ONLY legs with a real model behind them ever shown as
-                # addable options, so a prop with no prediction match at all should
-                # be filtered out here, not kept around for the user to see and add.
-                no_prediction = options_df["confidence"].isna()
-                n_hidden_range = (outside_range & ~no_prediction).sum()
-                n_hidden_no_model = no_prediction.sum()
-                if (n_hidden_range or n_hidden_no_model) and not narrowed:
-                    parts = []
-                    if n_hidden_range:
-                        parts.append(f"{n_hidden_range} outside the confidence range")
-                    if n_hidden_no_model:
-                        parts.append(f"{n_hidden_no_model} with no model prediction at all")
-                    st.caption(f"Hidden: {' and '.join(parts)}. Search or widen the range to see the confidence-range ones.")
-                options_df = options_df[~no_prediction & (~outside_range | narrowed)]
-                options_df = options_df.sort_values("confidence", ascending=False, na_position="last")
-            else:
-                # No predictions exist at all -- every prop would be a no-model
-                # prop, so there's nothing addable. Stop here rather than falling
-                # through to a loop that renders every raw Underdog prop as if it
-                # were a real option.
-                options_df = options_df.iloc[0:0]
+            n_out_range = int((has_model & ~in_range & ~unbettable).sum())
+            n_no_model = int((~has_model).sum())
+
+            keep = ~unbettable
+            if model_only:
+                keep = keep & has_model
+            keep = keep & (in_range | ~has_model | narrowed)
+            options_df = options_df[keep]
+
+            if not narrowed:
+                parts = []
+                if n_out_range:
+                    parts.append(f"{n_out_range} outside the confidence range")
+                if n_no_model and model_only:
+                    parts.append(f"{n_no_model} with no model (toggle **Model-backed only** off to show)")
+                if parts:
+                    st.caption("Hidden: " + " · ".join(parts) + ".")
+
+            options_df = options_df.sort_values("confidence", ascending=False, na_position="last")
 
             if not narrowed:
                 options_df = options_df.head(50)
@@ -631,37 +604,15 @@ def page_parlay_builder():
                 under_row = under_rows.iloc[0] if not under_rows.empty else None
                 any_row = over_row if over_row is not None else under_row
 
-                # Real fix (2026-08-26): confidence is now based on whether the
-                # REAL Underdog number hits, not our proxy line -- there should
-                # never be a "line mismatch" warning anymore, because the model's
-                # proxy-based probability gets recomputed against the actual real
-                # line every time, the same way the player card's combined
-                # predictions/lines section already does. See
-                # recompute_probability_for_real_line()'s docstring in utils.py
-                # for the full reasoning (no historical archive of real past
-                # Underdog lines exists yet to retrain against, so this reuses
-                # each model's real, already-validated predictive signal and
-                # re-targets it at serving time using the player's own real
-                # week-to-week variance).
-                raw_prob_over = any_row.get("predicted_prob_over") if predictions is not None else None
-                proxy_line = any_row.get("proxy_line")
-                recomputed_prob_over = None
-                if pd.notna(raw_prob_over) and pd.notna(proxy_line) and weekly_stats_for_std is not None:
-                    std = estimate_player_stat_std(
-                        any_row.get("player_id"), stat_name, weekly_stats_for_std, position=any_row.get("position"),
-                    )
-                    recomputed_prob_over = recompute_probability_for_real_line(
-                        raw_prob_over, proxy_line, line_value, std,
-                    )
-                has_model = recomputed_prob_over is not None
-                if not has_model:
-                    # Defense in depth -- the pre-filter above should already have
-                    # excluded every no-prediction row, but this catches the rarer
-                    # case where a match existed (old proxy-based confidence was
-                    # non-null) yet the real-line recomputation itself still failed
-                    # (e.g. no std estimate available). Alex wants ONLY legs with a
-                    # genuine model behind them ever shown as addable, full stop.
-                    continue
+                # score_underdog_board() already did the model match + real-line
+                # recompute per row -- model_prob_over is P(over the REAL Underdog
+                # line) where a weekly stat exists to estimate variance from, else
+                # the model's stored proxy-line probability. real_line_used says
+                # which. has_model rows with model_only off still render, just
+                # without a confidence.
+                recomputed_prob_over = any_row.get("model_prob_over")
+                has_model = bool(any_row.get("has_model")) and pd.notna(recomputed_prob_over)
+                real_line_used = bool(any_row.get("real_line_used"))
 
                 fbg_status = depth_status.get(normalize_name(player_name)) if depth_status is not None else None
 
@@ -712,10 +663,18 @@ def page_parlay_builder():
                             with badges[b_i]:
                                 st.badge(fbg_status, icon="🚑", color="red", help="Footballguys depth chart status, pulled today")
                             b_i += 1
+                        if has_model and not real_line_used and b_i < 3:
+                            with badges[b_i]:
+                                st.badge("vs proxy line", color="gray",
+                                         help="No continuous weekly stat to estimate variance for this "
+                                              "prop type — confidence is the model's proxy-line probability, "
+                                              "not recomputed against the real Underdog number.")
+                            b_i += 1
 
+                    _p = recomputed_prob_over if pd.notna(recomputed_prob_over) else None
                     side_specs = [
-                        ("OVER", "over", over_row, recomputed_prob_over if recomputed_prob_over is not None else None),
-                        ("UNDER", "under", under_row, 1 - recomputed_prob_over if recomputed_prob_over is not None else None),
+                        ("OVER", "over", over_row, _p),
+                        ("UNDER", "under", under_row, (1 - _p) if _p is not None else None),
                     ]
                     side_cols = st.columns(2)
                     for side_col, (label, choice, side_row, side_prob) in zip(side_cols, side_specs):

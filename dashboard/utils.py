@@ -351,6 +351,88 @@ def load_current_predictions() -> pd.DataFrame | None:
     return _read_current_predictions(os.path.getmtime(CURRENT_PREDICTIONS_PATH))
 
 
+# Underdog labels receptions "receiving_rec"; the model's stat_name for it is
+# "receptions". Every other stat_name the model emits already matches Underdog's.
+_UNDERDOG_TO_MODEL_STAT = {"receiving_rec": "receptions"}
+
+# stat_name -> weekly_stats.csv column to estimate week-to-week variance from, for
+# recomputing a proxy-line probability against the real Underdog line. Anything not
+# here (TDs, defensive sacks, season / period totals) has no continuous per-game
+# weekly stat -- those fall back to the model's stored proxy-line probability.
+_STAT_WEEKLY_COL = {
+    "receiving_yds": "receiving_yards",
+    "rushing_yds": "rushing_yards",
+    "passing_yds": "passing_yards",
+    "receptions": "receptions",
+    "passing_tds": "passing_tds",
+    "passing_ints": "interceptions",
+}
+
+
+def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
+                         weekly_stats: pd.DataFrame | None) -> pd.DataFrame:
+    """The Underdog pick'em board, one row per prop option (over + under), with the
+    model attached: `model_prob_over` recomputed against the REAL Underdog line
+    where a continuous weekly stat exists (else the model's stored proxy-line
+    probability), `confidence` = distance of the offered side's probability from a
+    coin flip, `has_model`, and `real_line_used`.
+
+    This -- not current_player_predictions.csv -- is the source of truth for what's
+    biddable: every row is a prop Underdog is actually offering right now."""
+    board = props.copy()
+    board["_k"] = board["full_name"].apply(normalize_name)
+
+    if predictions is not None and not predictions.empty:
+        p = predictions.copy()
+        p["_k"] = p["player_display_name"].apply(normalize_name)
+        board["_model_stat"] = board["stat_name"].map(
+            lambda s: _UNDERDOG_TO_MODEL_STAT.get(s, s))
+        board = board.merge(
+            p[["_k", "stat_name", "predicted_prob_over", "confidence", "proxy_line",
+               "prop_type", "position", "player_id", "recent_team",
+               "stats_as_of_season", "stats_as_of_week"]].rename(
+                   columns={"stat_name": "_model_stat", "confidence": "_proxy_conf",
+                            "player_id": "nflverse_player_id"}),
+            on=["_k", "_model_stat"], how="left")
+    else:
+        for c in ("predicted_prob_over", "proxy_line", "prop_type", "position",
+                  "nflverse_player_id", "recent_team", "stats_as_of_season",
+                  "stats_as_of_week"):
+            board[c] = pd.NA
+
+    board["has_model"] = board["predicted_prob_over"].notna()
+
+    # variance-based real-line recompute, computed once per (player, weekly col)
+    std_cache: dict = {}
+
+    def _row_prob_over(r):
+        if not r["has_model"]:
+            return (None, False)
+        wcol = _STAT_WEEKLY_COL.get(r["stat_name"])
+        if wcol and weekly_stats is not None and wcol in weekly_stats.columns and pd.notna(r["proxy_line"]):
+            key = (r["nflverse_player_id"], wcol)
+            if key not in std_cache:
+                std_cache[key] = estimate_player_stat_std(
+                    r["nflverse_player_id"], wcol, weekly_stats, position=r.get("position"))
+            std = std_cache[key]
+            recomputed = recompute_probability_for_real_line(
+                r["predicted_prob_over"], r["proxy_line"], r["stat_value"], std)
+            if recomputed is not None:
+                return (float(recomputed), True)
+        return (float(r["predicted_prob_over"]), False)  # proxy-line fallback
+
+    scored = board.apply(_row_prob_over, axis=1, result_type="expand")
+    board["model_prob_over"] = scored[0]
+    board["real_line_used"] = scored[1].fillna(False)
+
+    choice = board["choice"].astype(str).str.lower()
+    side_prob = board["model_prob_over"].where(choice != "under",
+                                               1 - board["model_prob_over"])
+    board["side_prob"] = side_prob
+    board["confidence"] = (side_prob - 0.5).abs() * 2
+    return board
+
+
 def normalize_name(name: str) -> str:
     """Loose name matching between Underdog's player names and nflverse's — strips
     suffixes/punctuation that commonly differ between sources."""
