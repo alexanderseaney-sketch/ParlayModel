@@ -229,9 +229,14 @@ def _get(path: str) -> dict:
         headers={"Authorization": f"Bearer {tok['access_token']}", "Accept": "application/json"},
         params={"format": "json"}, timeout=25,
     )
-    if r.status_code == 401:
+    if r.status_code in (401, 403):
+        detail = " ".join(r.text.split())[:300]
         st.session_state.pop("yahoo_token", None)      # force a fresh refresh next run
-        raise RuntimeError("Yahoo session expired — reconnect.")
+        # a scope-less token authenticates fine but 401s on every fantasy call
+        hint = (" — the token has no Fantasy access; remove the `yahoo_scope` secret "
+                "so it requests `fspt-r`, then re-authorize."
+                if "scope" in detail.lower() or not detail else " — reconnect.")
+        raise RuntimeError(f"Yahoo API {r.status_code}: {detail}{hint}")
     r.raise_for_status()
     return r.json()
 
