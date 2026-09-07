@@ -20,6 +20,9 @@ and `_flatten` absorb that; everything above them works with plain dicts/lists.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets as _pysecrets
 import time
 from typing import Any
 
@@ -53,34 +56,76 @@ def _secret(key: str) -> str | None:
 
 
 def configured() -> bool:
-    """True once the Yahoo app credentials are in secrets. Until then the Fantasy
-    page just doesn't show the Yahoo panel."""
-    return bool(_secret("yahoo_client_id") and _secret("yahoo_client_secret")
-               and _secret("yahoo_redirect_uri"))
+    """True once the Yahoo app is set up in secrets. A confidential-client app has
+    a client_secret; a public-client app uses PKCE instead and has none -- either
+    is fine, so the secret isn't required here."""
+    return bool(_secret("yahoo_client_id") and _secret("yahoo_redirect_uri"))
+
+
+def _is_public_client() -> bool:
+    """No client_secret configured => public client => PKCE, client_id in the token
+    body, no HTTP Basic auth."""
+    return not _secret("yahoo_client_secret")
 
 
 # ------------------------------------------------------------------ oauth tokens
 
+# The OAuth round trip navigates the browser away and back, which can drop
+# st.session_state. So the PKCE verifier is also kept module-side, keyed by the
+# `state` we hand Yahoo -- the module stays loaded for the process's life, and
+# Streamlit Community Cloud runs a single process per app.
+_PKCE_STORE: dict[str, tuple[str, float]] = {}
+
+
+def _stash_pkce() -> tuple[str, str]:
+    now = time.time()
+    for k in [k for k, (_, ts) in _PKCE_STORE.items() if now - ts > 900]:
+        _PKCE_STORE.pop(k, None)
+    state = _pysecrets.token_urlsafe(24)
+    verifier = base64.urlsafe_b64encode(_pysecrets.token_bytes(48)).rstrip(b"=").decode()
+    _PKCE_STORE[state] = (verifier, now)
+    st.session_state["yahoo_pkce_verifier"] = verifier   # fast path if the session survives
+    return state, verifier
+
+
+def _pop_verifier(state: str | None) -> str | None:
+    if state and state in _PKCE_STORE:
+        return _PKCE_STORE.pop(state)[0]
+    return st.session_state.get("yahoo_pkce_verifier")
+
+
+def _pkce_challenge(verifier: str) -> str:
+    return base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+
+
 def _exchange(grant: dict) -> dict:
-    """POST to the token endpoint with HTTP Basic client auth. Returns the token
-    dict augmented with an absolute `expires_at`."""
-    r = requests.post(
-        _TOKEN_URL, data=grant,
-        auth=(_secret("yahoo_client_id"), _secret("yahoo_client_secret")),
-        headers={"Accept": "application/json"}, timeout=20,
-    )
+    """POST to the token endpoint. Confidential client -> HTTP Basic (id:secret).
+    Public client -> client_id in the body, no auth header. Returns the token dict
+    with an absolute `expires_at`."""
+    kwargs: dict = {"headers": {"Accept": "application/json"}, "timeout": 20}
+    if _is_public_client():
+        grant = {**grant, "client_id": _secret("yahoo_client_id")}
+    else:
+        kwargs["auth"] = (_secret("yahoo_client_id"), _secret("yahoo_client_secret"))
+    r = requests.post(_TOKEN_URL, data=grant, **kwargs)
     r.raise_for_status()
     tok = r.json()
     tok["expires_at"] = time.time() + int(tok.get("expires_in", 3600)) - 60
     return tok
 
 
-def _token_from_code(code: str) -> dict:
-    return _exchange({
+def _token_from_code(code: str, verifier: str | None = None) -> dict:
+    grant = {
         "grant_type": "authorization_code",
         "redirect_uri": _secret("yahoo_redirect_uri"),
         "code": code,
-    })
+    }
+    if verifier:
+        grant["code_verifier"] = verifier
+    tok = _exchange(grant)
+    st.session_state.pop("yahoo_pkce_verifier", None)   # single-use
+    return tok
 
 
 def _token_from_refresh(refresh_token: str) -> dict:
@@ -95,16 +140,21 @@ def _token_from_refresh(refresh_token: str) -> dict:
 
 
 def authorize_url() -> str:
-    """Yahoo removed the 'Fantasy Sports' permission checkbox from app creation, so
-    access is requested here via the `fspt-r` scope. If Yahoo ever rejects that
-    scope for a given app, set the secret `yahoo_scope = ""` to drop it (the app
-    then gets whatever its registered permissions allow)."""
+    """Fantasy read access is requested via the `fspt-r` scope. If Yahoo rejects
+    that with `invalid_scope`, the app is missing Fantasy Sports permission --
+    add it on the app's API-Permissions page, or set `yahoo_scope = ""`."""
     from urllib.parse import urlencode
     params = {
         "client_id": _secret("yahoo_client_id"),
         "redirect_uri": _secret("yahoo_redirect_uri"),
         "response_type": "code",
     }
+    # PKCE -- required for a public client, harmless for a confidential one. `state`
+    # is how we find the verifier again after the redirect.
+    state, verifier = _stash_pkce()
+    params["state"] = state
+    params["code_challenge"] = _pkce_challenge(verifier)
+    params["code_challenge_method"] = "S256"
     scope = _secret("yahoo_scope")
     scope = "fspt-r" if scope is None else scope
     if scope:
@@ -176,8 +226,9 @@ def handle_oauth_redirect() -> None:
     code = st.query_params.get("code")
     if not code:
         return
+    verifier = _pop_verifier(st.query_params.get("state"))
     try:
-        st.session_state["yahoo_token"] = _token_from_code(code)
+        st.session_state["yahoo_token"] = _token_from_code(code, verifier)
         st.session_state.pop("yahoo_auth_error", None)
         st.session_state.pop("yahoo_auth_debug", None)
     except requests.HTTPError as e:  # surface Yahoo's body, which explains most failures
@@ -197,12 +248,14 @@ def diagnostics() -> dict:
     with no secret values -- safe to render."""
     return {
         "configured": configured(),
+        "client_type": "public (PKCE)" if _is_public_client() else "confidential",
         "secrets_present": [k for k in ("yahoo_client_id", "yahoo_client_secret",
                                         "yahoo_redirect_uri", "yahoo_refresh_token", "yahoo_scope")
                             if _secret(k) is not None],
         "redirect_uri": _secret("yahoo_redirect_uri"),
         "scope": ("fspt-r" if _secret("yahoo_scope") is None else _secret("yahoo_scope")),
         "redirect_params_on_url": redirect_params_seen(),
+        "pkce_pending": bool(st.session_state.get("yahoo_pkce_verifier")),
         "token_in_session": bool(st.session_state.get("yahoo_token")),
         "last_error": st.session_state.get("yahoo_auth_error"),
         "last_debug": st.session_state.get("yahoo_auth_debug"),
