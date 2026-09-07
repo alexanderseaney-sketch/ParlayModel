@@ -95,13 +95,21 @@ def _token_from_refresh(refresh_token: str) -> dict:
 
 
 def authorize_url() -> str:
+    """Yahoo removed the 'Fantasy Sports' permission checkbox from app creation, so
+    access is requested here via the `fspt-r` scope. If Yahoo ever rejects that
+    scope for a given app, set the secret `yahoo_scope = ""` to drop it (the app
+    then gets whatever its registered permissions allow)."""
     from urllib.parse import urlencode
-    return _AUTH_URL + "?" + urlencode({
+    params = {
         "client_id": _secret("yahoo_client_id"),
         "redirect_uri": _secret("yahoo_redirect_uri"),
         "response_type": "code",
-        "scope": "fspt-r",
-    })
+    }
+    scope = _secret("yahoo_scope")
+    scope = "fspt-r" if scope is None else scope
+    if scope:
+        params["scope"] = scope
+    return _AUTH_URL + "?" + urlencode(params)
 
 
 def _live_token() -> dict | None:
