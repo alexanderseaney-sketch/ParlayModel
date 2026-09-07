@@ -1014,13 +1014,8 @@ def _yahoo_panel() -> tuple[str | None, dict | None]:
             st.caption("Approve access and Yahoo sends you back here connected. If the "
                        "button doesn't open **api.login.yahoo.com**, open this link directly:")
             st.code(url, language=None)
-            seen = yf.redirect_params_seen()
-            if seen:
-                st.caption(f"↩︎ back from Yahoo with: `{', '.join(seen)}` — "
-                           + ("processing…" if "code" in seen else "see the error above."))
-            else:
-                st.caption(f"redirect URI in use: `{yf._secret('yahoo_redirect_uri')}` "
-                           "— this must match the Yahoo app **exactly**.")
+            with st.expander("Connection details"):
+                st.json(yf.diagnostics())
             return None, None
 
         st.link_button("Yahoo account", "https://football.fantasysports.yahoo.com/", disabled=True)

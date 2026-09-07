@@ -83,6 +83,15 @@ def check_password() -> bool:
     return False
 
 
+# Capture a Yahoo OAuth bounce-back (?code=) BEFORE the password gate -- otherwise
+# check_password()'s st.stop() runs first and the code is never read, so the round
+# trip silently does nothing. No-op unless a code/error is actually on the URL.
+try:
+    from yahoo_fantasy import handle_oauth_redirect as _yahoo_oauth_redirect
+    _yahoo_oauth_redirect()
+except Exception:  # noqa: BLE001
+    pass
+
 if not check_password():
     st.stop()
 

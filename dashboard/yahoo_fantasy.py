@@ -179,13 +179,34 @@ def handle_oauth_redirect() -> None:
     try:
         st.session_state["yahoo_token"] = _token_from_code(code)
         st.session_state.pop("yahoo_auth_error", None)
+        st.session_state.pop("yahoo_auth_debug", None)
     except requests.HTTPError as e:  # surface Yahoo's body, which explains most failures
-        body = e.response.text[:400] if e.response is not None else ""
+        body = e.response.text[:600] if e.response is not None else ""
         st.session_state["yahoo_auth_error"] = f"Token exchange failed ({e}). Yahoo said: {body}"
+        st.session_state["yahoo_auth_debug"] = body
     except Exception as e:  # noqa: BLE001
-        st.session_state["yahoo_auth_error"] = f"Token exchange failed: {e}"
+        import traceback
+        st.session_state["yahoo_auth_error"] = f"Token exchange failed: {e!r}"
+        st.session_state["yahoo_auth_debug"] = traceback.format_exc()
     finally:
         _clear_redirect_params()
+
+
+def diagnostics() -> dict:
+    """Everything the panel needs to explain why a connection isn't happening,
+    with no secret values -- safe to render."""
+    return {
+        "configured": configured(),
+        "secrets_present": [k for k in ("yahoo_client_id", "yahoo_client_secret",
+                                        "yahoo_redirect_uri", "yahoo_refresh_token", "yahoo_scope")
+                            if _secret(k) is not None],
+        "redirect_uri": _secret("yahoo_redirect_uri"),
+        "scope": ("fspt-r" if _secret("yahoo_scope") is None else _secret("yahoo_scope")),
+        "redirect_params_on_url": redirect_params_seen(),
+        "token_in_session": bool(st.session_state.get("yahoo_token")),
+        "last_error": st.session_state.get("yahoo_auth_error"),
+        "last_debug": st.session_state.get("yahoo_auth_debug"),
+    }
 
 
 def connected() -> bool:
