@@ -12,10 +12,12 @@ separate from the projection itself rather than baked in.
 Known gap: the prop model has no RB-receptions market, so RB projections carry
 receiving yards + TDs but no per-reception points. Flagged in the UI.
 """
+import json
 import os
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from utils import (
     CURRENT_PREDICTIONS_PATH, RAW_DIR, load_csv_if_exists, load_current_predictions,
@@ -1010,17 +1012,16 @@ def _yahoo_panel() -> tuple[str | None, dict | None]:
             st.error(err)
         if not yf.connected():
             url = yf.authorize_url()
-            # MUST navigate in the same tab -- st.link_button opens a new one, and
-            # Streamlit gives each tab its own session, so the token would land in a
-            # session the user isn't looking at.
-            st.markdown(
-                f'<a href="{url}" target="_self" style="display:inline-block;padding:.5rem 1rem;'
-                f'border-radius:.5rem;background:#7B61FF;color:#fff;font-weight:600;'
-                f'text-decoration:none">Authorize with Yahoo →</a>',
-                unsafe_allow_html=True,
-            )
-            st.caption("Opens Yahoo in **this tab**, then redirects back here connected. "
-                       "If the link doesn't work, paste this into the address bar of this tab:")
+            # A plain link/link_button opens a NEW tab, and Streamlit scopes
+            # session_state per tab -- the token would land where the user can't
+            # see it. Navigate the current tab via JS instead.
+            if st.button("Authorize with Yahoo →", type="primary", key="ff_yh_go"):
+                components.html(
+                    f"<script>window.top.location.href = {json.dumps(url)};</script>",
+                    height=0,
+                )
+            st.caption("Sends you to Yahoo **in this tab**, then back here connected. "
+                       "If nothing happens, copy this and paste it into this tab's address bar:")
             st.code(url, language=None)
             with st.expander("Connection details"):
                 st.json(yf.diagnostics())
