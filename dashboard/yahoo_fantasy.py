@@ -138,20 +138,54 @@ def _live_token() -> dict | None:
     return tok
 
 
+_REDIRECT_PARAMS = ("code", "state", "error", "error_description")
+
+
+def _clear_redirect_params() -> None:
+    for k in _REDIRECT_PARAMS:
+        try:
+            st.query_params.pop(k, None)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def redirect_params_seen() -> list[str]:
+    """Which OAuth-redirect params are on the URL right now (names only, no
+    values) -- shown in the panel so a failed round-trip is diagnosable."""
+    return [k for k in _REDIRECT_PARAMS if st.query_params.get(k)]
+
+
 def handle_oauth_redirect() -> None:
-    """If Yahoo just bounced back with ?code=, exchange it and drop the param.
+    """Process a bounce-back from Yahoo: an `error` param, or a `code` to exchange.
     Call once near the top of the Yahoo panel."""
+    if st.session_state.get("yahoo_token"):
+        _clear_redirect_params()
+        return
+
+    if st.query_params.get("error"):
+        why = st.query_params.get("error_description") or "(no detail from Yahoo)"
+        st.session_state["yahoo_auth_error"] = (
+            f"Yahoo rejected the request — `{st.query_params.get('error')}`: {why}. "
+            "Usual causes: the redirect URI doesn't exactly match the one registered "
+            "on the Yahoo app, or the `fspt-r` scope isn't allowed (set secret "
+            '`yahoo_scope = ""` and retry).'
+        )
+        _clear_redirect_params()
+        return
+
     code = st.query_params.get("code")
-    if not code or st.session_state.get("yahoo_token"):
+    if not code:
         return
     try:
         st.session_state["yahoo_token"] = _token_from_code(code)
         st.session_state.pop("yahoo_auth_error", None)
+    except requests.HTTPError as e:  # surface Yahoo's body, which explains most failures
+        body = e.response.text[:400] if e.response is not None else ""
+        st.session_state["yahoo_auth_error"] = f"Token exchange failed ({e}). Yahoo said: {body}"
     except Exception as e:  # noqa: BLE001
-        st.session_state["yahoo_auth_error"] = f"Authorization failed: {e}"
+        st.session_state["yahoo_auth_error"] = f"Token exchange failed: {e}"
     finally:
-        st.query_params.pop("code", None)
-        st.query_params.pop("state", None)
+        _clear_redirect_params()
 
 
 def connected() -> bool:
