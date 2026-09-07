@@ -1010,9 +1010,17 @@ def _yahoo_panel() -> tuple[str | None, dict | None]:
             st.error(err)
         if not yf.connected():
             url = yf.authorize_url()
-            st.link_button("Authorize with Yahoo →", url, type="primary")
-            st.caption("Approve access and Yahoo sends you back here connected. If the "
-                       "button doesn't open **api.login.yahoo.com**, open this link directly:")
+            # MUST navigate in the same tab -- st.link_button opens a new one, and
+            # Streamlit gives each tab its own session, so the token would land in a
+            # session the user isn't looking at.
+            st.markdown(
+                f'<a href="{url}" target="_self" style="display:inline-block;padding:.5rem 1rem;'
+                f'border-radius:.5rem;background:#7B61FF;color:#fff;font-weight:600;'
+                f'text-decoration:none">Authorize with Yahoo →</a>',
+                unsafe_allow_html=True,
+            )
+            st.caption("Opens Yahoo in **this tab**, then redirects back here connected. "
+                       "If the link doesn't work, paste this into the address bar of this tab:")
             st.code(url, language=None)
             with st.expander("Connection details"):
                 st.json(yf.diagnostics())
