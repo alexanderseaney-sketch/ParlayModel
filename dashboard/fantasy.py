@@ -1074,97 +1074,171 @@ def _disconnect_button() -> None:
         st.rerun()
 
 
-def _render_my_team(scoring: str, league_key: str | None, starters: dict | None):
-    if yf is None or not league_key:
-        st.info("Connect a Yahoo league in the panel above to load your team here.")
-        return
-    week = _next_week()
-    try:
-        roster = yf.my_roster(league_key, week)
-    except Exception as e:  # noqa: BLE001
-        st.error(f"Couldn't load your roster: {e}")
-        return
-    if roster.empty:
-        st.warning("Yahoo returned an empty roster.")
-        return
+def _starter_slots(lsettings: dict | None) -> dict:
+    """Starting-lineup shape for My Team. Pre-filled from a connected Yahoo league,
+    else a standard 1QB / 2RB / 2WR / 1TE / 1FLEX."""
+    if lsettings and st.session_state.get("_ff_mt_seeded") != lsettings.get("name"):
+        s = lsettings["starters"]
+        st.session_state.update({
+            "ff_mt_qb": s["QB"], "ff_mt_rb": s["RB"], "ff_mt_wr": s["WR"],
+            "ff_mt_te": s["TE"], "ff_mt_flex": s["FLEX"],
+            "_ff_mt_seeded": lsettings.get("name"),
+        })
+    with st.expander("Starting slots" + (" · from your Yahoo league" if lsettings else "")):
+        c = st.columns(5)
+        return {
+            "QB": c[0].number_input("QB", 0, 3, 1, key="ff_mt_qb"),
+            "RB": c[1].number_input("RB", 0, 5, 2, key="ff_mt_rb"),
+            "WR": c[2].number_input("WR", 0, 6, 2, key="ff_mt_wr"),
+            "TE": c[3].number_input("TE", 0, 3, 1, key="ff_mt_te"),
+            "FLEX": c[4].number_input("FLEX", 0, 4, 1, key="ff_mt_flex"),
+        }
 
+
+def _ros_lookup(scoring: str) -> dict:
+    """normalized name -> rest-of-season projection (draft-board full-season scale)."""
+    ros = _draft_table(scoring, 12, DEFAULT_STARTERS)
+    if ros.empty:
+        return {}
+    return {normalize_name(p): v for p, v in zip(ros["player"], ros["proj"])}
+
+
+def _my_roster_df(scoring: str, league_key: str | None) -> tuple[pd.DataFrame, str]:
+    """The user's roster joined to our weekly projections. From Yahoo if connected,
+    otherwise from a manual multiselect saved in session. Returns (df, source)."""
     proj = _projections(_pred_mtime(), scoring)
-    m = _attach_proj(roster, proj)
-    # trust our detected position where we matched, else Yahoo's
-    m["position"] = m["our_pos"].where(m["our_pos"].notna(), m["position"].str.upper())
-    m["is_starter_now"] = ~m["slot"].isin(["BN", "IR", "NA"])
+    if proj.empty:
+        return pd.DataFrame(), "none"
 
-    use_starters = starters or DEFAULT_STARTERS
-    best = _optimal_lineup(m, use_starters)
+    if league_key and yf is not None:
+        try:
+            roster = yf.my_roster(league_key, _next_week())
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't load your Yahoo roster: {e}")
+            return pd.DataFrame(), "yahoo"
+        m = _attach_proj(roster, proj)
+        m["position"] = m["our_pos"].where(m["our_pos"].notna(), m["position"].str.upper())
+        m["is_starter_now"] = ~m["slot"].isin(["BN", "IR", "NA"])
+        return m, "yahoo"
+
+    options = proj.sort_values("proj", ascending=False)["player"].tolist()
+    picked = st.multiselect(
+        "Your roster — pick every player you own", options, key="ff_my_roster",
+        help="Type to search. Saved for this browser session.",
+    )
+    if not picked:
+        return pd.DataFrame(), "manual-empty"
+    m = proj[proj["player"].isin(picked)].copy().reset_index(drop=True)
+    m["name"] = m["player"]
+    m["status"] = ""
+    m["is_starter_now"] = pd.NA
+    return m, "manual"
+
+
+def _render_my_team(scoring: str, league_key: str | None, lsettings: dict | None):
+    m, source = _my_roster_df(scoring, league_key)
+    if source == "none":
+        st.warning("No weekly projections available yet — run the data pulls.")
+        return
+    if source == "manual-empty":
+        st.info("Pick your roster above to get your best lineup and start/sit calls.")
+        return
+    if m.empty:
+        st.warning("Couldn't match any of those players to our projections.")
+        return
+
+    starters = _starter_slots(lsettings)
+    best = _optimal_lineup(m, starters)
+    m = m.copy()
     m["best_xi"] = m.index.isin(best)
+    _ros = _ros_lookup(scoring)
+    m["ReadOfSeason"] = m["name"].map(lambda n: _ros.get(normalize_name(n)))
 
+    week = _next_week()
     wk_txt = f"Week {week}" if week else "this week"
-    st.caption(f"{SCORING_LABELS[scoring]} · {wk_txt}. **Best XI** is the highest-projected legal "
-               f"lineup from your roster; rows where it disagrees with your current Yahoo slot are "
-               f"flagged. Projections are the prop model's weekly roll-up.")
+    st.caption(f"{SCORING_LABELS[scoring]} · {wk_txt}. **Start** = the highest-projected legal "
+               f"lineup from your roster. Weekly projections are the prop model's roll-up; "
+               f"**ROS** is the rest-of-season (full-season) projection.")
 
     show = m.assign(
+        Slot=m["best_xi"].map({True: "✅ START", False: "bench"}),
         Proj=m["proj"].round(1),
         Matchup=m["opp"].where(m["opp"].notna(), "—"),
-        Now=m["slot"].replace({"W/R/T": "FLEX"}),
-        Best=m["best_xi"].map({True: "✅ start", False: "bench"}),
-        Move=[("⬆️ start" if b and not n else "⬇️ sit" if n and not b else "")
-              for b, n in zip(m["best_xi"], m["is_starter_now"])],
     ).sort_values(["best_xi", "proj"], ascending=[False, False])
 
-    cols = ["name", "position", "team", "Now", "Best", "Move", "Proj", "Matchup", "status"]
+    cols = ["Slot", "name", "position", "team", "Proj", "Matchup", "ReadOfSeason"]
+    if source == "yahoo":
+        show["Yahoo now"] = m["slot"].replace({"W/R/T": "FLEX"})
+        cols.insert(1, "Yahoo now")
     st.dataframe(
         show[cols].rename(columns={"name": "Player", "position": "Pos", "team": "Team",
-                                   "status": "Inj"}),
-        hide_index=True, width="stretch", height=560)
+                                   "ReadOfSeason": "ROS"}),
+        hide_index=True, width="stretch", height=520)
 
-    moves = show[show["Move"] != ""]
-    if not moves.empty:
-        lines = []
-        for _, r in moves[moves["Move"] == "⬆️ start"].iterrows():
-            lines.append(f"**Start {r['name']}** ({r['Proj']:.1f})")
-        for _, r in moves[moves["Move"] == "⬇️ sit"].iterrows():
-            lines.append(f"sit {r['name']} ({r['Proj']:.1f})")
-        st.markdown("**Suggested moves:** " + " · ".join(lines))
+    start = show[show["best_xi"]]
+    bench = show[~show["best_xi"] & show["proj"].notna()]
+
+    if source == "yahoo":
+        # moves vs the lineup actually set on Yahoo
+        wrong = show[show["best_xi"] & show["Yahoo now"].isin(["BN", "IR", "NA"])]
+        if not wrong.empty:
+            st.markdown("**Change on Yahoo — start:** " + ", ".join(
+                f"{r['name']} ({r['proj']:.1f})" for _, r in wrong.iterrows()))
+        else:
+            st.success("Your Yahoo lineup already matches the best projected XI.")
     else:
-        st.success("Your current Yahoo lineup already matches the best projected XI.")
+        # manual mode: the best XI is the call; flag the tight ones + first off the bench
+        if not start.empty and not bench.empty:
+            floor = start["proj"].min()
+            tight = bench[bench["proj"] >= floor - 1.5].head(3)
+            if not tight.empty:
+                st.markdown("**Tight calls** (within ~1.5 of a starter — let matchup decide): "
+                            + " · ".join(f"{r['name']} {r['proj']:.1f}" for _, r in tight.iterrows()))
+            top_bench = bench.iloc[0]
+            st.caption(f"First off the bench if a starter sits: **{top_bench['name']}** "
+                       f"({top_bench['proj']:.1f}, {top_bench['position']}).")
 
 
 def _render_waivers(scoring: str, league_key: str | None):
-    if yf is None or not league_key:
-        st.info("Connect a Yahoo league in the panel above to see free agents.")
-        return
-    pos = st.radio("Position", ["All", "QB", "RB", "WR", "TE"], horizontal=True, key="ff_wv_pos")
-    try:
-        fa = yf.free_agents(league_key, None if pos == "All" else pos, count=75)
-    except Exception as e:  # noqa: BLE001
-        st.error(f"Couldn't load free agents: {e}")
-        return
-    if fa.empty:
-        st.info("No free agents returned for that filter.")
-        return
-
     proj = _projections(_pred_mtime(), scoring)
-    m = _attach_proj(fa, proj)
-    ros = _draft_table(scoring, (league_key and 12) or 12, DEFAULT_STARTERS)
-    ros_by = {}
-    if not ros.empty:
-        ros_by = {normalize_name(p): v for p, v in zip(ros["player"], ros["proj"])}
-    m["ros"] = m["name"].map(lambda n: ros_by.get(normalize_name(n)))
-    m = m[m["proj"].notna() | m["ros"].notna()].copy()
-    m = m.sort_values("proj", ascending=False, na_position="last")
-
+    if proj.empty:
+        st.warning("No weekly projections available yet.")
+        return
+    ros_by = _ros_lookup(scoring)
     week = _next_week()
-    st.caption(f"{SCORING_LABELS[scoring]} · free agents in your league, ranked by our "
-               f"{'Week ' + str(week) if week else 'weekly'} projection. **ROS** = our rest-of-"
-               f"season full-season projection (draft-board scale) for context.")
+    pos = st.radio("Position", ["All", "QB", "RB", "WR", "TE"], horizontal=True, key="ff_wv_pos")
+
+    if league_key and yf is not None:
+        try:
+            fa = yf.free_agents(league_key, None if pos == "All" else pos, count=75)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't load free agents: {e}")
+            return
+        m = _attach_proj(fa, proj)
+        m["name"] = m.get("name", m.get("player"))
+        src_note = "free agents in your league"
+    else:
+        mine = set(st.session_state.get("ff_my_roster", []))
+        m = proj[~proj["player"].isin(mine)].copy()
+        m["name"] = m["player"]
+        m["status"] = ""
+        if pos != "All":
+            m = m[m["position"] == pos]
+        src_note = "every projected player not on your roster (set it on **My Team**)"
+
+    m = m[m["proj"].notna()].copy()
+    m["ROS"] = m["name"].map(lambda n: ros_by.get(normalize_name(n)))
+    m = m.sort_values("proj", ascending=False)
+
+    st.caption(f"{SCORING_LABELS[scoring]} · {src_note}, ranked by our "
+               f"{'Week ' + str(week) if week else 'weekly'} projection. **ROS** = rest-of-season.")
     show = m.head(40).assign(
-        Proj=m["proj"].round(1), ROS=m["ros"].round(0),
+        Proj=m["proj"].round(1), ROS=m["ROS"].round(0),
         Matchup=m["opp"].where(m["opp"].notna(), "—"),
     )[["name", "position", "team", "Proj", "Matchup", "ROS", "status"]]
     st.dataframe(
         show.rename(columns={"name": "Player", "position": "Pos", "team": "Team", "status": "Inj"}),
-        hide_index=True, width="stretch", height=560)
+        hide_index=True, width="stretch", height=520)
 
 
 # ----------------------------------------------------------------------- page
@@ -1203,14 +1277,13 @@ def page_fantasy():
         "Projections roll up the prop model's per-stat trailing averages; matchups and "
         "boom/bust come from weekly box scores."
     )
-    base = ["Player Card", "Projections", "Start / Sit", "Matchups", "Boom / Bust"]
-    names = (["My Team", "Waivers"] + base) if league_key else base
+    names = ["My Team", "Waivers", "Player Card", "Projections",
+             "Start / Sit", "Matchups", "Boom / Bust"]
     tabs = dict(zip(names, st.tabs(names)))
-    if league_key:
-        with tabs["My Team"]:
-            _render_my_team(scoring, league_key, (lsettings or {}).get("starters"))
-        with tabs["Waivers"]:
-            _render_waivers(scoring, league_key)
+    with tabs["My Team"]:
+        _render_my_team(scoring, league_key, lsettings)
+    with tabs["Waivers"]:
+        _render_waivers(scoring, league_key)
     with tabs["Player Card"]:
         _render_player_card(scoring)
     with tabs["Projections"]:
