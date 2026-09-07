@@ -1009,10 +1009,11 @@ def _yahoo_panel() -> tuple[str | None, dict | None]:
         if err:
             st.error(err)
         if not yf.connected():
-            st.markdown(
-                f"[**Authorize with Yahoo →**]({yf.authorize_url()})  \n"
-                "Approve access, and Yahoo will send you back here connected."
-            )
+            url = yf.authorize_url()
+            st.link_button("Authorize with Yahoo →", url, type="primary")
+            st.caption("Approve access and Yahoo sends you back here connected. If the "
+                       "button doesn't open **api.login.yahoo.com**, open this link directly:")
+            st.code(url, language=None)
             seen = yf.redirect_params_seen()
             if seen:
                 st.caption(f"↩︎ back from Yahoo with: `{', '.join(seen)}` — "
