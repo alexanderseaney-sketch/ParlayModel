@@ -47,7 +47,8 @@ if hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
 from utils import (
     normalize_name, load_leg_correlations, pretty_stat_name,
-    estimate_player_stat_std, recompute_probability_for_real_line,
+    estimate_player_stat_std, recompute_probability_for_real_line, _STAT_WEEKLY_COL,
+    prop_scope, is_low_noise_line,
 )  # noqa: E402
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "..")
@@ -103,6 +104,21 @@ def load_matched_props() -> pd.DataFrame:
     predictions["_match_key"] = predictions["player_display_name"].apply(normalize_name)
     props["_match_key"] = props["full_name"].apply(normalize_name)
 
+    # A "weekly bet slip" is single-game props only: season-long and quarter/half
+    # props are a different bet shape and shouldn't sit next to a Week-1 game leg.
+    # And a sub-floor game line (rushing 3.5, receptions 1.5) is deep-backup noise
+    # -- the model is trivially 99% there and the payout is a rounding error. Both
+    # filters mirror the Parlay Builder's defaults.
+    props = props[props["stat_name"].apply(prop_scope) == "game"]
+    props = props[~props.apply(
+        lambda r: is_low_noise_line(r["stat_name"], r.get("stat_value")), axis=1)]
+
+    # Underdog labels receptions "receiving_rec"; the model's stat_name for it is
+    # "receptions". Every other stat_name already lines up. Without this remap the
+    # inner merge below silently drops every receptions prop (a high-volume,
+    # low-variance market the model is good at) -- same fix as score_underdog_board.
+    props["stat_name"] = props["stat_name"].replace({"receiving_rec": "receptions"})
+
     predictions = predictions.copy()
     predictions["my_side"] = np.where(predictions["predicted_prob_over"] >= 0.5, "over", "under")
     predictions["my_prob"] = np.where(
@@ -148,7 +164,12 @@ def load_matched_props() -> pd.DataFrame:
         # stat_value) directly when my_side is "over", or works in "under" terms
         # (both flipped) when my_side is "under", then returns whichever matches
         # my_side so downstream code (Kelly calc etc.) keeps meaning the same thing.
-        std = estimate_player_stat_std(row["_nflverse_player_id"], row["stat_name"], weekly_stats, position=row["position"])
+        # estimate_player_stat_std wants a weekly_stats.csv column, not the model's
+        # stat_name -- without this map it always returned None and the real-line
+        # recompute below silently no-op'd (same trap fixed in score_underdog_board).
+        wcol = _STAT_WEEKLY_COL.get(row["stat_name"])
+        std = (estimate_player_stat_std(row["_nflverse_player_id"], wcol, weekly_stats,
+                                        position=row["position"]) if wcol else None)
         if row["my_side"] == "over":
             recomputed = recompute_probability_for_real_line(row["my_prob"], row["proxy_line"], row["stat_value"], std)
         else:

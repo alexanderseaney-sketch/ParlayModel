@@ -115,13 +115,18 @@ def fetch_day_forecast(lat: float, lon: float, date: str) -> dict | None:
     day_hours = [i for i, t in enumerate(hourly["time"]) if 12 <= int(t[11:13]) <= 23]
     if not day_hours:
         return None
-    temps = [hourly["temperature_2m"][i] for i in day_hours]
-    winds = [hourly["wind_speed_10m"][i] for i in day_hours]
-    precip = [hourly["precipitation_probability"][i] for i in day_hours]
+    # Open-Meteo returns null for individual hours near the horizon edge, and
+    # precipitation_probability is frequently null more than ~a week out -- drop
+    # the nulls before aggregating rather than crashing on sum([float, None]).
+    temps = [v for i in day_hours if (v := hourly["temperature_2m"][i]) is not None]
+    winds = [v for i in day_hours if (v := hourly["wind_speed_10m"][i]) is not None]
+    precip = [v for i in day_hours if (v := hourly["precipitation_probability"][i]) is not None]
+    if not temps or not winds:
+        return None
     return {
         "temp_forecast": sum(temps) / len(temps),
         "wind_forecast": max(winds),
-        "precip_prob_forecast": max(precip),
+        "precip_prob_forecast": max(precip) if precip else None,
     }
 
 

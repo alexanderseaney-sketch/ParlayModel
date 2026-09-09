@@ -36,13 +36,18 @@ import requests
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
 HISTORY_DIR = os.path.join(RAW_DIR, "underdog_history")
-PICKEM_URL = "https://api.underdogfantasy.com/beta/v5/over_under_lines"
+# 2026-09-08: the old /beta/v5/ path started returning 426 "upgrade_required" for any
+# client version -- Underdog retired it. Their web app now hits /v1/over_under_lines,
+# which returns the identical {players, appearances, over_under_lines} shape.
+PICKEM_URL = "https://api.underdogfantasy.com/v1/over_under_lines"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept": "application/json",
+    "Origin": "https://underdogfantasy.com",
+    "Referer": "https://underdogfantasy.com/",
 }
-TIMEOUT = 15
+TIMEOUT = 20
 
 
 def fetch_pickem_data() -> dict:
