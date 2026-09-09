@@ -1,0 +1,110 @@
+name: Refresh data
+
+# Runs the same pulls the dashboard's "Run Data Pulls" button triggers, then
+# regenerates predictions and commits whatever changed. Streamlit Community Cloud
+# only ever serves what's in this repo (no storage of its own), so this is what
+# keeps the deployed site current without a human clicking anything -- a push here
+# triggers the same auto-redeploy a manual `git push` already does.
+#
+# Each pull step continues on error so one flaky source (Footballguys' backend has
+# been observed to fail most individual requests, see data/pull_footballguys_depth.py)
+# doesn't block the others from updating. Runs on a schedule and via workflow_dispatch
+# for an on-demand trigger from the Actions tab.
+
+"on":
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compute pull years
+        # --years has no default (required=True) -- reuses dashboard/utils.py's
+        # _default_pull_years() rather than hardcoding years here, which is exactly
+        # how this went stale before (see that function's own docstring: a
+        # hardcoded ["2023","2024"] silently never covered 2025 once time passed).
+        id: years
+        run: |
+          YEARS=$(python -c "import sys; sys.path.insert(0, 'dashboard'); from utils import _default_pull_years; print(' '.join(_default_pull_years()))")
+          echo "years=$YEARS" >> "$GITHUB_OUTPUT"
+
+      - name: Pull nflverse (schedules + stats + NGS + injuries + snaps + rosters)
+        continue-on-error: true
+        run: python data/pull_nflverse.py --years ${{ steps.years.outputs.years }} --skip-pbp
+
+      - name: Pull official team-site rosters (all 32 clubs)
+        continue-on-error: true
+        run: python data/pull_nfl_rosters.py
+
+      - name: Pull player id bridge (Yahoo / Sleeper / ESPN <-> nflverse)
+        continue-on-error: true
+        run: python data/pull_player_ids.py
+
+      - name: Pull coaching staff (Wikipedia)
+        continue-on-error: true
+        run: python data/pull_coaching_staff.py
+
+      - name: Pull Spotrac contracts + IR (all 32 clubs)
+        continue-on-error: true
+        run: python data/pull_spotrac.py
+
+      # team_scheme_tendencies.csv and coach_history.csv are NOT rebuilt here on
+      # purpose: both need the full pbp.csv (not pulled with --skip-pbp) and only
+      # shift on the timescale of new games / coaching changes -- manual
+      # `python models/build_team_scheme_tendencies.py` / `build_coach_history.py`
+      # after a pbp pull. The committed CSVs persist.
+
+      - name: Rebuild fantasy matchups (weekly_stats only, no pbp)
+        continue-on-error: true
+        run: python models/build_fantasy_matchups.py
+
+      - name: Pull SB Nation team news
+        continue-on-error: true
+        run: python data/pull_sbnation_news.py
+
+      - name: Pull NBC Sports / PFT rumor mill
+        continue-on-error: true
+        run: python data/pull_nbcsports_news.py
+
+      - name: Pull Footballguys depth charts
+        continue-on-error: true
+        run: python data/pull_footballguys_depth.py
+
+      - name: Pull Underdog pick'em props
+        continue-on-error: true
+        run: python data/pull_underdog.py
+
+      - name: Pull weather forecasts
+        continue-on-error: true
+        run: python data/pull_weather_forecast.py
+
+      - name: Regenerate current predictions
+        continue-on-error: true
+        run: python models/current_predictions.py
+
+      - name: Commit and push if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/*.csv models/current_player_predictions.csv
+          if git diff --cached --quiet; then
+            echo "No data changes -- nothing to commit."
+          else
+            git commit -m "Automated data refresh"
+            git push
+          fi
