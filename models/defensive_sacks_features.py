@@ -22,6 +22,8 @@ import os
 
 import pandas as pd
 
+from inference_mode import lag
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 DEFENSIVE_POSITIONS = ["LB", "OLB", "ILB", "MLB", "CB", "DE", "DT", "NT", "DL",
@@ -102,12 +104,12 @@ def build_sacks_dataset(min_week: int = 4) -> pd.DataFrame:
     for col in ["sacks", "plays_on_defense"]:
         log[f"{col}_rolling"] = (
             log.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
+            .apply(lambda s: lag(s).expanding().mean())
             .reset_index(level=[0, 1], drop=True)
         )
         log[f"{col}_last3"] = (
             log.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
+            .apply(lambda s: lag(s).rolling(3, min_periods=1).mean())
             .reset_index(level=[0, 1], drop=True)
         )
 
@@ -119,7 +121,7 @@ def build_sacks_dataset(min_week: int = 4) -> pd.DataFrame:
     team_sacks = team_sacks.sort_values(["defteam", "season", "week"]).reset_index(drop=True)
     team_sacks["team_sacks_rolling"] = (
         team_sacks.groupby(["defteam", "season"])["team_sacks"]
-        .apply(lambda s: s.shift(1).expanding().mean())
+        .apply(lambda s: lag(s).expanding().mean())
         .reset_index(level=[0, 1], drop=True)
     )
     log = log.merge(team_sacks[["defteam", "season", "week", "team_sacks_rolling"]],
@@ -129,7 +131,9 @@ def build_sacks_dataset(min_week: int = 4) -> pd.DataFrame:
 
     # Applied here, after every rolling/merge step above, not on the raw defender log --
     # see the matching comment where the rolling loop is first built.
-    log = log[log["plays_on_defense"] >= MIN_PLAYS_TO_QUALIFY].reset_index(drop=True)
+    # Pre-game role, not same-game snaps -- see feature_engineering.PREGAME_QUALIFIER.
+    from feature_engineering import qualify
+    log = qualify(log, "plays_on_defense", "plays_on_defense_rolling", MIN_PLAYS_TO_QUALIFY)
 
     log["proxy_line"] = log["sacks_rolling"]
     log["over_proxy_line"] = (log["sacks"] > log["proxy_line"]).astype(int)

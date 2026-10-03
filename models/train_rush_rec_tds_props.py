@@ -12,11 +12,11 @@ FEATURES = [
     "targets_rolling", "targets_last3", "rushing_yards_rolling", "receiving_yards_rolling",
     "def_epa_allowed_rolling", "red_zone_touches_rolling", "red_zone_share_rolling",
 ]
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 
 def main():
-    df = build_rush_rec_tds_dataset(min_week=4)
+    df = build_rush_rec_tds_dataset(min_week=1)
     df = df[df["position"].isin(["RB", "WR", "TE"])].copy()
     df = df.dropna(subset=["rush_rec_tds_rolling"])
     print(f"Dataset: {len(df)} RB/WR/TE player-games\n")

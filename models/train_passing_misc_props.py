@@ -17,7 +17,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from player_prop_passing_features import build_passing_yards_dataset
 from calibration_report import print_calibration_report
 
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 CONFIGS = {
     "passing_tds": {
@@ -37,7 +37,7 @@ CONFIGS = {
 
 def train_one(prop_type: str, config: dict) -> None:
     stat_col, features = config["stat_col"], config["features"]
-    df = build_passing_yards_dataset(min_week=4)
+    df = build_passing_yards_dataset(min_week=1)
     df["proxy_line"] = df[f"{stat_col}_rolling"]
     df["over_proxy_line"] = (df[stat_col] > df["proxy_line"]).astype(int)
     df = df.dropna(subset=features)

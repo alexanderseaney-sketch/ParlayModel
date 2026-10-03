@@ -5,6 +5,20 @@ and (eventually) drives an approval-gated bet-placement flow via browser automat
 
 ## Status
 
+> **2026-10-02 — read this first.** An accuracy audit found that the per-season holdout
+> accuracies quoted below (66-84%, "78% at 0.4 confidence") were measured on an
+> outcome-selected population and are **not achievable live**. Training rows only
+> existed for games where the player got volume *in that game* (NGS weekly rows +
+> same-game carries/targets filters), NGS week-0 season totals leaked future games into
+> rolling features, and the red-zone TD features leaked whether the player touched the
+> red zone in the predicted game. All fixed and all 29 models retrained; honest holdout
+> numbers vs the rolling-average proxy are now ~58-63% accuracy (AUC 0.57-0.62) for the
+> yardage/receptions props. Against **real Underdog closing lines** (2026 wk1, 304 props,
+> `backtesting/backtest_underdog_lines.py`) the model alone scores worse than the
+> de-vigged market (log loss 0.670 vs 0.662); a 35/65 model/market blend beats both
+> (0.659) and is now what the +EV Finder and Weekly Bet Slip use. See the 2026-10-02 log
+> entry.
+
 **Currently on: Phase 2/3 — 29 player-prop models + game-winner model, all trained on 2014/2016-2024 (varies by feature requirements), real data pipeline now committed to the repo. See the 2026-08-26 log entry for a full catch-up on everything the Status list below doesn't yet reflect — that entry is more current than the bullets underneath it.**
 
 Done:
@@ -253,6 +267,38 @@ before starting work to see what the other side left you.*
 - Blocked: anything that couldn't be finished here + why (e.g. network restriction, need a decision)
 - Next: what the other environment (or next session) should pick up
 ```
+
+---
+
+**2026-10-02 — [home]**
+- Did: (1) **Live features were one game stale** -- rolling features are shift(1), and
+  current_predictions.py scores each player's latest PLAYED row, so that game was never
+  in the window (Zay Flowers' proxy 71.4 instead of 75.9). `models/inference_mode.py`
+  `lag()` turns the shift off at inference. Matchup feature now describes the UPCOMING
+  opponent (`_latest_def_epa_allowed`). (2) **Leaks**: NGS week 0 = season totals
+  (`feature_engineering.load_ngs` drops it); red-zone table only had games with a RZ
+  touch (old TD AUCs 0.72-0.79 were inflated; now a full player-game grid); training
+  population selected on same-game volume via NGS presence + carries/targets/touches/
+  snaps filters -- `NGS_ASOF` + `PREGAME_QUALIFIER` in feature_engineering.py, tested in
+  `models/experiments/ngs_selection.py` (old setup AUC ~0.51 on the realistic
+  population). (3) Models had never been retrained after the 09-22 cross_season_rolling
+  refactor -> full retrain (all 29). (4) New: `models/calibration.py` (isotonic/Platt
+  chosen by cross-fitted log loss, mostly "none"), `models/odds_utils.py` (American/
+  decimal/implied, de-vig, market blend), `models/parlay_calculator.py` (joint prob with
+  measured correlations, entry payout, EV, best-entry search), `models/interpreter.py`
+  (Claude write-ups; template fallback without ANTHROPIC_API_KEY), `data/pull_odds_api.py`
+  (live sportsbook props, credit-capped), `backtesting/backtest_underdog_lines.py`
+  (point-in-time model vs real Underdog lines), dashboard pages **+EV Finder** and
+  **Model Performance**. Weekly Bet Slip now sizes with the blended probability (gate
+  still reads the raw model).
+- Tested and rejected: LightGBM (lost 13/18 season folds), direct distributional model
+  vs the classifier + normal-shift line conversion (shift path wins/ties -- validated).
+- Blocked: no ODDS_API_KEY / ANTHROPIC_API_KEY here, so the Odds API puller (parsing
+  tested on a sample payload) and the Claude call path are unverified live.
+- Next: re-run `backtesting/backtest_underdog_lines.py` after Monday (wk4 lines are
+  archived); the underdog_history archive has a 09-09 -> 09-30 gap, so run
+  `data/pull_underdog.py` daily; model leans UNDER on receiving yds / passing TDs vs real
+  lines (one week -- watch it); nfl_rosters.csv was 24 days stale.
 
 ---
 

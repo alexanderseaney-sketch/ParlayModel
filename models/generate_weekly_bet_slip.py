@@ -50,6 +50,7 @@ from utils import (
     estimate_player_stat_std, recompute_probability_for_real_line, _STAT_WEEKLY_COL,
     prop_scope, is_low_noise_line,
 )  # noqa: E402
+from odds_utils import add_underdog_market_probs, blend_with_market  # noqa: E402
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
@@ -118,6 +119,9 @@ def load_matched_props() -> pd.DataFrame:
     # inner merge below silently drops every receptions prop (a high-volume,
     # low-variance market the model is good at) -- same fix as score_underdog_board.
     props["stat_name"] = props["stat_name"].replace({"receiving_rec": "receptions"})
+    # De-vigged market probability per option (Underdog prices both sides), for the
+    # model/market blend applied after the real-line recompute below.
+    props = add_underdog_market_probs(props)
 
     predictions = predictions.copy()
     predictions["my_side"] = np.where(predictions["predicted_prob_over"] >= 0.5, "over", "under")
@@ -180,7 +184,15 @@ def load_matched_props() -> pd.DataFrame:
         return recomputed if recomputed is not None else row["my_prob"]  # fall back to proxy-based if std unavailable
 
     merged["my_prob"] = merged.apply(_recompute_row, axis=1)
-    merged["confidence"] = (merged["my_prob"] - 0.5).abs() * 2
+    # Blend with the de-vigged market (2026-10-02): on real Underdog lines the blend
+    # beat both the model and the market alone, and it tames the model's worst
+    # failure -- 99%+ calls where the line sits far from the player's baseline
+    # because of a role change the model can't see. model_prob keeps the raw value.
+    # The MIN_CONFIDENCE gate keeps its meaning ("the model has a strong opinion") by
+    # reading the raw model; Kelly/EV sizing uses the blended, market-anchored my_prob.
+    merged["model_prob"] = merged["my_prob"]
+    merged["my_prob"] = blend_with_market(merged["my_prob"], merged["market_fair_prob"])
+    merged["confidence"] = (merged["model_prob"] - 0.5).abs() * 2
 
     return merged
 

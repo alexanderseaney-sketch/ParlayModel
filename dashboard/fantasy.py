@@ -1227,7 +1227,9 @@ def _render_waivers(scoring: str, league_key: str | None):
         src_note = "every projected player not on your roster (set it on **My Team**)"
 
     m = m[m["proj"].notna()].copy()
-    m["ROS"] = m["name"].map(lambda n: ros_by.get(normalize_name(n)))
+    # to_numeric: a player missing from the ROS lookup maps to None, and an object
+    # column holding None crashes .round() below.
+    m["ROS"] = pd.to_numeric(m["name"].map(lambda n: ros_by.get(normalize_name(n))), errors="coerce")
     m = m.sort_values("proj", ascending=False)
 
     st.caption(f"{SCORING_LABELS[scoring]} · {src_note}, ranked by our "

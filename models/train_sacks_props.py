@@ -39,6 +39,9 @@ def main():
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
         test = df[df["season"] == holdout]
+        if test.empty:  # pbp-derived: seasons missing from pbp.csv have no rows
+            print(f"{holdout}: no rows, skipped")
+            continue
         X_train, y_train = train[FEATURES], train["over_proxy_line"]
         X_test, y_test = test[FEATURES], test["over_proxy_line"].values
         model = XGBClassifier(**XGB_PARAMS)

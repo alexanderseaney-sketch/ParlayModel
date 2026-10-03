@@ -9,14 +9,21 @@ import os
 
 import pandas as pd
 
+from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 MIN_ATTEMPTS_TO_QUALIFY = 10  # filters out garbage-time/emergency QB appearances
 
+# See feature_engineering.cross_season_rolling's docstring for why these are bounded
+# and cross a season boundary rather than resetting there.
+_ROLLING_WINDOW = 16
+_TEAM_WINDOW = 8
 
-def build_passing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
+
+def build_passing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
-    ngs_passing = pd.read_csv(os.path.join(RAW_DIR, "ngs_passing.csv"))
+    ngs_passing = load_ngs("passing")  # drops week-0 season totals (look-ahead)
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
     qb = weekly[weekly["position"] == "QB"].copy()
@@ -31,42 +38,26 @@ def build_passing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     # baseline silently excluded their mop-up/emergency games, not just this week's
     # label. Applied below instead, after the rolling features are computed.
     for col in ["passing_yards", "attempts", "passing_tds", "interceptions"]:
-        qb[f"{col}_rolling"] = (
-            qb.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
-        qb[f"{col}_last3"] = (
-            qb.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        qb[f"{col}_rolling"] = cross_season_rolling(qb, "player_id", col, window=_ROLLING_WINDOW)
+        qb[f"{col}_last3"] = cross_season_rolling(qb, "player_id", col, window=3)
 
     # NGS passing: CPOE and avg intended air yards — skill + aggression signals
     ngs = ngs_passing.rename(columns={"player_gsis_id": "player_id"})
     ngs = ngs.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     for col in ["completion_percentage_above_expectation", "avg_intended_air_yards",
                 "aggressiveness", "avg_time_to_throw"]:
-        ngs[f"{col}_rolling"] = (
-            ngs.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        ngs[f"{col}_rolling"] = cross_season_rolling(ngs, "player_id", col, window=_ROLLING_WINDOW)
     ngs_cols = ["player_id", "season", "week"] + [
         f"{c}_rolling" for c in ["completion_percentage_above_expectation", "avg_intended_air_yards",
                                    "aggressiveness", "avg_time_to_throw"]
     ]
-    qb = qb.merge(ngs[ngs_cols], on=["player_id", "season", "week"], how="left")
+    qb = merge_ngs(qb, ngs[ngs_cols])
 
     # Opponent's pass defense strength
     from feature_engineering import build_team_week_offense, build_team_week_defense
     defense = build_team_week_defense(build_team_week_offense(weekly), schedules)
     defense = defense.sort_values(["team", "season", "week"]).reset_index(drop=True)
-    defense["def_epa_allowed_rolling"] = (
-        defense.groupby(["team", "season"])["def_epa_allowed"]
-        .apply(lambda s: s.shift(1).expanding().mean())
-        .reset_index(level=[0, 1], drop=True)
-    )
+    defense["def_epa_allowed_rolling"] = cross_season_rolling(defense, "team", "def_epa_allowed", window=_TEAM_WINDOW)
 
     home = schedules[["season", "week", "home_team", "away_team"]].rename(
         columns={"home_team": "recent_team", "away_team": "opponent"})
@@ -84,7 +75,7 @@ def build_passing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
 
     # Applied here, after every rolling/merge step above, not on the raw weekly log --
     # see the matching comment where qb is first built.
-    qb = qb[qb["attempts"] >= MIN_ATTEMPTS_TO_QUALIFY].reset_index(drop=True)
+    qb = qualify(qb, "attempts", "attempts_rolling", MIN_ATTEMPTS_TO_QUALIFY)
 
     qb["proxy_line"] = qb["passing_yards_rolling"]
     qb["over_proxy_line"] = (qb["passing_yards"] > qb["proxy_line"]).astype(int)

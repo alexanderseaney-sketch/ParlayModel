@@ -33,11 +33,11 @@ FEATURES = [
     "target_share_rolling", "receiving_air_yards_rolling", "def_epa_allowed_rolling",
     "team_pass_oe_rolling", "team_off_epa_per_play_rolling",
 ]
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 
 def main():
-    df = build_receiving_yards_dataset(min_week=4)
+    df = build_receiving_yards_dataset(min_week=1)
     df = df[df["position"] == "RB"].copy()
     df = df.dropna(subset=FEATURES)
     print(f"Dataset: {len(df)} RB player-games\n")

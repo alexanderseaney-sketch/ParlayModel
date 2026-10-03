@@ -42,15 +42,40 @@ import sys
 import numpy as np
 import pandas as pd
 
+import inference_mode
 from individual_context_features import build_player_injury_status, build_game_flags
 from game_context_features import build_game_context, add_snap_share
 from defensive_sacks_features import DEFENSIVE_POSITIONS
+from calibration import apply_calibrator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
 from utils import normalize_name  # noqa: E402
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "current_player_predictions.csv")
+IMPORTANCE_PATH = os.path.join(os.path.dirname(__file__), "feature_importance.csv")
+
+# prop_type -> [(feature, normalised importance)], filled by score_prop() and saved
+# by __main__ for the dashboard's Model Performance page and the AI write-ups.
+FEATURE_IMPORTANCE: dict[str, list[tuple[str, float]]] = {}
+
+
+def _ensemble_importance(models: list, features: list[str], X: pd.DataFrame) -> list[tuple[str, float]]:
+    """Mean importance across the bootstrap ensemble. XGBoost: gain-based
+    feature_importances_. LogisticRegression (unscaled inputs): |coef| x the feature's
+    std across the players being scored, so a coefficient on a big-unit feature
+    (yards) and a small-unit one (share) are comparable."""
+    if hasattr(models[0], "feature_importances_"):
+        imp = np.mean([m.feature_importances_ for m in models], axis=0)
+    elif hasattr(models[0], "coef_"):
+        coef = np.mean([np.abs(m.coef_[0]) for m in models], axis=0)
+        imp = coef * X.std(ddof=0).fillna(0).to_numpy()
+    else:
+        return []
+    total = imp.sum()
+    if not total:
+        return []
+    return sorted(zip(features, (imp / total).tolist()), key=lambda t: -t[1])
 
 
 def _roster_from_team_sites() -> frozenset:
@@ -126,19 +151,50 @@ def _current_roster_names() -> frozenset | None:
     return None
 
 
-def _next_game_lookup(schedules: pd.DataFrame) -> pd.DataFrame:
+def _next_game_lookup(schedules: pd.DataFrame, as_of: tuple[int, int] | None = None) -> pd.DataFrame:
     """Each team's next unplayed game (home_score still null in schedules.csv), one row
     per team. This is what "current" predictions should actually be conditioned on --
-    not whatever game a player's rolling-stats row happens to be dated."""
+    not whatever game a player's rolling-stats row happens to be dated.
+
+    as_of=(season, week) instead returns each team's first game at or after that week,
+    played or not -- used by the point-in-time real-line backtest."""
     home = schedules[["season", "week", "home_team", "away_team", "home_score", "gameday"]].rename(
         columns={"home_team": "team", "away_team": "opponent"})
     away = schedules[["season", "week", "home_team", "away_team", "home_score", "gameday"]].rename(
         columns={"away_team": "team", "home_team": "opponent"})
     all_games = pd.concat([home, away], ignore_index=True)
 
-    unplayed = all_games[all_games["home_score"].isna()].copy()
+    if as_of is None:
+        unplayed = all_games[all_games["home_score"].isna()].copy()
+    else:
+        unplayed = all_games[(all_games["season"] > as_of[0])
+                             | ((all_games["season"] == as_of[0]) & (all_games["week"] >= as_of[1]))].copy()
     unplayed = unplayed.sort_values(["team", "season", "week"])
     return unplayed.groupby("team").head(1)[["team", "season", "week", "opponent", "gameday"]]
+
+
+@functools.lru_cache(maxsize=8)
+def _latest_def_epa_allowed(as_of: tuple[int, int] | None) -> dict[str, float]:
+    """Each defense's trailing-8-game EPA allowed through its most recent PLAYED game
+    (before as_of, when given) -- the same quantity the feature builders compute as
+    def_epa_allowed_rolling, but keyed by team so it can be attached to the player's
+    UPCOMING opponent. Found 2026-10-02: the latest-row approach left
+    def_epa_allowed_rolling describing whichever defense the player faced LAST
+    week, so every live matchup feature was about the wrong opponent."""
+    from feature_engineering import build_team_week_offense, build_team_week_defense, cross_season_rolling
+    weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
+    schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
+    if as_of is not None:
+        weekly = weekly[(weekly["season"] < as_of[0]) | ((weekly["season"] == as_of[0]) & (weekly["week"] < as_of[1]))]
+    defense = build_team_week_defense(build_team_week_offense(weekly), schedules)
+    defense = defense.dropna(subset=["def_epa_allowed"]).sort_values(["team", "season", "week"]).reset_index(drop=True)
+    prev = inference_mode.INCLUDE_LATEST_GAME
+    inference_mode.INCLUDE_LATEST_GAME = True  # window must include the latest game
+    try:
+        defense["roll"] = cross_season_rolling(defense, "team", "def_epa_allowed", window=8)
+    finally:
+        inference_mode.INCLUDE_LATEST_GAME = prev
+    return defense.groupby("team")["roll"].last().to_dict()
 
 
 def _merge_injury(df: pd.DataFrame) -> pd.DataFrame:
@@ -474,9 +530,17 @@ def _build_base_dataset(prop_type: str, min_week: int) -> pd.DataFrame:
     raise ValueError(f"Unknown prop_type: {prop_type}")
 
 
-def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
+def score_prop(prop_type: str, config: dict, min_week: int = 1,
+               as_of: tuple[int, int] | None = None) -> pd.DataFrame:
+    """as_of=(season, week): point-in-time scoring for backtests -- only rows from
+    games strictly before that week count as "latest form", the roster gate (which
+    reflects TODAY's rosters) is skipped, and the next game is the team's first game
+    at/after that week. Callers must have inference_mode.INCLUDE_LATEST_GAME on, same
+    as build_current_predictions()."""
     df = _build_base_dataset(prop_type, min_week)
     df = df[df["position"].isin(config["positions"])].copy()
+    if as_of is not None and "season" in df.columns and "week" in df.columns:
+        df = df[(df["season"] < as_of[0]) | ((df["season"] == as_of[0]) & (df["week"] < as_of[1]))]
     df = df.dropna(subset=[config["proxy_col"]])
     if df.empty:
         print(f"[{prop_type}] no qualifying rows, skipping.")
@@ -502,7 +566,7 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
     # (retired players being scored as live props). Skips the filter (rather than
     # dropping everyone) if the depth-chart pull hasn't run yet, matching how the
     # rest of this file degrades when an optional input is missing.
-    roster = _current_roster_names()
+    roster = _current_roster_names() if as_of is None else None
     if roster is not None:
         before = len(latest)
         latest = latest[latest["player_display_name"].apply(normalize_name).isin(roster)]
@@ -515,7 +579,7 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
     # "opponent"/"season"/"week" columns (that game's matchup), so merging a
     # same-named second copy would silently get pandas-suffixed (_x/_y) instead of
     # overwriting, and a post-merge rename would then find nothing to rename.
-    next_game = _next_game_lookup(schedules).rename(columns={
+    next_game = _next_game_lookup(schedules, as_of).rename(columns={
         "team": "recent_team", "season": "next_season", "week": "next_week", "opponent": "next_opponent",
     })
     latest = latest.merge(next_game, on="recent_team", how="left")
@@ -535,6 +599,10 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
         print(f"[{prop_type}] dropped {dropped} player(s) with no upcoming scheduled game.")
     if latest.empty:
         return pd.DataFrame()
+
+    if "def_epa_allowed_rolling" in latest.columns:
+        upcoming_def = latest["next_opponent"].map(_latest_def_epa_allowed(as_of))
+        latest["def_epa_allowed_rolling"] = upcoming_def.fillna(latest["def_epa_allowed_rolling"])
 
     if "injury" in config["context"]:
         injuries = pd.read_csv(os.path.join(RAW_DIR, "injuries.csv"), low_memory=False)
@@ -561,38 +629,50 @@ def score_prop(prop_type: str, config: dict, min_week: int = 4) -> pd.DataFrame:
 
     X = latest[features].fillna(0)
     all_probs = np.array([m.predict_proba(X)[:, 1] for m in models])  # shape (100, n_players)
-    mean_prob = all_probs.mean(axis=0)
+    raw_prob = all_probs.mean(axis=0)
+    mean_prob = apply_calibrator(prop_type, raw_prob)
+    if as_of is None:
+        FEATURE_IMPORTANCE[prop_type] = _ensemble_importance(models, features, X)
     confidence = np.abs(mean_prob - 0.5) * 2
 
     latest["prop_type"] = prop_type
     latest["stat_name"] = config["stat_name"]
     latest["proxy_line"] = latest[config["proxy_col"]].round(1)
     latest["predicted_prob_over"] = mean_prob
+    latest["raw_prob_over"] = raw_prob
     latest["confidence"] = confidence
 
     return latest[[
         "player_id", "player_display_name", "position", "recent_team",
         "stats_as_of_season", "stats_as_of_week", "next_season", "next_week", "next_opponent", "next_gameday",
-        "prop_type", "stat_name", "proxy_line", "predicted_prob_over", "confidence",
+        "prop_type", "stat_name", "proxy_line", "predicted_prob_over", "raw_prob_over", "confidence",
     ]]
 
 
-def build_current_predictions() -> pd.DataFrame:
+def build_current_predictions(as_of: tuple[int, int] | None = None) -> pd.DataFrame:
     frames = []
-    for prop_type, config in PROP_CONFIGS.items():
-        try:
-            result = score_prop(prop_type, config)
-            if not result.empty:
-                frames.append(result)
-                print(f"[{prop_type}] scored {len(result)} players.")
-        except Exception as e:
-            print(f"[{prop_type}] FAILED: {e}")
+    # Rolling windows must include each player's most recent game -- see
+    # inference_mode.py for the one-game-stale bug this fixes. Restored afterwards so
+    # a training script importing this module in the same process isn't affected.
+    prev = inference_mode.INCLUDE_LATEST_GAME
+    inference_mode.INCLUDE_LATEST_GAME = True
+    try:
+        for prop_type, config in PROP_CONFIGS.items():
+            try:
+                result = score_prop(prop_type, config, as_of=as_of)
+                if not result.empty:
+                    frames.append(result)
+                    print(f"[{prop_type}] scored {len(result)} players.")
+            except Exception as e:
+                print(f"[{prop_type}] FAILED: {e}")
+    finally:
+        inference_mode.INCLUDE_LATEST_GAME = prev
 
     if not frames:
         return pd.DataFrame(columns=[
             "player_id", "player_display_name", "position", "recent_team",
             "stats_as_of_season", "stats_as_of_week", "next_season", "next_week", "next_opponent", "next_gameday",
-            "prop_type", "stat_name", "proxy_line", "predicted_prob_over", "confidence",
+            "prop_type", "stat_name", "proxy_line", "predicted_prob_over", "raw_prob_over", "confidence",
         ])
 
     combined = pd.concat(frames, ignore_index=True)
@@ -603,6 +683,8 @@ if __name__ == "__main__":
     predictions = build_current_predictions()
     predictions.to_csv(OUT_PATH, index=False)
     print(f"\n{len(predictions)} current player predictions saved -> {OUT_PATH}\n")
+    pd.DataFrame([{"prop_type": pt, "feature": f, "importance": v}
+                  for pt, rows in FEATURE_IMPORTANCE.items() for f, v in rows]).to_csv(IMPORTANCE_PATH, index=False)
 
     for prop_type in PROP_CONFIGS:
         subset = predictions[predictions["prop_type"] == prop_type]

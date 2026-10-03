@@ -9,3 +9,6 @@ python-dotenv
 nfl_data_py
 matplotlib
 streamlit
+lightgbm
+plotly
+anthropic

@@ -539,35 +539,10 @@ def correlation_adjusted_parlay_probability(legs: list[dict]) -> dict:
     more honest than assuming zero correlation everywhere.
 
     Returns {"naive_prob", "adjusted_prob", "adjustments": [(leg_a, leg_b, phi), ...]}."""
-    correlations = load_leg_correlations()
-
-    naive_prob = 1.0
-    for leg in legs:
-        naive_prob *= leg["prob"]
-
-    adjusted_prob = naive_prob
-    adjustments = []
-    for i in range(len(legs)):
-        for j in range(i + 1, len(legs)):
-            a, b = legs[i], legs[j]
-            if not a.get("team") or not b.get("team") or a["team"] != b["team"]:
-                continue
-            if a.get("position_prop") is None or b.get("position_prop") is None:
-                continue
-            key = frozenset([a["position_prop"], b["position_prop"]])
-            phi = correlations.get(key)
-            if phi is None:
-                continue
-
-            p_a, p_b = a["prob"], b["prob"]
-            joint = p_a * p_b + phi * np.sqrt(max(p_a * (1 - p_a) * p_b * (1 - p_b), 0))
-            joint = min(max(joint, max(0.0, p_a + p_b - 1)), min(p_a, p_b))
-
-            correction = joint / (p_a * p_b) if p_a * p_b > 0 else 1.0
-            adjusted_prob *= correction
-            adjustments.append((a["position_prop"], b["position_prop"], phi))
-
-    return {"naive_prob": naive_prob, "adjusted_prob": adjusted_prob, "adjustments": adjustments}
+    # Math lives in models/parlay_calculator.py (shared with the +EV Finder and the
+    # parlay backtest); this wrapper only supplies the Streamlit-cached correlations.
+    from parlay_calculator import joint_probability
+    return joint_probability(legs, load_leg_correlations())
 
 
 def get_player_detail(player_name: str) -> dict:

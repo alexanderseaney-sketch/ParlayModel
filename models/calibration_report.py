@@ -4,14 +4,12 @@ leave-one-season-out holdout loop produces pooled (all_probs, all_y) arrays.
 
 Motivated by a real question: does a model's raw predicted probability mean what it
 says, especially at the extreme tail (predictions the dashboard rounds to a "100%"
-confidence badge)? Every training script in this project uses RAW, UNCALIBRATED
-classifier output (LogisticRegression / XGBoost predict_proba) -- no Platt scaling or
-isotonic regression is applied anywhere. Raw probabilities from both model families
+confidence badge)? Training scripts produce RAW classifier output (LogisticRegression
+/ XGBoost predict_proba); since 2026-10-02 this report also fits the Platt/isotonic
+map applied at inference (calibration.py). Raw probabilities from both model families
 are known to often be overconfident at the extremes, so this checks empirically:
 within each raw-probability band, what fraction of holdout predictions were ACTUALLY
-correct, not just what the model claims. This doesn't refit anything -- it's a
-read-only check on predictions each script already computed for its own accuracy
-report.
+correct, not just what the model claims.
 """
 import numpy as np
 
@@ -62,4 +60,10 @@ def print_calibration_report(all_probs, all_y, label: str) -> list[dict]:
         print(f"  [{lo:.3f}, {hi:.3f})  {n:>6}  {actual*100:>14.1f}%  {gap*100:>+14.1f}pt{flag}")
         rows.append({"label": label, "band_lo": lo, "band_hi": hi, "n": n,
                       "actual_hit_rate": actual, "implied_mid": implied_mid, "gap": gap})
+
+    # No longer read-only (2026-10-02): the same out-of-sample arrays now also fit
+    # the calibration map current_predictions.py applies -- see calibration.py.
+    # `label` is always the prop_type key (= the model's .pkl stem).
+    from calibration import fit_and_save
+    fit_and_save(all_probs, all_y, label)
     return rows

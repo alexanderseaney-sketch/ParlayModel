@@ -11,7 +11,87 @@ import os
 import numpy as np
 import pandas as pd
 
+from inference_mode import lag
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
+
+
+# Training-population switches. Both ON since 2026-10-02 (experiments/ngs_selection.py):
+#   NGS_ASOF: attach each player's latest NGS rolling as of the game. NGS weekly only
+#     lists players who cleared a volume minimum IN THAT GAME, so the old exact join +
+#     the train scripts' dropna kept only games where the player got volume -- an
+#     outcome-conditioned population.
+#   PREGAME_QUALIFIER: filter rows on PRE-game rolling usage instead of same-game
+#     carries/targets/attempts (post-game information).
+# Scored on the realistic population (pre-game role >= minimum, every outcome), the
+# old setup was near coin-flip (AUC ~0.51, log loss 0.94-1.37; its "90%+" calls hit
+# 39-46%) vs AUC 0.58-0.62 / log loss ~0.65-0.66 with both switches on -- better in
+# every holdout season for rushing yards, receiving yards and receptions.
+NGS_ASOF = True
+PREGAME_QUALIFIER = True
+
+
+def merge_ngs(df: pd.DataFrame, ngs: pd.DataFrame) -> pd.DataFrame:
+    """Left-join NGS rolling columns onto player-game rows by (player_id, season, week),
+    or as-of (latest NGS row at/before the game) when NGS_ASOF. Adds `_ngs_row` = the
+    game itself has an NGS row."""
+    exact = ngs[["player_id", "season", "week"]].drop_duplicates().assign(_ngs_row=True)
+    if not NGS_ASOF:
+        out = df.merge(ngs, on=["player_id", "season", "week"], how="left")
+    else:
+        left = df.assign(_k=df["season"] * 100 + df["week"]).sort_values("_k")
+        right = (ngs.dropna(subset=["player_id"]).assign(_k=ngs["season"] * 100 + ngs["week"])
+                 .drop(columns=["season", "week"]).drop_duplicates(["player_id", "_k"]).sort_values("_k"))
+        out = pd.merge_asof(left, right, on="_k", by="player_id", direction="backward").drop(columns=["_k"])
+        out = out.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
+    out = out.merge(exact, on=["player_id", "season", "week"], how="left")
+    out["_ngs_row"] = out["_ngs_row"].fillna(False).astype(bool)
+    return out
+
+
+def qualify(df: pd.DataFrame, label_col: str, pregame_col: str, minimum: float) -> pd.DataFrame:
+    col = pregame_col if PREGAME_QUALIFIER else label_col
+    return df[df[col] >= minimum].reset_index(drop=True)
+
+
+def load_ngs(kind: str) -> pd.DataFrame:
+    """ngs_{passing,rushing,receiving}.csv WITHOUT nflverse's week-0 rows. Week 0 is
+    the full-SEASON aggregate, not a game; sorted by (season, week) it lands first in
+    each season, so every "strictly prior" rolling window for that season's games
+    silently included the whole season's totals -- future games included. Found
+    2026-10-02; every NGS feature (prop models and the game model) loads through here."""
+    df = pd.read_csv(os.path.join(RAW_DIR, f"ngs_{kind}.csv"))
+    return df[df["week"] > 0].reset_index(drop=True)
+
+
+def cross_season_rolling(df: pd.DataFrame, group_col: str, value_col: str,
+                         window: int | None = None, min_periods: int = 1) -> pd.Series:
+    """Trailing rolling average of value_col within group_col, using only strictly
+    PRIOR rows (shift(1)) in (season, week) order -- carries across a season
+    boundary instead of resetting there. `df` must already be sorted by
+    [group_col, "season", "week"] (or [group_col, "season", "week"] equivalent);
+    caller is responsible for that sort.
+
+    Why this exists (found 2026-09-22, two weeks into the 2026 season): every
+    rolling feature in this project used to reset at each season's week 1 --
+    groupby([id, "season"]) -- so a player's or team's rolling stats were
+    undefined until ~3 games into a new season (the min_week=4 filters
+    throughout models/player_prop_*_features.py exist for exactly this reason).
+    That bit at BOTH training time and live inference: current_predictions.py's
+    "most recent qualifying row" fell back to a player's LAST GAME OF THE
+    PREVIOUS SEASON, frozen, for the first month of every year -- see its own
+    2026-08-15 comment. That's backwards for a league where rosters,
+    coordinators and schemes turn over heavily every offseason: the exact weeks
+    that most need a fresh in-season signal were structurally unable to get one.
+
+    window=None -> expanding (all available prior history, unbounded);
+    window=N -> trailing N-game average. Bounded windows are used for anything
+    that should react to a real role/scheme change within a season rather than
+    being diluted by years of older data (see call sites)."""
+    g = df.groupby(group_col)[value_col]
+    if window is None:
+        return g.apply(lambda s: lag(s).expanding(min_periods=min_periods).mean()).reset_index(level=0, drop=True)
+    return g.apply(lambda s: lag(s).rolling(window, min_periods=min_periods).mean()).reset_index(level=0, drop=True)
 
 
 def build_team_week_offense(weekly_stats: pd.DataFrame) -> pd.DataFrame:
@@ -114,7 +194,7 @@ def build_qb_rolling_cpoe(ngs_passing: pd.DataFrame) -> pd.DataFrame:
     qb = qb.sort_values(["player_gsis_id", "season", "week"]).reset_index(drop=True)
     qb["qb_cpoe_rolling"] = (
         qb.groupby(["player_gsis_id", "season"])["qb_cpoe"]
-        .apply(lambda s: s.shift(1).expanding().mean())
+        .apply(lambda s: lag(s).expanding().mean())
         .reset_index(level=[0, 1], drop=True)
     )
     return qb[["player_gsis_id", "season", "week", "qb_cpoe_rolling"]]
@@ -129,7 +209,7 @@ def add_rolling_pregame_features(team_week: pd.DataFrame, feature_cols: list[str
     for col in feature_cols:
         team_week[f"{col}_rolling"] = (
             team_week.groupby(["team", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
+            .apply(lambda s: lag(s).expanding().mean())
             .reset_index(level=[0, 1], drop=True)
         )
     return team_week
@@ -142,9 +222,9 @@ def build_game_features(min_week: int = 3) -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
     weekly_stats = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
     injuries = pd.read_csv(os.path.join(RAW_DIR, "injuries.csv"), low_memory=False)
-    ngs_passing = pd.read_csv(os.path.join(RAW_DIR, "ngs_passing.csv"))
-    ngs_rushing = pd.read_csv(os.path.join(RAW_DIR, "ngs_rushing.csv"))
-    ngs_receiving = pd.read_csv(os.path.join(RAW_DIR, "ngs_receiving.csv"))
+    ngs_passing = load_ngs("passing")
+    ngs_rushing = load_ngs("rushing")
+    ngs_receiving = load_ngs("receiving")
 
     offense = build_team_week_offense(weekly_stats)
     defense = build_team_week_defense(offense, schedules)

@@ -43,12 +43,12 @@ FEATURES = [
     "avg_separation_rolling", "avg_cushion_rolling", "avg_yac_above_expectation_rolling",
     "def_epa_allowed_rolling", "own_injury_severity", "div_game", "is_primetime",
 ]
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
 
 
 def _build_dataset() -> pd.DataFrame:
-    df = build_receiving_yards_dataset(min_week=4)
+    df = build_receiving_yards_dataset(min_week=1)
     df = df[df["position"].isin(["WR", "TE"])].copy()
     df = df.dropna(subset=["receiving_yards_rolling"])
 

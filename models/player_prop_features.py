@@ -18,14 +18,25 @@ import os
 
 import pandas as pd
 
+from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 MIN_TARGETS_TO_QUALIFY = 2  # filters out garbage-time/emergency snaps from the training signal
 
+# Rolling windows now cross a season boundary (see cross_season_rolling's docstring
+# in feature_engineering.py) -- bounded rather than a career-long expanding mean so
+# a real role/scheme change still shows up within a season instead of being diluted
+# by years of older data. _ROLLING = a longer "recent form" window (~1 season worth
+# of games), _LAST3 = a fast-reacting 3-game window, _TEAM_WINDOW = ~half a season
+# of a team's own games for defense/scheme-type features.
+_ROLLING_WINDOW = 16
+_TEAM_WINDOW = 8
 
-def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
+
+def build_receiving_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
-    ngs_receiving = pd.read_csv(os.path.join(RAW_DIR, "ngs_receiving.csv"))
+    ngs_receiving = load_ngs("receiving")  # drops week-0 season totals (look-ahead)
     snaps = pd.read_csv(os.path.join(RAW_DIR, "snap_counts.csv"), low_memory=False)
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
@@ -47,29 +58,17 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     # from being a training LABEL, without also erasing it from being part of
     # every later week's rolling INPUT.
     for col in ["receiving_yards", "targets", "target_share", "receiving_air_yards"]:
-        wr_te[f"{col}_rolling"] = (
-            wr_te.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW)
         # Recent form: trailing 3-game average, more responsive than season-to-date
-        wr_te[f"{col}_last3"] = (
-            wr_te.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3)
 
     # NGS rolling (avg separation, YAC over expected — same no-leakage pattern)
     ngs = ngs_receiving.rename(columns={"player_gsis_id": "player_id", "yards": "ngs_yards"})
     ngs = ngs.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     for col in ["avg_separation", "avg_cushion", "avg_yac_above_expectation"]:
-        ngs[f"{col}_rolling"] = (
-            ngs.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        ngs[f"{col}_rolling"] = cross_season_rolling(ngs, "player_id", col, window=_ROLLING_WINDOW)
     ngs_cols = ["player_id", "season", "week"] + [f"{c}_rolling" for c in ["avg_separation", "avg_cushion", "avg_yac_above_expectation"]]
-    wr_te = wr_te.merge(ngs[ngs_cols], on=["player_id", "season", "week"], how="left")
+    wr_te = merge_ngs(wr_te, ngs[ngs_cols])
 
     # Snap share rolling (opportunity signal)
     snaps_r = snaps.rename(columns={"pfr_player_id": "player_id_pfr"})
@@ -81,11 +80,7 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     offense = build_team_week_offense(weekly)
     defense = build_team_week_defense(offense, schedules)
     defense = defense.sort_values(["team", "season", "week"]).reset_index(drop=True)
-    defense["def_epa_allowed_rolling"] = (
-        defense.groupby(["team", "season"])["def_epa_allowed"]
-        .apply(lambda s: s.shift(1).expanding().mean())
-        .reset_index(level=[0, 1], drop=True)
-    )
+    defense["def_epa_allowed_rolling"] = cross_season_rolling(defense, "team", "def_epa_allowed", window=_TEAM_WINDOW)
 
     # Get each player's opponent that week from schedules
     home = schedules[["season", "week", "home_team", "away_team"]].rename(
@@ -133,7 +128,7 @@ def build_receiving_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     # excludes a barely-used game (garbage-time/emergency snaps) from being a row this
     # function outputs, without also erasing it from earlier filtering out of any
     # OTHER row's rolling average (see comment above where wr_te is first built).
-    wr_te = wr_te[wr_te["targets"] >= MIN_TARGETS_TO_QUALIFY].reset_index(drop=True)
+    wr_te = qualify(wr_te, "targets", "targets_rolling", MIN_TARGETS_TO_QUALIFY)
 
     # The backtestable proxy target: did the player beat their own season-to-date average?
     wr_te["proxy_line"] = wr_te["receiving_yards_rolling"]

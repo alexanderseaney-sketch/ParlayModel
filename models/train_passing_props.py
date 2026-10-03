@@ -38,11 +38,11 @@ FEATURES = [
     "aggressiveness_rolling", "avg_time_to_throw_rolling", "def_epa_allowed_rolling",
     "temp", "wind", "is_dome",
 ]
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 
 def _build_dataset() -> pd.DataFrame:
-    df = build_passing_yards_dataset(min_week=4)
+    df = build_passing_yards_dataset(min_week=1)
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
     context = build_game_context(schedules).rename(columns={"team": "recent_team"})
     df = df.merge(context, on=["recent_team", "season", "week"], how="left")

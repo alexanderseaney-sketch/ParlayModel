@@ -11,6 +11,8 @@ import os
 
 import pandas as pd
 
+from inference_mode import lag
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 
@@ -84,7 +86,7 @@ def add_rolling(team_week: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     for col in cols:
         team_week[f"{col}_rolling"] = (
             team_week.groupby(["team", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
+            .apply(lambda s: lag(s).expanding().mean())
             .reset_index(level=[0, 1], drop=True)
         )
     return team_week

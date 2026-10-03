@@ -13,6 +13,8 @@ import os
 
 import pandas as pd
 
+from inference_mode import lag
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 
@@ -71,7 +73,7 @@ def add_snap_share(df: pd.DataFrame, id_col: str = "player_id") -> pd.DataFrame:
     snaps = snaps.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     snaps["offense_pct_rolling"] = (
         snaps.groupby(["player_id", "season"])["offense_pct"]
-        .apply(lambda s: s.shift(1).expanding().mean())
+        .apply(lambda s: lag(s).expanding().mean())
         .reset_index(level=[0, 1], drop=True)
     )
     return df.merge(

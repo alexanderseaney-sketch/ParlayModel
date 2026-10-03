@@ -19,14 +19,21 @@ import os
 
 import pandas as pd
 
+from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 MIN_CARRIES_TO_QUALIFY = 3
 
+# See feature_engineering.cross_season_rolling's docstring for why these are bounded
+# and cross a season boundary rather than resetting there.
+_ROLLING_WINDOW = 16
+_TEAM_WINDOW = 8
 
-def build_rushing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
+
+def build_rushing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
-    ngs_rushing = pd.read_csv(os.path.join(RAW_DIR, "ngs_rushing.csv"))
+    ngs_rushing = load_ngs("rushing")  # drops week-0 season totals (look-ahead)
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
     rb = weekly[weekly["position"].isin(["RB", "QB"])].copy()
@@ -42,39 +49,23 @@ def build_rushing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
     # label, inflating the proxy for anyone with an irregular rushing role. Applied
     # below instead, after the rolling features are computed.
     for col in ["rushing_yards", "carries", "targets", "receiving_yards"]:
-        rb[f"{col}_rolling"] = (
-            rb.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
-        rb[f"{col}_last3"] = (
-            rb.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        rb[f"{col}_rolling"] = cross_season_rolling(rb, "player_id", col, window=_ROLLING_WINDOW)
+        rb[f"{col}_last3"] = cross_season_rolling(rb, "player_id", col, window=3)
 
     # NGS rushing: rush yards over expected is the cleanest efficiency signal here —
     # directly analogous to CPOE for the receiving model
     ngs = ngs_rushing.rename(columns={"player_gsis_id": "player_id"})
     ngs = ngs.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     for col in ["rush_yards_over_expected_per_att", "percent_attempts_gte_eight_defenders", "efficiency"]:
-        ngs[f"{col}_rolling"] = (
-            ngs.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        ngs[f"{col}_rolling"] = cross_season_rolling(ngs, "player_id", col, window=_ROLLING_WINDOW)
     ngs_cols = ["player_id", "season", "week"] + [f"{c}_rolling" for c in ["rush_yards_over_expected_per_att", "percent_attempts_gte_eight_defenders", "efficiency"]]
-    rb = rb.merge(ngs[ngs_cols], on=["player_id", "season", "week"], how="left")
+    rb = merge_ngs(rb, ngs[ngs_cols])
 
     # Opponent's rushing defense strength — how many yards do they typically allow
     from feature_engineering import build_team_week_offense, build_team_week_defense
     defense = build_team_week_defense(build_team_week_offense(weekly), schedules)
     defense = defense.sort_values(["team", "season", "week"]).reset_index(drop=True)
-    defense["def_epa_allowed_rolling"] = (
-        defense.groupby(["team", "season"])["def_epa_allowed"]
-        .apply(lambda s: s.shift(1).expanding().mean())
-        .reset_index(level=[0, 1], drop=True)
-    )
+    defense["def_epa_allowed_rolling"] = cross_season_rolling(defense, "team", "def_epa_allowed", window=_TEAM_WINDOW)
 
     home = schedules[["season", "week", "home_team", "away_team"]].rename(
         columns={"home_team": "recent_team", "away_team": "opponent"})
@@ -92,7 +83,7 @@ def build_rushing_yards_dataset(min_week: int = 4) -> pd.DataFrame:
 
     # Applied here, after every rolling/merge step above, not on the raw weekly log --
     # see the matching comment where rb is first built.
-    rb = rb[rb["carries"] >= MIN_CARRIES_TO_QUALIFY].reset_index(drop=True)
+    rb = qualify(rb, "carries", "carries_rolling", MIN_CARRIES_TO_QUALIFY)
 
     rb["proxy_line"] = rb["rushing_yards_rolling"]
     rb["over_proxy_line"] = (rb["rushing_yards"] > rb["proxy_line"]).astype(int)

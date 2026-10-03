@@ -36,3 +36,4 @@ data/processed/*
 !data/processed/.gitkeep
 .DS_Store
 .streamlit/secrets.toml
+backtesting/_pit_cache/

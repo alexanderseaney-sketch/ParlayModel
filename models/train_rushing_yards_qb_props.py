@@ -24,11 +24,11 @@ from calibration_report import print_calibration_report
 
 FEATURES = ["rushing_yards_rolling", "rushing_yards_last3", "carries_rolling",
             "carries_last3", "def_epa_allowed_rolling"]
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 
 def main():
-    df = build_rushing_yards_dataset(min_week=4)
+    df = build_rushing_yards_dataset(min_week=1)
     df = df[df["position"] == "QB"].copy()
     df = df.dropna(subset=FEATURES)
     print(f"Dataset: {len(df)} QB player-games\n")

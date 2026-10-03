@@ -8,6 +8,8 @@ against this specific opponent).
 """
 import pandas as pd
 
+from inference_mode import lag
+
 
 def add_vs_opponent_history(df: pd.DataFrame, stat_col: str, min_games: int = 1) -> pd.DataFrame:
     """Adds vs_opponent_avg: this player's average in that stat across all PRIOR
@@ -17,7 +19,7 @@ def add_vs_opponent_history(df: pd.DataFrame, stat_col: str, min_games: int = 1)
 
     df["vs_opponent_avg"] = (
         df.groupby(["player_id", "opponent"])[stat_col]
-        .apply(lambda s: s.shift(1).expanding().mean())
+        .apply(lambda s: lag(s).expanding().mean())
         .reset_index(level=[0, 1], drop=True)
     )
     df["vs_opponent_n_games"] = (

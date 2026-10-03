@@ -19,6 +19,8 @@ import os
 
 import pandas as pd
 
+from inference_mode import lag
+
 from period_features import build_period_totals
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -49,12 +51,12 @@ def build_period_stat_dataset(period: str, stat_col: str, min_week: int = 4) -> 
     for col in [stat_col, opportunity_col]:
         df[f"{col}_rolling"] = (
             df.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
+            .apply(lambda s: lag(s).expanding().mean())
             .reset_index(level=[0, 1], drop=True)
         )
         df[f"{col}_last3"] = (
             df.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
+            .apply(lambda s: lag(s).rolling(3, min_periods=1).mean())
             .reset_index(level=[0, 1], drop=True)
         )
 

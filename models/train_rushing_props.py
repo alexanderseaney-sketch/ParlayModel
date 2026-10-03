@@ -36,12 +36,12 @@ FEATURES = [
     "efficiency_rolling", "def_epa_allowed_rolling",
     "team_implied_total", "temp", "wind", "is_dome", "offense_pct_rolling", "is_primetime",
 ]
-HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
+HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
 
 
 def _build_dataset() -> pd.DataFrame:
-    df = build_rushing_yards_dataset(min_week=4)
+    df = build_rushing_yards_dataset(min_week=1)
     # Explicit RB filter -- build_rushing_yards_dataset() now includes QB too (for the
     # separate QB model, see train_rushing_yards_qb_props.py).
     df = df[df["position"] == "RB"].copy()

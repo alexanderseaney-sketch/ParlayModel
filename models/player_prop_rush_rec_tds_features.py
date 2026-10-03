@@ -29,13 +29,20 @@ import os
 
 import pandas as pd
 
+from feature_engineering import cross_season_rolling, qualify
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
 MIN_TOUCHES_TO_QUALIFY = 3  # carries + targets, filters out garbage-time/inactive players
 PROXY_LINE = 0.5
 
+# See feature_engineering.cross_season_rolling's docstring for why these are bounded
+# and cross a season boundary rather than resetting there.
+_ROLLING_WINDOW = 16
+_TEAM_WINDOW = 8
 
-def build_rush_rec_tds_dataset(min_week: int = 4) -> pd.DataFrame:
+
+def build_rush_rec_tds_dataset(min_week: int = 1) -> pd.DataFrame:
     weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False)
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
 
@@ -52,33 +59,17 @@ def build_rush_rec_tds_dataset(min_week: int = 4) -> pd.DataFrame:
     # player's own baseline silently excluded their cold/inactive games, not just this
     # week's label. Applied below instead, after the rolling features are computed.
     for col in ["rush_rec_tds", "carries", "targets"]:
-        skill[f"{col}_rolling"] = (
-            skill.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
-        skill[f"{col}_last3"] = (
-            skill.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).rolling(3, min_periods=1).mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW)
+        skill[f"{col}_last3"] = cross_season_rolling(skill, "player_id", col, window=3)
 
     for col in ["rushing_yards", "receiving_yards"]:
-        skill[f"{col}_rolling"] = (
-            skill.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW)
 
     # Opponent defense strength -- how many EPA/play they typically allow
     from feature_engineering import build_team_week_offense, build_team_week_defense
     defense = build_team_week_defense(build_team_week_offense(weekly), schedules)
     defense = defense.sort_values(["team", "season", "week"]).reset_index(drop=True)
-    defense["def_epa_allowed_rolling"] = (
-        defense.groupby(["team", "season"])["def_epa_allowed"]
-        .apply(lambda s: s.shift(1).expanding().mean())
-        .reset_index(level=[0, 1], drop=True)
-    )
+    defense["def_epa_allowed_rolling"] = cross_season_rolling(defense, "team", "def_epa_allowed", window=_TEAM_WINDOW)
 
     home = schedules[["season", "week", "home_team", "away_team"]].rename(
         columns={"home_team": "recent_team", "away_team": "opponent"})
@@ -110,7 +101,11 @@ def build_rush_rec_tds_dataset(min_week: int = 4) -> pd.DataFrame:
 
     # Applied here, after every rolling/merge step above, not on the raw weekly log --
     # see the matching comment where skill is first built.
-    skill = skill[(skill["carries"] + skill["targets"]) >= MIN_TOUCHES_TO_QUALIFY].reset_index(drop=True)
+    # Pre-game role, not same-game touches (post-game info) -- see
+    # feature_engineering.PREGAME_QUALIFIER.
+    skill["touches"] = skill["carries"] + skill["targets"]
+    skill["touches_rolling"] = skill["carries_rolling"] + skill["targets_rolling"]
+    skill = qualify(skill, "touches", "touches_rolling", MIN_TOUCHES_TO_QUALIFY)
 
     skill["proxy_line"] = PROXY_LINE
     skill["over_proxy_line"] = (skill["rush_rec_tds"] >= 1).astype(int)

@@ -15,8 +15,13 @@ import os
 
 import pandas as pd
 
+from feature_engineering import cross_season_rolling
+
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 RED_ZONE_YARDLINE = 20
+# See feature_engineering.cross_season_rolling's docstring for why this is bounded
+# and crosses a season boundary rather than resetting there.
+_ROLLING_WINDOW = 16
 
 
 def build_red_zone_usage(min_week: int = 1) -> pd.DataFrame:
@@ -49,17 +54,30 @@ def build_red_zone_usage(min_week: int = 1) -> pd.DataFrame:
         .size().rename("team_red_zone_touches").reset_index()
     )
 
-    df = player_touches.merge(team_touches, on=["posteam", "game_id", "season", "week"], how="left")
-    df["red_zone_share"] = df["red_zone_touches"] / df["team_red_zone_touches"]
-
+    # Every game the player actually played (weekly_stats), restricted to team-games
+    # pbp.csv covers -- NOT just games with >=1 red-zone touch. Found 2026-10-02: the
+    # touch table only had rows for games with a red-zone touch, so (a) a zero-touch
+    # game's row got its rolling features fillna(0)'d downstream instead of carrying
+    # the player's trailing average -- live, Chase Brown's anytime-TD probability fell
+    # from ~45% to 5% because his latest game had no red-zone touch -- and (b) the
+    # rolling averages silently skipped every zero-touch game, inflating them.
+    weekly = pd.read_csv(os.path.join(RAW_DIR, "weekly_stats.csv"), low_memory=False,
+                         usecols=["player_id", "recent_team", "season", "week"])
+    covered = pbp[["season", "week", "posteam"]].drop_duplicates()
+    grid = weekly.drop_duplicates().merge(
+        covered.rename(columns={"posteam": "recent_team"}), on=["recent_team", "season", "week"], how="inner")
+    df = grid.merge(
+        player_touches.rename(columns={"posteam": "recent_team"}).drop(columns=["game_id"]),
+        on=["player_id", "recent_team", "season", "week"], how="left")
+    df = df.merge(
+        team_touches.rename(columns={"posteam": "recent_team"}).drop(columns=["game_id"]),
+        on=["recent_team", "season", "week"], how="left")
+    df["red_zone_touches"] = df["red_zone_touches"].fillna(0)
+    df["red_zone_share"] = (df["red_zone_touches"] / df["team_red_zone_touches"]).fillna(0)
     df = df.rename(columns={"posteam": "recent_team"})
     df = df.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
     for col in ["red_zone_touches", "red_zone_share"]:
-        df[f"{col}_rolling"] = (
-            df.groupby(["player_id", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
-            .reset_index(level=[0, 1], drop=True)
-        )
+        df[f"{col}_rolling"] = cross_season_rolling(df, "player_id", col, window=_ROLLING_WINDOW)
 
     df = df[df["week"] >= min_week].reset_index(drop=True)
     return df[["player_id", "recent_team", "season", "week",

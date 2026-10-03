@@ -13,6 +13,8 @@ import os
 
 import pandas as pd
 
+from inference_mode import lag
+
 from pbp_features import filter_garbage_time
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -71,7 +73,7 @@ def add_rolling(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
         if col in df.columns:
             df[f"{col}_rolling"] = (
                 df.groupby(["team", "season"])[col]
-                .apply(lambda s: s.shift(1).expanding().mean())
+                .apply(lambda s: lag(s).expanding().mean())
                 .reset_index(level=[0, 1], drop=True)
             )
     return df

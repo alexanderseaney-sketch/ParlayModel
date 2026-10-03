@@ -91,8 +91,24 @@ def pull_schedules(years):
 
 
 def pull_pbp(years):
-    """Play-by-play data — source for EPA, success rate, and other advanced stats."""
-    df = nfl.import_pbp_data(years, downcast=True)
+    """Play-by-play data — source for EPA, success rate, and other advanced stats.
+
+    nflverse's pbp_participation release lags the main play-by-play release by a
+    bit at the start of a season (confirmed 2026-09-22: play_by_play_2026.parquet
+    existed, pbp_participation_2026.parquet 404'd). import_pbp_data(include_
+    participation=True, the default) merges that in for every year >= 2016 and,
+    worse, the installed nfl_data_py has its own bug here -- it catches the 404
+    with `except Error` where `Error` is never defined, so instead of the library's
+    intended "skip this year" behavior the whole call dies with a NameError that
+    has nothing to do with the actual problem. Retry once without participation
+    columns so an in-progress season doesn't take down the whole pull; once
+    nflverse publishes that year's participation file this stops triggering and
+    those years get the richer data back automatically."""
+    try:
+        df = nfl.import_pbp_data(years, downcast=True)
+    except Exception as e:  # noqa: BLE001 -- includes the library's own NameError
+        print(f"[pbp] include_participation=True failed ({e}); retrying without it.")
+        df = nfl.import_pbp_data(years, downcast=True, include_participation=False)
     key_cols = ["game_id", "play_id"]
     validate(df, "play_by_play", key_cols=key_cols, warn_null_cols=["epa", "posteam"])
     save(df, "pbp.csv", key_cols)

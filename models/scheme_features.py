@@ -12,6 +12,8 @@ import os
 
 import pandas as pd
 
+from inference_mode import lag
+
 from pbp_features import filter_garbage_time
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -43,7 +45,7 @@ def build_team_week_scheme(pbp: pd.DataFrame) -> pd.DataFrame:
     for col in cols:
         team_week[f"{col}_rolling"] = (
             team_week.groupby(["team", "season"])[col]
-            .apply(lambda s: s.shift(1).expanding().mean())
+            .apply(lambda s: lag(s).expanding().mean())
             .reset_index(level=[0, 1], drop=True)
         )
     return team_week
