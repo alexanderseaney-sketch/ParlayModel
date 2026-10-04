@@ -57,7 +57,8 @@ def validate(df: pd.DataFrame, name: str, key_cols: list[str], warn_null_cols: l
         print(f"[{name}] validation passed clean.")
 
 
-def save(df: pd.DataFrame, filename: str, key_cols: list[str]) -> None:
+def save(df: pd.DataFrame, filename: str, key_cols: list[str],
+         keep_recent_seasons: int | None = None) -> None:
     """Merges into any existing file rather than overwriting it. Fixed 2026-08-15 after
     a real near-miss: re-running this with a different --years range (e.g. pulling
     2019-2023 to backfill history) used to silently wipe out whatever years an earlier
@@ -76,6 +77,12 @@ def save(df: pd.DataFrame, filename: str, key_cols: list[str]) -> None:
             print(f"   WARNING: existing {filename} is corrupt/unreadable ({e}) — "
                   f"treating as no prior data rather than failing this pull. "
                   f"The new data below will fully replace it.")
+    if keep_recent_seasons is not None and "season" in df.columns:
+        cutoff = df["season"].max() - keep_recent_seasons + 1
+        dropped = int((df["season"] < cutoff).sum())
+        df = df[df["season"] >= cutoff]
+        if dropped:
+            print(f"   trimmed {dropped} rows from seasons before {cutoff}")
     df.to_csv(out_path, index=False)
     print(f"   saved -> {out_path} ({len(df)} rows total)\n")
 
@@ -248,6 +255,9 @@ def pull_players():
     return df
 
 
+WEEKLY_ROSTER_SEASONS_KEPT = 2
+
+
 def pull_weekly_rosters(years):
     """Week-by-week official rosters (53-man active, practice squad, IR/PUP/etc.),
     keyed on gsis_id so it joins cleanly to weekly_stats / players. nflverse batches
@@ -259,7 +269,11 @@ def pull_weekly_rosters(years):
     df = _pull_per_year(lambda y: nfl.import_weekly_rosters([y]), years, "weekly_rosters")
     key_cols = ["season", "week", "player_id"]
     validate(df, "weekly_rosters", key_cols=key_cols, warn_null_cols=["status"])
-    save(df, "weekly_rosters.csv", key_cols)
+    # Only the current + previous season are kept (2026-10-03): the file had grown to
+    # 50.8 MB (2023-2026, ~150k rows), over GitHub's recommended size and headed for
+    # its 100 MB hard limit mid-season. Its only reader is the roster gate in
+    # models/current_predictions.py, which uses the latest season/week alone.
+    save(df, "weekly_rosters.csv", key_cols, keep_recent_seasons=WEEKLY_ROSTER_SEASONS_KEPT)
     return df
 
 
