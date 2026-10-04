@@ -13068,11 +13068,13 @@ season,game_type,team,week,gsis_id,position,full_name,first_name,last_name,repor
 2026.0,REG,ARI,4.0,00-0036568,DT,Roy Lopez,Roy,Lopez,,,,Groin,,Full Participation in Practice,,REG
 2026.0,REG,ARI,4.0,00-0039864,S,Dadrion Taylor-Demerson,Dadrion,Taylor-Demerson,Back,,Out,Back,,Did Not Participate In Practice,,REG
 2026.0,REG,ARI,4.0,00-0040706,DT,Walter Nolen,Walter,Nolen,,,,Shoulder,,Full Participation in Practice,,REG
-2026.0,REG,ATL,4.0,00-0031576,DE,Za'Darius Smith,Za'Darius,Smith,,,,Not injury related - resting player,,Limited Participation in Practice,,REG
-2026.0,REG,ATL,4.0,00-0033945,DE,Samson Ebukam,Nnamaka,Ebukam,,,,Hamstring,,Limited Participation in Practice,,REG
-2026.0,REG,ATL,4.0,00-0035237,T,Jawaan Taylor,Jawaan,Taylor,,,,Not injury related - resting player,,Did Not Participate In Practice,,REG
-2026.0,REG,ATL,4.0,00-0036990,LB,Divine Deablo,Divine,Deablo,,,,Hamstring,,Limited Participation in Practice,,REG
-2026.0,REG,ATL,4.0,00-0041066,LB,Kendal Daniels,Kendal,Daniels,,,,Achilles,,Limited Participation in Practice,,REG
+2026.0,REG,ATL,4.0,00-0031279,T,Jake Matthews,Jacob,Matthews,,,,Not injury related - resting player,,Did Not Participate In Practice,,REG
+2026.0,REG,ATL,4.0,00-0031576,DE,Za'Darius Smith,Za'Darius,Smith,,,,Not injury related - resting player,,Full Participation in Practice,,REG
+2026.0,REG,ATL,4.0,00-0033945,DE,Samson Ebukam,Nnamaka,Ebukam,Hamstring,,Questionable,Hamstring,,Full Participation in Practice,,REG
+2026.0,REG,ATL,4.0,00-0035237,T,Jawaan Taylor,Jawaan,Taylor,,,,Not injury related - resting player,,Full Participation in Practice,,REG
+2026.0,REG,ATL,4.0,00-0036990,LB,Divine Deablo,Divine,Deablo,Hamstring,,Questionable,Hamstring,,Limited Participation in Practice,,REG
+2026.0,REG,ATL,4.0,00-0038580,LB,Yasir Abdullah,Yasir,Abdullah,Illness,,Questionable,Illness,,Full Participation in Practice,,REG
+2026.0,REG,ATL,4.0,00-0041066,LB,Kendal Daniels,Kendal,Daniels,,,,Achilles,,Full Participation in Practice,,REG
 2026.0,REG,BAL,4.0,00-0026190,DT,Calais Campbell,Calais,Campbell,,,,Not injury related - resting player,,Full Participation in Practice,,REG
 2026.0,REG,BAL,4.0,00-0032398,WR,Chris Moore,Christopher,Moore,Ankle,,Questionable,Ankle,,Limited Participation in Practice,,REG
 2026.0,REG,BAL,4.0,00-0032965,T,Ronnie Stanley,Ronnie,Stanley,Toe,Not injury related - resting player,Questionable,Toe,Not injury related - resting player,Did Not Participate In Practice,,REG
@@ -13268,16 +13270,19 @@ season,game_type,team,week,gsis_id,position,full_name,first_name,last_name,repor
 2026.0,REG,NE,4.0,00-0040716,S,Craig Woodson,Craig,Woodson,Shoulder,,Questionable,Shoulder,,Limited Participation in Practice,,REG
 2026.0,REG,NE,4.0,00-0041316,CB,Channing Canada,Channing,Canada,Hamstring,,Questionable,Hamstring,,Limited Participation in Practice,,REG
 2026.0,REG,NE,4.0,00-0041395,TE,Eli Raridon,Elijah,Raridon,Thigh,,Questionable,Thigh,,Limited Participation in Practice,,REG
-2026.0,REG,NO,4.0,00-0033860,DT,Davon Godchaux,Davon,Godchaux,,,,Not injury related - resting player,,Did Not Participate In Practice,,REG
-2026.0,REG,NO,4.0,00-0035316,LB,Kaden Elliss,Kaden,Elliss,,,,Calf,,Did Not Participate In Practice,,REG
-2026.0,REG,NO,4.0,00-0035402,LB,Carl Granderson,Carl,Granderson,,,,Ankle,,Did Not Participate In Practice,,REG
-2026.0,REG,NO,4.0,00-0035644,TE,Noah Fant,Noah,Fant,,,,Abdomen,,Limited Participation in Practice,,REG
-2026.0,REG,NO,4.0,00-0036193,LB,Anfernee Jennings,Anfernee,Jennings,,,,Knee,,Did Not Participate In Practice,,REG
+2026.0,REG,NO,4.0,00-0033860,DT,Davon Godchaux,Davon,Godchaux,,,,Not injury related - resting player,,Full Participation in Practice,,REG
+2026.0,REG,NO,4.0,00-0034760,DT,Nathan Shepherd,Nathan,Shepherd,,,,Not injury related - resting player,,Did Not Participate In Practice,,REG
+2026.0,REG,NO,4.0,00-0035316,LB,Kaden Elliss,Kaden,Elliss,Calf,,Out,Calf,,Did Not Participate In Practice,,REG
+2026.0,REG,NO,4.0,00-0035402,LB,Carl Granderson,Carl,Granderson,Ankle,,Out,Ankle,,Did Not Participate In Practice,,REG
+2026.0,REG,NO,4.0,00-0035644,TE,Noah Fant,Noah,Fant,Abdomen,,Questionable,Abdomen,,Limited Participation in Practice,,REG
+2026.0,REG,NO,4.0,00-0036193,LB,Anfernee Jennings,Anfernee,Jennings,Knee,,Out,Knee,,Did Not Participate In Practice,,REG
 2026.0,REG,NO,4.0,00-0036253,S,Julian Blackmon,Julian,Blackmon,,,,Calf,,Full Participation in Practice,,REG
-2026.0,REG,NO,4.0,00-0036927,LB,Pete Werner,Pete,Werner,,,,Shoulder,,Did Not Participate In Practice,,REG
+2026.0,REG,NO,4.0,00-0036927,LB,Pete Werner,Pete,Werner,Shoulder,,Questionable,Shoulder,,Did Not Participate In Practice,,REG
 2026.0,REG,NO,4.0,00-0037250,CB,Martin Emerson,Martin,Emerson,,,,Shoulder,,Full Participation in Practice,,REG
-2026.0,REG,NO,4.0,00-0041099,WR,Barion Brown,Barion,Brown,,,,Hamstring,,Limited Participation in Practice,,REG
-2026.0,REG,NO,4.0,00-0041390,DT,Christen Miller,Christen,Miller,,,,Toe,,Limited Participation in Practice,,REG
+2026.0,REG,NO,4.0,00-0039518,TE,Treyton Welch,Treyton,Welch,,,,Not injury related - personal matter,,Did Not Participate In Practice,,REG
+2026.0,REG,NO,4.0,00-0039725,CB,Jayden Price,Jayden,Price,,,,Ankle,,Limited Participation in Practice,,REG
+2026.0,REG,NO,4.0,00-0041099,WR,Barion Brown,Barion,Brown,,,,Hamstring,,Full Participation in Practice,,REG
+2026.0,REG,NO,4.0,00-0041390,DT,Christen Miller,Christen,Miller,,,,Toe,,Full Participation in Practice,,REG
 2026.0,REG,NYG,4.0,00-0033376,FB,Patrick Ricard,Patrick,Ricard,,,,Nose,,Full Participation in Practice,,REG
 2026.0,REG,NYG,4.0,00-0034248,S,Elijah Campbell,Elijah,Campbell,,,,Foot,,Full Participation in Practice,,REG
 2026.0,REG,NYG,4.0,00-0036386,T,Andrew Thomas,Andrew,Thomas,,,,Groin,,Limited Participation in Practice,,REG
