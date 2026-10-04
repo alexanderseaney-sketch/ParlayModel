@@ -30,7 +30,7 @@ FILE_PATH = "bets.csv"
 BRANCH = "main"
 API = "https://api.github.com"
 COLUMNS = ["date", "sport", "player", "stat", "choice", "line", "multiplier_or_odds",
-           "stake", "result", "notes", "logged_at"]
+           "stake", "result", "notes", "logged_at", "entry_id", "entry_payout"]
 
 
 class BetStoreError(RuntimeError):

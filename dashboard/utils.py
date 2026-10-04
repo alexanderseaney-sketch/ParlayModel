@@ -455,7 +455,7 @@ def load_bet_log() -> pd.DataFrame:
     if not os.path.exists(BET_LOG_PATH):
         return pd.DataFrame(columns=[
             "date", "sport", "player", "stat", "choice", "line",
-            "multiplier_or_odds", "stake", "result", "notes", "logged_at",
+            "multiplier_or_odds", "stake", "result", "notes", "logged_at", "entry_id", "entry_payout",
         ])
     return pd.read_csv(BET_LOG_PATH)
 

@@ -12,6 +12,7 @@ Needs ANTHROPIC_API_KEY (env / .env locally, Streamlit secrets when hosted).
 """
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -261,24 +262,27 @@ def build_tools(prob_source: str) -> list:
 
     @beta_tool
     def stage_bet_log(player: str, stat: str, side: str, line: float, stake: float,
-                      price_or_multiplier: str = "", notes: str = "") -> str:
+                      entry: str = "A", payout_multiple: str = "", notes: str = "") -> str:
         """Stage a bet the user says they PLACED, for logging in their bet log. Does not write
         anything: the page shows a Confirm button and the bet is saved only if the user clicks it.
-        Call once per leg.
+        Call once per pick; picks of the same entry share the same `entry` label.
 
         Args:
             player: Player name.
             stat: Stat, e.g. receiving_yds.
             side: OVER or UNDER.
             line: The line, e.g. 64.5.
-            stake: Dollars staked on the entry (repeat on each leg of the same entry).
-            price_or_multiplier: Price or payout multiple, e.g. 1.92 or "3x".
+            stake: Dollars staked on the whole entry (same value on every pick of the entry).
+            entry: Label grouping picks into one entry, e.g. "A" for all picks of the first
+                entry and "B" for a separate entry in the same message.
+            payout_multiple: The entry's payout multiple if the user gave it, e.g. "6" or "3.2x".
             notes: Optional note, e.g. "2-pick with Kelce".
         """
         row = {"date": datetime.now().date().isoformat(), "sport": "NFL", "player": player, "stat": stat,
-               "choice": side.lower(), "line": line, "multiplier_or_odds": price_or_multiplier,
+               "choice": side.lower(), "line": line, "multiplier_or_odds": "",
                "stake": stake, "result": "pending", "notes": notes,
-               "logged_at": datetime.now(timezone.utc).isoformat()}
+               "logged_at": datetime.now(timezone.utc).isoformat(),
+               "_entry_label": entry or "A", "entry_payout": payout_multiple}
         st.session_state.setdefault("assistant_pending_bets", []).append(row)
         return json.dumps({"status": "staged -- waiting for the user to click Confirm on the page", "bet": row})
 
@@ -329,11 +333,16 @@ def _render_pending_bets():
         return
     with st.container(border=True):
         st.markdown(f"**Log {len(pending)} bet leg(s)?** Nothing is saved until you confirm.")
-        st.dataframe(pd.DataFrame(pending)[["date", "player", "stat", "choice", "line", "multiplier_or_odds",
-                                            "stake", "notes"]], hide_index=True, use_container_width=True)
+        view = pd.DataFrame(pending).rename(columns={"_entry_label": "entry"})
+        st.dataframe(view[["entry", "date", "player", "stat", "choice", "line", "stake", "entry_payout", "notes"]],
+                     hide_index=True, use_container_width=True)
         c1, c2 = st.columns(2)
         if c1.button("✅ Confirm and log", type="primary"):
-            err = append_bets(pending)
+            # One entry_id per staged entry label (picks the assistant grouped together).
+            ids = {lbl: uuid.uuid4().hex[:10] for lbl in {r.get("_entry_label", "A") for r in pending}}
+            rows = [{**{k: v for k, v in r.items() if k != "_entry_label"},
+                     "entry_id": ids[r.get("_entry_label", "A")]} for r in pending]
+            err = append_bets(rows)
             if err:
                 st.error(err)
             else:

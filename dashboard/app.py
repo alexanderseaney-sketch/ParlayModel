@@ -6,6 +6,7 @@ Run with:
 """
 import os
 import sys
+import uuid
 from datetime import datetime, date, timezone
 
 import pandas as pd
@@ -943,7 +944,7 @@ def page_parlay_builder():
         )
         b1, b2 = st.columns(2)
         if b1.button("📒 Send slip to Bet Log (as pending)", width="stretch"):
-            rows = []
+            rows, entry_id, now = [], uuid.uuid4().hex[:10], datetime.now().isoformat()
             for leg in st.session_state.slip:
                 rows.append({
                     "date": date.today().isoformat(),
@@ -953,10 +954,12 @@ def page_parlay_builder():
                     "choice": leg["choice"],
                     "line": leg["line"],
                     "multiplier_or_odds": leg["underdog_multiplier"],
-                    "stake": round(stake / len(st.session_state.slip), 2),
+                    "stake": stake,  # the ENTRY's stake, same on every leg of entry_id
                     "result": "pending",
                     "notes": "Sent from Parlay Builder slip",
-                    "logged_at": datetime.now().isoformat(),
+                    "logged_at": now,
+                    "entry_id": entry_id,
+                    "entry_payout": "",
                 })
             err = append_bets(rows)
             if err:
@@ -968,126 +971,232 @@ def page_parlay_builder():
             st.rerun()
 
 
+def _with_entries(bets: pd.DataFrame) -> pd.DataFrame:
+    """Bet rows with an entry_id on every row. Rows logged before entries existed (no
+    entry_id) are treated as their own single-pick entry."""
+    b = bets.copy().reset_index(drop=True)
+    for col in ("entry_id", "entry_payout"):
+        if col not in b.columns:
+            b[col] = pd.NA
+    missing = b["entry_id"].isna() | (b["entry_id"].astype(str).str.strip().isin(["", "nan"]))
+    b.loc[missing, "entry_id"] = "row" + b.index[missing].astype(str)
+    b["result"] = b["result"].fillna("pending").replace("", "pending")
+    return b
+
+
+def _entry_payout(legs: pd.DataFrame) -> float | None:
+    """The entry's payout multiple: entry_payout if logged, else (single picks logged
+    the old way) that pick's multiplier_or_odds."""
+    vals = legs["entry_payout"].dropna() if "entry_payout" in legs.columns else pd.Series(dtype=object)
+    vals = vals[vals.astype(str).str.strip().ne("")]
+    if not vals.empty:
+        return _payout_multiple(vals.iloc[0])
+    if len(legs) == 1 and "multiplier_or_odds" in legs.columns:
+        return _payout_multiple(legs["multiplier_or_odds"].iloc[0])
+    return None
+
+
+def _payout_multiple(val) -> float | None:
+    try:
+        out = float(str(val).lower().replace("x", "").strip())
+        return out if out > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+_RESULT_TO_STATUS = {"won": "hit", "lost": "miss", "push": "push", "pending": "pending"}
+_STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "push"}
+_STATE_BADGE = {"won": ("WON", "green"), "lost": ("LOST", "red"), "push": ("PUSH", "gray"),
+                "live": ("LIVE", "blue"), "pending": ("PENDING", "orange")}
+
+
+def _save_results(edited: pd.DataFrame) -> None:
+    try:
+        save_bet_results(edited)
+        st.rerun(scope="app")
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Couldn't save the result change: {e}")
+
+
+def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: bool) -> None:
+    """One card per entry: header (size, stake, payout, status, x/n hit) and one compact
+    row per pick with its live value vs line."""
+    from live_tracker import track_leg, entry_status, ICON
+    tracked = []
+    for idx, leg in legs.iterrows():
+        stored = str(leg["result"])
+        t = (track_leg(leg["player"], leg["stat"], leg["choice"], leg["line"])
+             if track and stored == "pending" else None)
+        status = t["status"] if t is not None else _RESULT_TO_STATUS.get(stored, "pending")
+        tracked.append((idx, leg, t, status))
+    state = entry_status([s for *_, s in tracked])
+    n = len(tracked)
+    n_hit = sum(s == "hit" for *_, s in tracked)
+    stake = pd.to_numeric(legs["stake"], errors="coerce").max()
+    payout = _entry_payout(legs)
+
+    with st.container(border=True):
+        h1, h2 = st.columns([5, 1.4])
+        bits = [str(legs["date"].iloc[0])]
+        # Escaped "$": a bare "$...$" pair renders as a LaTeX formula in st.markdown.
+        if pd.notna(stake):
+            bits.append(f"\\${stake:,.2f}")
+        if payout:
+            bits.append(f"{payout:g}x" + (f" → \\${stake * payout:,.2f}" if pd.notna(stake) else ""))
+        h1.markdown(f"**{'Single pick' if n == 1 else f'{n}-pick entry'}** · " + " · ".join(bits))
+        label, color = _STATE_BADGE[state]
+        with h2:
+            st.badge(f"{label} · {n_hit}/{n} hit" if n > 1 else label, color=color)
+
+        for idx, leg, t, status in tracked:
+            c1, c2, c3 = st.columns([3.2, 2.2, 3])
+            pick = f"{str(leg['choice']).upper()} {leg['line']} {_pretty_stat(leg['stat'])}"
+            c1.markdown(f"{ICON[status]} **{leg['player']}**  \n{pick}")
+            if t is not None and t["value"] is not None:
+                line_val = pd.to_numeric(leg["line"], errors="coerce")
+                c2.markdown(f"**{t['value']:g}** / {leg['line']}" + (f" · pace {t['pace']:g}" if t.get("pace") else ""))
+                if pd.notna(line_val) and line_val > 0:
+                    c2.progress(min(float(t["value"]) / float(line_val), 1.0))
+            elif t is not None:
+                c2.caption(t["text"] or "—")
+            else:
+                c2.caption(f"result: {leg['result']}")
+            if t is not None:
+                c3.caption(" · ".join(x for x in ((t["text"] if t["value"] is not None else ""), t["game"]) if x))
+
+        live_legs = [(idx, t) for idx, _, t, _ in tracked if t is not None]
+        if live_legs and all(t["state"] == "final" for _, t in live_legs):
+            if st.button("✔ Save final results", key=f"apply_{entry_id}",
+                         help="Write each finished pick's hit / miss into the log"):
+                edited = bets.copy()
+                for idx, t in live_legs:
+                    edited.at[idx, "result"] = _STATUS_TO_RESULT.get(t["status"], "pending")
+                _save_results(edited)
+
+        with st.expander("Edit results"):
+            edited, changed = bets.copy(), False
+            options = ["pending", "won", "lost", "push"]
+            for idx, leg, _, _ in tracked:
+                cur = leg["result"] if leg["result"] in options else "pending"
+                new = st.selectbox(f"{leg['player']} — {str(leg['choice']).upper()} {leg['line']} "
+                                   f"{_pretty_stat(leg['stat'])}", options, index=options.index(cur),
+                                   key=f"res_{entry_id}_{idx}")
+                if new != cur:
+                    edited.at[idx, "result"] = new
+                    changed = True
+            if changed:
+                _save_results(edited)
+
+
+def _render_entries(bets: pd.DataFrame, show: str, track: bool) -> None:
+    order = (bets.assign(_t=bets["logged_at"].astype(str)).groupby("entry_id")["_t"].max()
+             .sort_values(ascending=False).index)
+    shown = 0
+    for eid in order:
+        legs = bets[bets["entry_id"] == eid]
+        is_open = (legs["result"] == "pending").any()
+        if (show == "Open" and not is_open) or (show == "Settled" and is_open):
+            continue
+        _render_entry(str(eid), legs, bets, track)
+        shown += 1
+    if not shown:
+        st.info("No entries in this view.")
+
+
+@st.fragment(run_every=60)
+def _render_entries_live(bets: pd.DataFrame, show: str) -> None:
+    st.caption(f"🔴 Live tracking from ESPN box scores · updated {datetime.now().strftime('%I:%M:%S %p')} · "
+               "refreshes every 60 s")
+    _render_entries(bets, show, track=True)
+
+
 def page_bet_log():
     st.title("📒 Bet Log")
-    st.caption("Manual tracking for now — will connect to the automated flow once Phase 4/5 are built.")
     st.caption(bet_log_location())
 
-    # Real stat types, not a raw text box the user has to remember an exact internal
-    # spelling for (underscores and all) -- sourced from live Underdog markets first
-    # since that's the most complete real list (covers plenty of prop types no
-    # trained model exists for yet, e.g. "kicking_points"), falling back to whatever
-    # this app currently predicts if props haven't been pulled, and to a plain typed
-    # entry only if neither source is available.
     props_df = load_csv_if_exists("underdog_props.csv")
     if props_df is not None and "stat_name" in props_df.columns:
         stat_options = sorted(props_df["stat_name"].dropna().unique())
     else:
         preds_df = load_current_predictions()
         stat_options = sorted(preds_df["stat_name"].dropna().unique()) if preds_df is not None else []
-    OTHER_STAT = "__other__"
 
-    with st.expander("➕ Log a new bet", expanded=False):
-        with st.form("new_bet_form", clear_on_submit=True):
+    with st.expander("➕ Log an entry", expanded=False):
+        n_picks = st.number_input("Picks in this entry", min_value=1, max_value=8, value=2, step=1,
+                                  key="bl_npicks")
+        with st.form("new_entry_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
-            with c1:
-                bet_date = st.date_input("Date", value=date.today())
-                sport = st.text_input("Sport/League", value="NFL")
-                player = st.text_input("Player")
-            with c2:
+            bet_date = c1.date_input("Date", value=date.today())
+            stake = c2.number_input("Entry stake ($)", min_value=0.0, step=1.0)
+            payout = c3.text_input("Payout multiple", placeholder="e.g. 6 or 3.2x")
+            legs = []
+            for j in range(int(n_picks)):
+                p1, p2, p3, p4 = st.columns([3, 3, 1.4, 1.4])
+                player = p1.text_input(f"Pick {j + 1} · player", key=f"bl_player_{j}")
                 if stat_options:
-                    stat_choice = st.selectbox(
-                        "Stat", stat_options + [OTHER_STAT],
-                        format_func=lambda s: "Other (type below)" if s == OTHER_STAT else _pretty_stat(s))
-                    stat_other = st.text_input(
-                        "If \"Other\" above, name the stat", disabled=stat_choice != OTHER_STAT)
+                    stat = p2.selectbox("Stat", stat_options, format_func=_pretty_stat, key=f"bl_stat_{j}",
+                                        index=stat_options.index("receiving_yds") if "receiving_yds" in stat_options else 0)
                 else:
-                    stat_choice, stat_other = OTHER_STAT, st.text_input("Stat (e.g. rushing_yards)")
-                choice = st.selectbox("Choice", ["over", "under"])
-                line = st.number_input("Line", step=0.5)
-            with c3:
-                multiplier = st.text_input("Multiplier / odds")
-                stake = st.number_input("Stake ($)", min_value=0.0, step=1.0)
-                result = st.selectbox("Result", ["pending", "won", "lost", "push"])
-            notes = st.text_area("Notes")
-
-            if st.form_submit_button("Save bet"):
-                stat = stat_other.strip() if stat_choice == OTHER_STAT else stat_choice
-                err = append_bet({
-                    "date": bet_date.isoformat(),
-                    "sport": sport,
-                    "player": player,
-                    "stat": stat,
-                    "choice": choice,
-                    "line": line,
-                    "multiplier_or_odds": multiplier,
-                    "stake": stake,
-                    "result": result,
-                    "notes": notes,
-                    "logged_at": datetime.now().isoformat(),
-                })
-                if err:
-                    st.error(err)
+                    stat = p2.text_input("Stat (e.g. receiving_yds)", key=f"bl_stat_{j}")
+                choice = p3.selectbox("Side", ["over", "under"], key=f"bl_choice_{j}")
+                line = p4.number_input("Line", step=0.5, key=f"bl_line_{j}")
+                legs.append((player, stat, choice, line))
+            notes = st.text_input("Notes")
+            if st.form_submit_button("Save entry"):
+                if any(not p.strip() for p, *_ in legs):
+                    st.error("Every pick needs a player name.")
                 else:
-                    st.success("Bet logged.")
-                    st.rerun()
+                    entry_id, now = uuid.uuid4().hex[:10], datetime.now().isoformat()
+                    err = append_bets([{
+                        "date": bet_date.isoformat(), "sport": "NFL", "player": p.strip(), "stat": s,
+                        "choice": c, "line": ln, "multiplier_or_odds": "", "stake": stake,
+                        "result": "pending", "notes": notes, "logged_at": now,
+                        "entry_id": entry_id, "entry_payout": payout.strip(),
+                    } for p, s, c, ln in legs])
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(f"Logged a {len(legs)}-pick entry." if len(legs) > 1 else "Logged a single pick.")
+                        st.rerun()
 
-    bets = load_bet_log()
+    try:
+        bets = load_bet_log()
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Couldn't load the bet log: {e}")
+        return
     if bets.empty:
         st.info("No bets logged yet.")
         return
+    bets = _with_entries(bets)
 
-    c1, c2, c3, c4 = st.columns(4)
-    n_pending = (bets["result"] == "pending").sum()
-    n_won = (bets["result"] == "won").sum()
-    n_lost = (bets["result"] == "lost").sum()
-    staked = pd.to_numeric(bets["stake"], errors="coerce").sum()
-    c1.metric("Pending", n_pending)
-    c2.metric("Won", n_won)
-    c3.metric("Lost", n_lost)
-    c4.metric("Total staked", f"${staked:,.2f}")
+    # Entry-level summary: an entry is won only when every non-push pick won.
+    from live_tracker import entry_status
+    per_entry = pd.DataFrame([{
+        "stake": pd.to_numeric(g["stake"], errors="coerce").max(),
+        "payout": _entry_payout(g),
+        "state": entry_status([_RESULT_TO_STATUS.get(x, "pending") for x in g["result"]]),
+    } for _, g in bets.groupby("entry_id")])
+    settled = per_entry[per_entry["state"].isin(["won", "lost", "push"])]
+    profit = sum(
+        (r.stake * (r.payout - 1) if r.state == "won" else -r.stake if r.state == "lost" else 0.0)
+        for r in settled.itertuples()
+        if pd.notna(r.stake) and (r.state != "won" or (r.payout is not None and pd.notna(r.payout))))
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Open entries", int((~per_entry["state"].isin(["won", "lost", "push"])).sum()))
+    c2.metric("Won", int((per_entry["state"] == "won").sum()))
+    c3.metric("Lost", int((per_entry["state"] == "lost").sum()))
+    c4.metric("Staked", f"${per_entry['stake'].sum():,.0f}")
+    c5.metric("Profit", f"{'-' if profit < 0 else '+'}${abs(profit):,.2f}",
+              help="Settled entries only. Won entries count only when a payout multiple was logged.")
 
-    RESULT_OPTIONS = ["pending", "won", "lost", "push"]
-    RESULT_COLOR = {"won": "green", "lost": "red", "push": "gray", "pending": "orange"}
-
-    photo_map = load_player_photos()
-    editable = bets.sort_values("date", ascending=False).reset_index(drop=True)
-    changed = False
-
-    for i, bet in editable.iterrows():
-        with st.container(border=True):
-            photo_col, info_col, result_col = st.columns([1, 4, 2])
-            with photo_col:
-                _leg_photo(bet.get("player"), photo_map)
-            with info_col:
-                st.markdown(f"**{bet.get('player') or '?'}**")
-                st.markdown(f"{_pretty_stat(bet.get('stat'))} — **{str(bet.get('choice', '')).upper()} {bet.get('line', '')}**")
-                stake_val = pd.to_numeric(bet.get("stake"), errors="coerce")
-                meta_bits = [
-                    bet.get("date"),
-                    f"${stake_val:.2f}" if pd.notna(stake_val) else None,
-                    bet.get("multiplier_or_odds"),
-                ]
-                st.caption(" · ".join(str(b) for b in meta_bits if pd.notna(b) and str(b).strip()))
-                if isinstance(bet.get("notes"), str) and bet["notes"].strip():
-                    st.caption(f"📝 {bet['notes']}")
-            with result_col:
-                current_result = bet.get("result") if bet.get("result") in RESULT_OPTIONS else "pending"
-                st.badge(current_result.upper(), color=RESULT_COLOR[current_result])
-                new_result = st.selectbox(
-                    "Result", RESULT_OPTIONS, index=RESULT_OPTIONS.index(current_result),
-                    key=f"bet_result_{i}", label_visibility="collapsed",
-                )
-                if new_result != current_result:
-                    editable.at[i, "result"] = new_result
-                    changed = True
-
-    if changed:
-        try:
-            save_bet_results(editable)
-            st.rerun()
-        except Exception as e:  # noqa: BLE001
-            st.error(f"Couldn't save the result change: {e}")
+    f1, f2 = st.columns([3, 2])
+    show = f1.segmented_control("Show", ["Open", "Settled", "All"], default="Open", key="bl_show") or "Open"
+    live = f2.toggle("Live tracking", value=True, key="bl_live",
+                     help="Pull each open pick's current stat from ESPN box scores every 60 s.")
+    if live and show != "Settled":
+        _render_entries_live(bets, show)
+    else:
+        _render_entries(bets, show, track=False)
 
 
 # ==================================================================== Research
