@@ -5,6 +5,7 @@ Run with:
     streamlit run dashboard/app.py
 """
 import os
+import re
 import sys
 import uuid
 from datetime import datetime, date, timezone
@@ -51,6 +52,7 @@ from utils import (  # noqa: E402
     estimate_player_stat_std, recompute_probability_for_real_line,
     score_underdog_board, is_low_noise_line,
     load_underdog_props, underdog_freshness_bar, save_bet_results, bet_log_location,
+    delete_bet_rows, clear_bet_log,
 )
 
 # abspath first: Streamlit can hand this module a relative __file__, which would
@@ -979,7 +981,13 @@ def _with_entries(bets: pd.DataFrame) -> pd.DataFrame:
         if col not in b.columns:
             b[col] = pd.NA
     missing = b["entry_id"].isna() | (b["entry_id"].astype(str).str.strip().isin(["", "nan"]))
-    b.loc[missing, "entry_id"] = "row" + b.index[missing].astype(str)
+    # Older rows: picks saved together share a date + note (e.g. the assistant's
+    # "Parlay #3, 12.9x"), so group on that; a row with no note stays a single.
+    notes = b["notes"].fillna("").astype(str).str.strip() if "notes" in b.columns else pd.Series("", index=b.index)
+    grouped = missing & notes.ne("")
+    b.loc[grouped, "entry_id"] = "legacy|" + b.loc[grouped, "date"].astype(str) + "|" + notes[grouped]
+    single = missing & ~grouped
+    b.loc[single, "entry_id"] = "row" + b.index[single].astype(str)
     b["result"] = b["result"].fillna("pending").replace("", "pending")
     return b
 
@@ -993,7 +1001,8 @@ def _entry_payout(legs: pd.DataFrame) -> float | None:
         return _payout_multiple(vals.iloc[0])
     if len(legs) == 1 and "multiplier_or_odds" in legs.columns:
         return _payout_multiple(legs["multiplier_or_odds"].iloc[0])
-    return None
+    m = re.search(r"(\d+(?:\.\d+)?)\s*x\b", str(legs["notes"].iloc[0]) if "notes" in legs.columns else "")
+    return float(m.group(1)) if m else None
 
 
 def _payout_multiple(val) -> float | None:
@@ -1018,7 +1027,8 @@ def _save_results(edited: pd.DataFrame) -> None:
         st.error(f"Couldn't save the result change: {e}")
 
 
-def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: bool) -> None:
+def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: bool,
+                  selectable: bool = False) -> None:
     """One card per entry: header (size, stake, payout, status, x/n hit) and one compact
     row per pick with its live value vs line."""
     from live_tracker import track_leg, entry_status, ICON
@@ -1036,7 +1046,11 @@ def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: 
     payout = _entry_payout(legs)
 
     with st.container(border=True):
-        h1, h2 = st.columns([5, 1.4])
+        if selectable:
+            h0, h1, h2 = st.columns([0.35, 5, 1.4])
+            h0.checkbox("Select entry", key=f"sel_{entry_id}", label_visibility="collapsed")
+        else:
+            h1, h2 = st.columns([5, 1.4])
         bits = [str(legs["date"].iloc[0])]
         # Escaped "$": a bare "$...$" pair renders as a LaTeX formula in st.markdown.
         if pd.notna(stake):
@@ -1088,7 +1102,7 @@ def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: 
                 _save_results(edited)
 
 
-def _render_entries(bets: pd.DataFrame, show: str, track: bool) -> None:
+def _render_entries(bets: pd.DataFrame, show: str, track: bool, selectable: bool = False) -> None:
     order = (bets.assign(_t=bets["logged_at"].astype(str)).groupby("entry_id")["_t"].max()
              .sort_values(ascending=False).index)
     shown = 0
@@ -1097,7 +1111,7 @@ def _render_entries(bets: pd.DataFrame, show: str, track: bool) -> None:
         is_open = (legs["result"] == "pending").any()
         if (show == "Open" and not is_open) or (show == "Settled" and is_open):
             continue
-        _render_entry(str(eid), legs, bets, track)
+        _render_entry(str(eid), legs, bets, track, selectable)
         shown += 1
     if not shown:
         st.info("No entries in this view.")
@@ -1108,6 +1122,58 @@ def _render_entries_live(bets: pd.DataFrame, show: str) -> None:
     st.caption(f"🔴 Live tracking from ESPN box scores · updated {datetime.now().strftime('%I:%M:%S %p')} · "
                "refreshes every 60 s")
     _render_entries(bets, show, track=True)
+
+
+def _delete_toolbar(bets: pd.DataFrame) -> None:
+    """Delete the entries ticked on their cards (in 'Select to delete' mode), or clear the
+    whole log -- each behind a confirm step. Deleting an entry removes every pick in it.
+    The selection is snapshotted into session_state when Delete is clicked: checkbox
+    state alone doesn't survive the reruns between that click and the confirm."""
+    if st.session_state.pop("_bl_manage_off", False):
+        st.session_state["bl_manage"] = False
+    entry_ids = list(dict.fromkeys(bets["entry_id"].astype(str)))
+    selected = [e for e in entry_ids if st.session_state.get(f"sel_{e}")]
+
+    d0, d1, d2 = st.columns([2, 2, 1.4])
+    d0.toggle("Select to delete", key="bl_manage",
+              help="Shows a checkbox on each entry (live tracking pauses while this is on).")
+    if d1.button(f"🗑 Delete selected ({len(selected)})", disabled=not selected, key="bl_del_sel"):
+        st.session_state["bl_confirm"] = "selected"
+        st.session_state["bl_to_delete"] = selected
+    if d2.button("Clear all", key="bl_clear_all"):
+        st.session_state["bl_confirm"] = "all"
+
+    confirm = st.session_state.get("bl_confirm")
+    targets = [e for e in st.session_state.get("bl_to_delete", []) if e in entry_ids]
+    if confirm == "selected" and targets:
+        n_picks = int(bets["entry_id"].astype(str).isin(targets).sum())
+        st.warning(f"Delete {len(targets)} entr{'y' if len(targets) == 1 else 'ies'} "
+                   f"({n_picks} pick{'s' if n_picks != 1 else ''})? This can't be undone from the app.")
+    elif confirm == "all":
+        st.warning(f"Delete ALL {len(entry_ids)} entr{'y' if len(entry_ids) == 1 else 'ies'} "
+                   f"({len(bets)} picks) from the bet log? This can't be undone from the app.")
+    else:
+        st.session_state.pop("bl_confirm", None)
+        return
+
+    c1, c2, _ = st.columns([1.4, 1, 3.6])
+    if c1.button("Yes, delete", type="primary", key="bl_confirm_yes"):
+        err = (clear_bet_log() if confirm == "all"
+               else delete_bet_rows(bets[bets["entry_id"].astype(str).isin(targets)]))
+        for e in entry_ids:
+            st.session_state.pop(f"sel_{e}", None)
+        for k in ("bl_confirm", "bl_to_delete"):
+            st.session_state.pop(k, None)
+        st.session_state["_bl_manage_off"] = True  # applied before the toggle renders next run
+        if err:
+            st.error(err)
+        else:
+            st.toast("Deleted." if confirm == "selected" else "Bet log cleared.")
+            st.rerun()
+    if c2.button("Cancel", key="bl_confirm_no"):
+        for k in ("bl_confirm", "bl_to_delete"):
+            st.session_state.pop(k, None)
+        st.rerun()
 
 
 def page_bet_log():
@@ -1189,11 +1255,15 @@ def page_bet_log():
     c5.metric("Profit", f"{'-' if profit < 0 else '+'}${abs(profit):,.2f}",
               help="Settled entries only. Won entries count only when a payout multiple was logged.")
 
+    _delete_toolbar(bets)
+
     f1, f2 = st.columns([3, 2])
     show = f1.segmented_control("Show", ["Open", "Settled", "All"], default="Open", key="bl_show") or "Open"
     live = f2.toggle("Live tracking", value=True, key="bl_live",
                      help="Pull each open pick's current stat from ESPN box scores every 60 s.")
-    if live and show != "Settled":
+    if st.session_state.get("bl_manage"):
+        _render_entries(bets, show, track=False, selectable=True)
+    elif live and show != "Settled":
         _render_entries_live(bets, show)
     else:
         _render_entries(bets, show, track=False)

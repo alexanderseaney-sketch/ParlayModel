@@ -481,6 +481,33 @@ def append_bet(row: dict) -> str | None:
     return append_bets([row])
 
 
+def delete_bet_rows(rows: pd.DataFrame) -> str | None:
+    """Delete these bet rows (matched on bet_store.KEY). None on success, else an error."""
+    import bet_store
+    try:
+        keys = set(bet_store.row_keys(rows))
+        if bet_store.enabled():
+            bet_store.delete_rows(keys)
+        elif os.path.exists(BET_LOG_PATH):
+            df = pd.read_csv(BET_LOG_PATH)
+            df[~bet_store.row_keys(df).isin(keys)].to_csv(BET_LOG_PATH, index=False)
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f"Couldn't delete: {e}"
+
+
+def clear_bet_log() -> str | None:
+    import bet_store
+    try:
+        if bet_store.enabled():
+            bet_store.clear()
+        elif os.path.exists(BET_LOG_PATH):
+            bet_store._empty().to_csv(BET_LOG_PATH, index=False)
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f"Couldn't clear the bet log: {e}"
+
+
 def save_bet_results(edited: pd.DataFrame) -> None:
     """Persist result edits from the Bet Log page (GitHub store merges onto the latest log)."""
     import bet_store

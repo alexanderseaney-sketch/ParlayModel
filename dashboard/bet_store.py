@@ -142,3 +142,32 @@ def update_results(edited: pd.DataFrame, attempts: int = 3) -> None:
         except BetStoreError as e:
             if str(e) != "stale" or i == attempts - 1:
                 raise
+
+
+def row_keys(df: pd.DataFrame) -> pd.Series:
+    """Stable identity of a bet row (no row ids in the CSV): KEY columns joined."""
+    return df[KEY].astype(str).agg("|".join, axis=1)
+
+
+def delete_rows(keys: set[str], attempts: int = 3) -> int:
+    """Remove rows whose row_keys() are in `keys` from the LATEST stored log. Returns
+    how many rows were removed."""
+    for i in range(attempts):
+        latest, sha = read()
+        if latest.empty:
+            return 0
+        drop = row_keys(latest).isin(keys)
+        if not drop.any():
+            return 0
+        try:
+            write(latest[~drop], sha, f"Delete {int(drop.sum())} bet row(s)")
+            return int(drop.sum())
+        except BetStoreError as e:
+            if str(e) != "stale" or i == attempts - 1:
+                raise
+    return 0
+
+
+def clear() -> None:
+    _, sha = read()
+    write(_empty(), sha, "Clear bet log")
