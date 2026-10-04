@@ -20,7 +20,7 @@ from anthropic import beta_tool
 
 from utils import (
     load_csv_if_exists, load_current_predictions, normalize_name,
-    load_bet_log, append_bet, get_player_news, ROOT_DIR, load_leg_correlations,
+    load_bet_log, append_bets, get_player_news, ROOT_DIR, load_leg_correlations,
 )
 
 MODEL = "claude-opus-5-5"
@@ -277,7 +277,7 @@ def build_tools(prob_source: str) -> list:
         """
         row = {"date": datetime.now().date().isoformat(), "sport": "NFL", "player": player, "stat": stat,
                "choice": side.lower(), "line": line, "multiplier_or_odds": price_or_multiplier,
-               "stake": stake, "result": "", "notes": notes,
+               "stake": stake, "result": "pending", "notes": notes,
                "logged_at": datetime.now(timezone.utc).isoformat()}
         st.session_state.setdefault("assistant_pending_bets", []).append(row)
         return json.dumps({"status": "staged -- waiting for the user to click Confirm on the page", "bet": row})
@@ -333,10 +333,12 @@ def _render_pending_bets():
                                             "stake", "notes"]], hide_index=True, use_container_width=True)
         c1, c2 = st.columns(2)
         if c1.button("✅ Confirm and log", type="primary"):
-            for row in pending:
-                append_bet(row)
-            st.session_state["assistant_pending_bets"] = []
-            st.success(f"Logged {len(pending)} leg(s) to the Bet Log.")
+            err = append_bets(pending)
+            if err:
+                st.error(err)
+            else:
+                st.session_state["assistant_pending_bets"] = []
+                st.success(f"Logged {len(pending)} leg(s) to the Bet Log.")
         if c2.button("✖ Discard"):
             st.session_state["assistant_pending_bets"] = []
             st.rerun()

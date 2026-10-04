@@ -439,7 +439,19 @@ def load_csv_if_exists(filename: str) -> pd.DataFrame | None:
     return load_csv(filename, mtime)
 
 
+def bet_log_location() -> str:
+    """Human-readable 'where do my bets go' for the Bet Log page."""
+    import bet_store
+    if bet_store.enabled():
+        return f"🔒 Saved to private GitHub repo `{bet_store.repo()}` — persists across redeploys."
+    return ("⚠️ Saved to this app's local disk only. On the hosted app that's wiped on every "
+            "redeploy (every 6 h) — set BET_LOG_GITHUB_TOKEN to keep bets.")
+
+
 def load_bet_log() -> pd.DataFrame:
+    import bet_store
+    if bet_store.enabled():
+        return bet_store.read()[0]
     if not os.path.exists(BET_LOG_PATH):
         return pd.DataFrame(columns=[
             "date", "sport", "player", "stat", "choice", "line",
@@ -448,11 +460,34 @@ def load_bet_log() -> pd.DataFrame:
     return pd.read_csv(BET_LOG_PATH)
 
 
-def append_bet(row: dict) -> None:
-    os.makedirs(BET_LOG_DIR, exist_ok=True)
-    df = load_bet_log()
-    df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-    df.to_csv(BET_LOG_PATH, index=False)
+def append_bets(rows: list[dict]) -> str | None:
+    """Log one or more bet legs. Returns None on success, else an error message for
+    the page to show -- a failed save must never look like a saved bet."""
+    import bet_store
+    try:
+        if bet_store.enabled():
+            bet_store.append(rows)
+            return None
+        os.makedirs(BET_LOG_DIR, exist_ok=True)
+        df = load_bet_log()
+        df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+        df.to_csv(BET_LOG_PATH, index=False)
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f"Couldn't save the bet: {e}"
+
+
+def append_bet(row: dict) -> str | None:
+    return append_bets([row])
+
+
+def save_bet_results(edited: pd.DataFrame) -> None:
+    """Persist result edits from the Bet Log page (GitHub store merges onto the latest log)."""
+    import bet_store
+    if bet_store.enabled():
+        bet_store.update_results(edited)
+        return
+    edited.to_csv(BET_LOG_PATH, index=False)  # local mode
 
 
 CURRENT_PREDICTIONS_PATH = os.path.join(ROOT_DIR, "models", "current_player_predictions.csv")

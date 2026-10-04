@@ -42,14 +42,14 @@ _purge_stale_project_modules()
 
 from utils import (  # noqa: E402
     EXPECTED_FILES, PULL_SCRIPTS, BET_LOG_PATH,
-    file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
+    file_status, load_csv_if_exists, load_bet_log, append_bet, append_bets, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
     load_player_photos, load_player_jersey_numbers, get_player_news,
     correlation_adjusted_parlay_probability, data_freshness_check, run_all_pulls,
     pretty_stat_name, load_line_movement,
     estimate_player_stat_std, recompute_probability_for_real_line,
     score_underdog_board, is_low_noise_line,
-    load_underdog_props, underdog_freshness_bar,
+    load_underdog_props, underdog_freshness_bar, save_bet_results, bet_log_location,
 )
 
 # abspath first: Streamlit can hand this module a relative __file__, which would
@@ -943,8 +943,9 @@ def page_parlay_builder():
         )
         b1, b2 = st.columns(2)
         if b1.button("📒 Send slip to Bet Log (as pending)", width="stretch"):
+            rows = []
             for leg in st.session_state.slip:
-                append_bet({
+                rows.append({
                     "date": date.today().isoformat(),
                     "sport": "NFL",
                     "player": leg["player"],
@@ -957,7 +958,11 @@ def page_parlay_builder():
                     "notes": "Sent from Parlay Builder slip",
                     "logged_at": datetime.now().isoformat(),
                 })
-            st.success(f"Logged {len(st.session_state.slip)} leg(s) as pending bets.")
+            err = append_bets(rows)
+            if err:
+                st.error(err)
+            else:
+                st.success(f"Logged {len(rows)} leg(s) as pending bets.")
         if b2.button("Clear slip", width="stretch"):
             st.session_state.slip = []
             st.rerun()
@@ -966,6 +971,7 @@ def page_parlay_builder():
 def page_bet_log():
     st.title("📒 Bet Log")
     st.caption("Manual tracking for now — will connect to the automated flow once Phase 4/5 are built.")
+    st.caption(bet_log_location())
 
     # Real stat types, not a raw text box the user has to remember an exact internal
     # spelling for (underscores and all) -- sourced from live Underdog markets first
@@ -1007,7 +1013,7 @@ def page_bet_log():
 
             if st.form_submit_button("Save bet"):
                 stat = stat_other.strip() if stat_choice == OTHER_STAT else stat_choice
-                append_bet({
+                err = append_bet({
                     "date": bet_date.isoformat(),
                     "sport": sport,
                     "player": player,
@@ -1020,8 +1026,11 @@ def page_bet_log():
                     "notes": notes,
                     "logged_at": datetime.now().isoformat(),
                 })
-                st.success("Bet logged.")
-                st.rerun()
+                if err:
+                    st.error(err)
+                else:
+                    st.success("Bet logged.")
+                    st.rerun()
 
     bets = load_bet_log()
     if bets.empty:
@@ -1074,8 +1083,11 @@ def page_bet_log():
                     changed = True
 
     if changed:
-        editable.to_csv(BET_LOG_PATH, index=False)
-        st.rerun()
+        try:
+            save_bet_results(editable)
+            st.rerun()
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Couldn't save the result change: {e}")
 
 
 # ==================================================================== Research
