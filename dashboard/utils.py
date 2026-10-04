@@ -1,5 +1,6 @@
 """Shared helpers for the ParlayModel dashboard."""
 import email.utils
+import io
 import os
 import re
 import subprocess
@@ -291,8 +292,10 @@ def file_status(filename: str) -> dict:
 
 
 @st.cache_data(show_spinner=False)
-def load_csv(filename: str, _mtime: float) -> pd.DataFrame:
-    """_mtime is passed in purely to bust the cache when the underlying file changes."""
+def load_csv(filename: str, mtime: float) -> pd.DataFrame:
+    """mtime is passed in purely to bust the cache when the underlying file changes -- it
+    must NOT be underscore-prefixed: st.cache_data leaves _args out of the cache key,
+    so the old `_mtime` never busted anything and a running app kept its first read."""
     path = os.path.join(RAW_DIR, filename)
     return pd.read_csv(path, low_memory=False)
 
@@ -314,7 +317,83 @@ def load_line_movement() -> pd.DataFrame:
     return _cached_line_movement((len(files), newest_mtime))
 
 
+# Underdog lines move all day (injury news, inactives ~90 min before kickoff), but the
+# committed underdog_props.csv only refreshes every 6 hours -- the last refresh before
+# a 1pm ET kickoff is 8am ET. So the dashboard fetches Underdog's board itself,
+# cached for this many seconds, and only falls back to the committed file when the
+# live call fails. Every page that reads "underdog_props.csv" goes through here.
+UNDERDOG_LIVE_TTL = 300
+
+
+@st.cache_data(ttl=UNDERDOG_LIVE_TTL, show_spinner="Refreshing Underdog lines…")
+def _fetch_underdog_live() -> tuple[pd.DataFrame | None, str | None]:
+    """(props, error). Errors are returned, not raised, so a failed fetch is cached for
+    the TTL too -- an unreachable API shouldn't add a timeout to every rerun."""
+    data_dir = os.path.join(ROOT_DIR, "data")
+    if data_dir not in sys.path:
+        sys.path.insert(0, data_dir)
+    try:
+        import pull_underdog
+        df = pull_underdog.process(pull_underdog.fetch_pickem_data())
+        if "sport_id" in df.columns:
+            df = df[df["sport_id"] == "NFL"]
+        if df.empty or "stat_name" not in df.columns:
+            return None, "live pull returned no NFL lines"
+        df = df.reset_index(drop=True)
+        df["pulled_at"] = datetime.now(timezone.utc).isoformat()
+        # Same CSV round trip the committed file goes through: the API returns numbers
+        # as strings ("45.5"), and every page was written against read_csv's dtypes.
+        return pd.read_csv(io.StringIO(df.to_csv(index=False)), low_memory=False), None
+    except Exception as e:  # noqa: BLE001 -- any failure falls back to the file
+        return None, f"{type(e).__name__}: {e}"[:200]
+
+
+def load_underdog_props() -> pd.DataFrame | None:
+    """Live Underdog board (<= UNDERDOG_LIVE_TTL old), else the committed file. The
+    frame's `pulled_at` column says which one you got."""
+    live, err = _fetch_underdog_live()
+    if live is not None:
+        st.session_state.pop("underdog_live_error", None)
+        return live
+    st.session_state["underdog_live_error"] = err
+    path = os.path.join(RAW_DIR, "underdog_props.csv")
+    if not os.path.exists(path):
+        return None
+    return load_csv("underdog_props.csv", os.path.getmtime(path))
+
+
+def underdog_freshness_caption(props: pd.DataFrame | None) -> str:
+    """'Lines live from Underdog, 2 min old' / 'saved file, 3.1 h old (live fetch failed: ...)'."""
+    if props is None or "pulled_at" not in props.columns or props.empty:
+        return "No Underdog lines loaded."
+    ts = pd.to_datetime(props["pulled_at"].iloc[0], utc=True, errors="coerce")
+    if pd.isna(ts):
+        return "Underdog lines loaded (pull time unknown)."
+    age_min = (pd.Timestamp.now(tz="UTC") - ts).total_seconds() / 60
+    age = f"{age_min:.0f} min" if age_min < 90 else f"{age_min / 60:.1f} h"
+    err = st.session_state.get("underdog_live_error")
+    if age_min <= UNDERDOG_LIVE_TTL / 60 + 1 and not err:
+        return f"🟢 Underdog lines live · pulled {age} ago · auto-refresh every {UNDERDOG_LIVE_TTL // 60} min"
+    return f"🟠 Underdog lines from the saved file · {age} old" + (f" · live fetch failed ({err})" if err else "")
+
+
+def refresh_underdog_now() -> None:
+    _fetch_underdog_live.clear()
+    st.session_state.pop("underdog_live_error", None)
+
+
+def underdog_freshness_bar(props: pd.DataFrame | None, key: str) -> None:
+    """Freshness caption + a 'refresh now' button, shown on every page that prices lines."""
+    c1, c2 = st.columns([5, 1])
+    c1.caption(underdog_freshness_caption(props))
+    if c2.button("↻ Lines", key=f"ud_refresh_{key}", help="Re-pull Underdog's board right now"):
+        refresh_underdog_now()
+        st.rerun()
+
+
 def load_csv_if_exists(filename: str) -> pd.DataFrame | None:
+    if filename == "underdog_props.csv":
+        return load_underdog_props()
     path = os.path.join(RAW_DIR, filename)
     if not os.path.exists(path):
         return None
@@ -342,7 +421,7 @@ CURRENT_PREDICTIONS_PATH = os.path.join(ROOT_DIR, "models", "current_player_pred
 
 
 @st.cache_data(show_spinner=False)
-def _read_current_predictions(_mtime: float) -> pd.DataFrame:
+def _read_current_predictions(mtime: float) -> pd.DataFrame:
     """Same cache pattern as load_csv() -- _mtime keys the read; the Run Data Pulls
     / freshness-refresh flows call st.cache_data.clear() after regenerating."""
     return pd.read_csv(CURRENT_PREDICTIONS_PATH)
@@ -499,7 +578,7 @@ LEG_CORRELATIONS_PATH = os.path.join(ROOT_DIR, "models", "parlay_leg_correlation
 
 
 @st.cache_data(show_spinner=False)
-def _read_leg_correlations(_mtime: float) -> dict[frozenset, float]:
+def _read_leg_correlations(mtime: float) -> dict[frozenset, float]:
     df = pd.read_csv(LEG_CORRELATIONS_PATH)
     return {
         frozenset([row["position_prop_a"], row["position_prop_b"]]): row["phi"]

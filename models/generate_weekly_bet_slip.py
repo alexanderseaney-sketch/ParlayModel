@@ -93,14 +93,17 @@ def kelly_fraction(p: float, decimal_odds: float) -> float:
     return max(f, 0.0)
 
 
-def load_matched_props() -> pd.DataFrame:
+def load_matched_props(props: pd.DataFrame | None = None) -> pd.DataFrame:
     """One row per (player, stat_name), matched to whichever side (over/under) the
     model actually favors -- NOT hardcoded to "over". predicted_prob_over < 0.5 means
     the model favors UNDER, and must be matched against the "under" row's own price,
     not the "over" row's. Confidence alone doesn't tell you which side; it's symmetric
     around 50/50 by construction (confidence = |prob - 0.5| * 2)."""
     predictions = pd.read_csv(PREDICTIONS_PATH)
-    props = pd.read_csv(os.path.join(RAW_DIR, "underdog_props.csv"), low_memory=False)
+    # The dashboard passes its live (<=5 min old) Underdog board; the CLI reads the file.
+    if props is None:
+        props = pd.read_csv(os.path.join(RAW_DIR, "underdog_props.csv"), low_memory=False)
+    props = props.copy()
 
     predictions["_match_key"] = predictions["player_display_name"].apply(normalize_name)
     props["_match_key"] = props["full_name"].apply(normalize_name)

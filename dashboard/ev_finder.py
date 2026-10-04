@@ -24,6 +24,7 @@ import streamlit as st
 from utils import (
     load_csv_if_exists, load_current_predictions, normalize_name, score_underdog_board,
     is_low_noise_line, line_matches_proxy, load_leg_correlations, pretty_stat_name, ROOT_DIR,
+    underdog_freshness_bar,
 )
 from odds_utils import add_underdog_market_probs, decimal_to_american, blend_with_market
 
@@ -57,7 +58,7 @@ def _key_status() -> dict[str, bool]:
 
 
 @st.cache_data(show_spinner=False)
-def _team_lookup(_mtime: float) -> dict[str, str]:
+def _team_lookup(mtime: float) -> dict[str, str]:
     """Current team per normalized player name from the 32 club team sites (fresher
     than weekly_stats' recent_team for anyone traded/signed since their last game)."""
     df = load_csv_if_exists("nfl_rosters.csv")
@@ -69,7 +70,7 @@ def _team_lookup(_mtime: float) -> dict[str, str]:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _sportsbook_consensus(_mtime: float) -> pd.DataFrame | None:
+def _sportsbook_consensus(mtime: float) -> pd.DataFrame | None:
     """Saved Odds API pull (data/raw/odds_api_props.csv) collapsed to a per-prop
     consensus. Cached 5 minutes; re-pulling (credits) only happens on the button."""
     df = load_csv_if_exists("odds_api_props.csv")
@@ -206,7 +207,7 @@ def _recent_games(player: str, stat_name: str, weekly: pd.DataFrame | None, n: i
 
 
 @st.cache_data(show_spinner=False)
-def _top_features(_mtime: float) -> dict[str, list]:
+def _top_features(mtime: float) -> dict[str, list]:
     path = os.path.join(ROOT_DIR, "models", "feature_importance.csv")
     if not os.path.exists(path):
         return {}
@@ -292,7 +293,8 @@ def page_ev_finder():
                    "`python models/current_predictions.py` (Run Data Pulls page).")
         return
     cands = _apply_prob_source(cands, prob_source)
-    st.caption(f"Underdog board pulled {info['pulled_at'] or '?'} · {len(cands)} comparable model-backed options"
+    underdog_freshness_bar(load_csv_if_exists("underdog_props.csv"), key="ev")
+    st.caption(f"{len(cands)} comparable model-backed options"
                f" · {int((cands['n_books'] > 0).sum())} with sportsbook consensus")
 
     tab_legs, tab_auto, tab_build = st.tabs(["🎯 Best single picks", "🤖 Best entries", "🛠️ Build your own"])

@@ -646,7 +646,7 @@ def _num(v) -> float:
 
 
 @st.cache_data(show_spinner=False)
-def _draft_pool(_ud_mtime: float, _ros_mtime: float, _pred_mtime: float, scoring: str) -> pd.DataFrame:
+def _draft_pool(ud_mtime: float, ros_mtime: float, pred_mtime: float, scoring: str) -> pd.DataFrame:
     ud = load_csv_if_exists("underdog_props.csv")
     if ud is None:
         return pd.DataFrame()

@@ -20,6 +20,7 @@ from utils import (
     pretty_stat_name, load_line_movement,
     estimate_player_stat_std, recompute_probability_for_real_line,
     score_underdog_board, is_low_noise_line,
+    load_underdog_props, underdog_freshness_bar,
 )
 
 # abspath first: Streamlit can hand this module a relative __file__, which would
@@ -317,12 +318,13 @@ def page_weekly_bet_slip():
             "it was actually computed against. Only wager what you can afford to lose."
         )
 
+    underdog_freshness_bar(load_underdog_props(), key="slip")
     budget = st.number_input("Weekly budget ($)", min_value=1.0, value=10.0, step=1.0)
 
     if st.button("Generate this week's bets", type="primary", width="content"):
         try:
             with st.spinner("Pulling live predictions and current Underdog prices..."):
-                matched = load_matched_props()
+                matched = load_matched_props(load_underdog_props())
                 candidates = build_single_leg_candidates(matched) + build_parlay_candidates(matched)
                 allocated = allocate_budget(candidates, budget)
             st.session_state["bet_slip_result"] = {
@@ -389,6 +391,7 @@ def page_parlay_builder():
     if df is None:
         st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls** first.")
         st.stop()
+    underdog_freshness_bar(df, key="builder")
 
     if predictions is not None:
         predictions = predictions.copy()
@@ -1729,6 +1732,7 @@ UNDERDOG_DISPLAY_COLUMNS = [
 def page_underdog_props():
     st.title("💰 Underdog Pick'em Props")
     df = load_csv_if_exists("underdog_props.csv")
+    underdog_freshness_bar(df, key="props")
 
     if df is None:
         st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
