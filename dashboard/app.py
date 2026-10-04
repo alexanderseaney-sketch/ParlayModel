@@ -11,7 +11,36 @@ from datetime import datetime, date
 import pandas as pd
 import streamlit as st
 
-from utils import (
+
+def _purge_stale_project_modules() -> None:
+    """Streamlit re-executes this file on every rerun, but modules it imports
+    (utils, fantasy, models/*) stay cached in sys.modules. After a code deploy (git
+    pull on Streamlit Cloud, or a local edit) the new app.py then runs against OLD
+    copies of them -- 2026-10-04 the hosted app died with an ImportError because the
+    new app.py imported load_underdog_props from a utils.py loaded before it existed.
+    So: the first time this process runs the app, and whenever any project .py file
+    has changed since, drop every project module so they re-import together."""
+    import sys as _sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project = {
+        name: mod.__file__ for name, mod in list(_sys.modules.items())
+        if name != "__main__" and getattr(mod, "__file__", None)
+        and os.path.abspath(mod.__file__).startswith(root)
+        and "site-packages" not in mod.__file__ and ".venv" not in mod.__file__
+    }
+    import time as _time
+    last_check = getattr(_sys, "_parlaymodel_last_module_check", None)
+    now = _time.time()
+    if last_check is None or any(
+            os.path.exists(p) and os.path.getmtime(p) > last_check for p in project.values()):
+        for name in project:
+            _sys.modules.pop(name, None)
+    _sys._parlaymodel_last_module_check = now
+
+
+_purge_stale_project_modules()
+
+from utils import (  # noqa: E402
     EXPECTED_FILES, PULL_SCRIPTS, BET_LOG_PATH,
     file_status, load_csv_if_exists, load_bet_log, append_bet, run_pull_script,
     find_column, load_current_predictions, normalize_name, get_player_detail,
