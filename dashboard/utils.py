@@ -320,9 +320,11 @@ def load_line_movement() -> pd.DataFrame:
 # Underdog lines move all day (injury news, inactives ~90 min before kickoff), but the
 # committed underdog_props.csv only refreshes every 6 hours -- the last refresh before
 # a 1pm ET kickoff is 8am ET. So the dashboard fetches Underdog's board itself,
-# cached for this many seconds, and only falls back to the committed file when the
-# live call fails. Every page that reads "underdog_props.csv" goes through here.
-UNDERDOG_LIVE_TTL = 300
+# cached for this many seconds (one shared fetch per minute however many viewers),
+# and only falls back to the committed file when the live call fails. Every page that
+# reads "underdog_props.csv" goes through here; underdog_freshness_bar() re-checks on
+# the same cadence and reruns the page when the board actually changed.
+UNDERDOG_LIVE_TTL = 60
 
 
 @st.cache_data(ttl=UNDERDOG_LIVE_TTL, show_spinner="Refreshing Underdog lines…")
@@ -373,7 +375,8 @@ def underdog_freshness_caption(props: pd.DataFrame | None) -> str:
     age = f"{age_min:.0f} min" if age_min < 90 else f"{age_min / 60:.1f} h"
     err = st.session_state.get("underdog_live_error")
     if age_min <= UNDERDOG_LIVE_TTL / 60 + 1 and not err:
-        return f"🟢 Underdog lines live · pulled {age} ago · auto-refresh every {UNDERDOG_LIVE_TTL // 60} min"
+        age = f"{age_min * 60:.0f} s" if age_min < 1 else age
+        return f"🟢 Underdog lines live · pulled {age} ago"
     return f"🟠 Underdog lines from the saved file · {age} old" + (f" · live fetch failed ({err})" if err else "")
 
 
@@ -382,13 +385,48 @@ def refresh_underdog_now() -> None:
     st.session_state.pop("underdog_live_error", None)
 
 
-def underdog_freshness_bar(props: pd.DataFrame | None, key: str) -> None:
-    """Freshness caption + a 'refresh now' button, shown on every page that prices lines."""
+def _board_signature(props: pd.DataFrame | None) -> int | None:
+    """Hash of what a bettor sees (player, stat, line, side, price) -- not pulled_at,
+    so a re-fetch that changed nothing doesn't trigger a rerun."""
+    if props is None or props.empty:
+        return None
+    cols = [c for c in ("full_name", "stat_name", "stat_value", "choice", "decimal_price",
+                        "american_price", "payout_multiplier") if c in props.columns]
+    return int(pd.util.hash_pandas_object(props[cols], index=False).sum())
+
+
+@st.fragment(run_every=UNDERDOG_LIVE_TTL)
+def _underdog_live_watch(baseline: int | None, key: str) -> None:
+    """Re-runs on its own every UNDERDOG_LIVE_TTL seconds: refreshes the caption, and
+    reruns the whole page only when Underdog's board actually changed. Widget state,
+    the parlay slip and any AI write-ups live in session_state, so they survive."""
+    props = load_underdog_props()
     c1, c2 = st.columns([5, 1])
-    c1.caption(underdog_freshness_caption(props))
+    c1.caption(underdog_freshness_caption(props) + f" · auto-refresh every {UNDERDOG_LIVE_TTL} s")
     if c2.button("↻ Lines", key=f"ud_refresh_{key}", help="Re-pull Underdog's board right now"):
         refresh_underdog_now()
-        st.rerun()
+        st.rerun(scope="app")
+    if _board_signature(props) != baseline:
+        st.session_state["underdog_lines_changed_at"] = datetime.now(timezone.utc).isoformat()
+        st.rerun(scope="app")
+
+
+def underdog_freshness_bar(props: pd.DataFrame | None, key: str) -> None:
+    """Freshness caption + refresh button + (optional) 60-second auto-refresh, shown on
+    every page that prices lines. `props` is the board the page rendered with."""
+    auto = st.toggle("Auto-refresh lines", value=st.session_state.get("ud_auto_refresh", True),
+                     key=f"ud_auto_{key}",
+                     help="Re-check Underdog every minute and update the page when a line or "
+                          "price changes. Turn off to keep the page still while you build an entry.")
+    st.session_state["ud_auto_refresh"] = auto
+    if auto:
+        _underdog_live_watch(_board_signature(props), key)
+    else:
+        c1, c2 = st.columns([5, 1])
+        c1.caption(underdog_freshness_caption(props) + " · auto-refresh paused")
+        if c2.button("↻ Lines", key=f"ud_refresh_{key}", help="Re-pull Underdog's board right now"):
+            refresh_underdog_now()
+            st.rerun()
 
 
 def load_csv_if_exists(filename: str) -> pd.DataFrame | None:

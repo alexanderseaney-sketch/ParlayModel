@@ -6,7 +6,7 @@ Run with:
 """
 import os
 import sys
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 import pandas as pd
 import streamlit as st
@@ -359,6 +359,7 @@ def page_weekly_bet_slip():
             st.session_state["bet_slip_result"] = {
                 "matched_count": len(matched), "candidate_count": len(candidates),
                 "allocated": allocated, "budget": budget,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             }
         except FileNotFoundError as e:
             st.error(f"Missing data: {e}. Run the data pulls first from **Run Data Pulls**.")
@@ -366,6 +367,10 @@ def page_weekly_bet_slip():
     result = st.session_state.get("bet_slip_result")
     if not result:
         return
+    changed_at = st.session_state.get("underdog_lines_changed_at")
+    if changed_at and result.get("generated_at") and changed_at > result["generated_at"]:
+        st.warning("Underdog lines have moved since these bets were generated — click "
+                   "**Generate this week's bets** again before entering any of them.", icon="🔄")
 
     yard_divider("MATCHED PROPS")
     st.caption(
