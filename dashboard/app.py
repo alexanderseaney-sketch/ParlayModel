@@ -78,6 +78,7 @@ from compare import page_compare  # noqa: E402
 from fantasy import page_fantasy  # noqa: E402
 from ev_finder import page_ev_finder  # noqa: E402
 from model_performance import page_model_performance  # noqa: E402
+from assistant import page_assistant  # noqa: E402
 
 inject_theme()
 
@@ -1934,6 +1935,7 @@ PAGE_WEEKLY_BET_SLIP = st.Page(page_weekly_bet_slip, title="Weekly Bet Slip", ic
 PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon="🧩")
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
 PAGE_EV_FINDER = st.Page(page_ev_finder, title="+EV Finder", icon="📈")
+PAGE_ASSISTANT = st.Page(page_assistant, title="AI Assistant", icon="💬")
 PAGE_MODEL_PERFORMANCE = st.Page(page_model_performance, title="Model Performance", icon="🔬")
 PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon="💰")
 PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈")
@@ -1946,7 +1948,7 @@ PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
 PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
 
 nav = st.navigation({
-    "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
+    "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
     "Research": [PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
     "Admin": [PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
