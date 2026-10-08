@@ -89,6 +89,10 @@ jobs:
         continue-on-error: true
         run: python data/pull_underdog.py
 
+      - name: Archive Underdog line changes (slim, committed -- line moves on the hosted app)
+        continue-on-error: true
+        run: python data/archive_underdog_lines.py
+
       - name: Pull weather forecasts
         continue-on-error: true
         run: python data/pull_weather_forecast.py

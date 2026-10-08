@@ -274,6 +274,7 @@ PULL_SCRIPTS = {
     "NBC Sports / PFT rumor mill": [sys.executable, "data/pull_nbcsports_news.py"],
     "Footballguys depth charts": [sys.executable, "data/pull_footballguys_depth.py"],
     "Underdog pick'em props": [sys.executable, "data/pull_underdog.py"],
+    "Underdog line-change archive": [sys.executable, "data/archive_underdog_lines.py"],
     "Weather forecasts (upcoming outdoor games)": [sys.executable, "data/pull_weather_forecast.py"],
 }
 
