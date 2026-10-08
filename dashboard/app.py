@@ -87,7 +87,11 @@ from game_center import page_game_center  # noqa: E402
 from player_page import page_player  # noqa: E402
 from usage import page_usage  # noqa: E402
 from matchups import page_matchups  # noqa: E402
+from bankroll import page_bankroll  # noqa: E402
 import nav_registry  # noqa: E402
+from bet_entries import (  # noqa: E402
+    _with_entries, _entry_payout, _payout_multiple, _RESULT_TO_STATUS, _STATUS_TO_RESULT,
+)
 
 inject_theme()
 
@@ -979,48 +983,6 @@ def page_parlay_builder():
             st.rerun()
 
 
-def _with_entries(bets: pd.DataFrame) -> pd.DataFrame:
-    """Bet rows with an entry_id on every row. Rows logged before entries existed (no
-    entry_id) are treated as their own single-pick entry."""
-    b = bets.copy().reset_index(drop=True)
-    for col in ("entry_id", "entry_payout"):
-        if col not in b.columns:
-            b[col] = pd.NA
-    missing = b["entry_id"].isna() | (b["entry_id"].astype(str).str.strip().isin(["", "nan"]))
-    # Older rows: picks saved together share a date + note (e.g. the assistant's
-    # "Parlay #3, 12.9x"), so group on that; a row with no note stays a single.
-    notes = b["notes"].fillna("").astype(str).str.strip() if "notes" in b.columns else pd.Series("", index=b.index)
-    grouped = missing & notes.ne("")
-    b.loc[grouped, "entry_id"] = "legacy|" + b.loc[grouped, "date"].astype(str) + "|" + notes[grouped]
-    single = missing & ~grouped
-    b.loc[single, "entry_id"] = "row" + b.index[single].astype(str)
-    b["result"] = b["result"].fillna("pending").replace("", "pending")
-    return b
-
-
-def _entry_payout(legs: pd.DataFrame) -> float | None:
-    """The entry's payout multiple: entry_payout if logged, else (single picks logged
-    the old way) that pick's multiplier_or_odds."""
-    vals = legs["entry_payout"].dropna() if "entry_payout" in legs.columns else pd.Series(dtype=object)
-    vals = vals[vals.astype(str).str.strip().ne("")]
-    if not vals.empty:
-        return _payout_multiple(vals.iloc[0])
-    if len(legs) == 1 and "multiplier_or_odds" in legs.columns:
-        return _payout_multiple(legs["multiplier_or_odds"].iloc[0])
-    m = re.search(r"(\d+(?:\.\d+)?)\s*x\b", str(legs["notes"].iloc[0]) if "notes" in legs.columns else "")
-    return float(m.group(1)) if m else None
-
-
-def _payout_multiple(val) -> float | None:
-    try:
-        out = float(str(val).lower().replace("x", "").strip())
-        return out if out > 0 else None
-    except (TypeError, ValueError):
-        return None
-
-
-_RESULT_TO_STATUS = {"won": "hit", "lost": "miss", "push": "push", "pending": "pending"}
-_STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "push"}
 _STATE_BADGE = {"won": ("WON", "green"), "lost": ("LOST", "red"), "push": ("PUSH", "gray"),
                 "live": ("LIVE", "blue"), "pending": ("PENDING", "orange")}
 
@@ -2131,6 +2093,7 @@ def page_run_pulls():
 PAGE_WEEKLY_BET_SLIP = st.Page(page_weekly_bet_slip, title="Weekly Bet Slip", icon="🎯", default=True)
 PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon="🧩")
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
+PAGE_BANKROLL = st.Page(page_bankroll, title="Bankroll", icon=":material/account_balance_wallet:")
 PAGE_EV_FINDER = st.Page(page_ev_finder, title="+EV Finder", icon="📈")
 PAGE_ASSISTANT = st.Page(page_assistant, title="AI Assistant", icon="💬")
 PAGE_MODEL_PERFORMANCE = st.Page(page_model_performance, title="Model Performance", icon="🔬")
@@ -2153,10 +2116,11 @@ PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
 nav_registry.PAGES.update({
     "game_center": PAGE_GAME_CENTER, "player": PAGE_PLAYER, "injuries": PAGE_INJURIES, "usage": PAGE_USAGE,
     "ev_finder": PAGE_EV_FINDER, "bet_log": PAGE_BET_LOG, "parlay_builder": PAGE_PARLAY_BUILDER,
+    "bankroll": PAGE_BANKROLL, "matchups": PAGE_MATCHUPS,
 })
 
 nav = st.navigation({
-    "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
+    "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG, PAGE_BANKROLL],
     "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
     "Admin": [PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],

@@ -171,3 +171,43 @@ def delete_rows(keys: set[str], attempts: int = 3) -> int:
 def clear() -> None:
     _, sha = read()
     write(_empty(), sha, "Clear bet log")
+
+
+# ---------------------------------------------------------------- settings (2026-10)
+# Small JSON next to bets.csv (starting bankroll, ...): in the private repo when the
+# store is enabled, else bet_logs/settings.json -- same persistence as the bet log.
+SETTINGS_PATH = "settings.json"
+LOCAL_SETTINGS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bet_logs", "settings.json")
+
+
+def read_settings() -> dict:
+    import json
+    if not enabled():
+        if os.path.exists(LOCAL_SETTINGS):
+            with open(LOCAL_SETTINGS) as f:
+                return json.load(f)
+        return {}
+    url = f"{API}/repos/{repo()}/contents/{SETTINGS_PATH}"
+    resp = requests.get(url, headers=_headers(), params={"ref": BRANCH}, timeout=15)
+    if resp.status_code == 404:
+        return {}
+    resp.raise_for_status()
+    return json.loads(base64.b64decode(resp.json()["content"]).decode("utf-8"))
+
+
+def write_settings(settings: dict) -> None:
+    import json
+    body = json.dumps(settings, indent=2)
+    if not enabled():
+        os.makedirs(os.path.dirname(LOCAL_SETTINGS), exist_ok=True)
+        with open(LOCAL_SETTINGS, "w") as f:
+            f.write(body)
+        return
+    url = f"{API}/repos/{repo()}/contents/{SETTINGS_PATH}"
+    cur = requests.get(url, headers=_headers(), params={"ref": BRANCH}, timeout=15)
+    payload = {"message": "Update settings", "branch": BRANCH,
+               "content": base64.b64encode(body.encode("utf-8")).decode("ascii")}
+    if cur.status_code == 200:
+        payload["sha"] = cur.json()["sha"]
+    resp = requests.put(url, headers=_headers(), json=payload, timeout=20)
+    resp.raise_for_status()
