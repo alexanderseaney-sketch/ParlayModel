@@ -1947,10 +1947,12 @@ def page_depth_charts():
         "Each team's real starters, laid out like a formation rather than a flat "
         "table -- a 3-4 team's line is 3 wide because that's what's actually on "
         "their depth chart, not a template. Click any player for their injury "
-        "status, model predictions, current Underdog lines, and recent games. "
-        "Starters/backups: Footballguys (status tags Q/PUP/IR/SUS/NFI/O). Practice "
-        "squad & reserve: club team sites. Contracts & IR reasons: Spotrac. "
-        "Coaching staff: Wikipedia. Scheme tendencies: play-by-play."
+        "status, model predictions, current Underdog lines, and recent games."
+    )
+    st.caption(
+        "Sources — starters/backups: Footballguys (status tags Q/PUP/IR/SUS/NFI/O) · practice "
+        "squad & reserve: club team sites · contracts & IR reasons: Spotrac · "
+        "coaching staff: Wikipedia · scheme tendencies: play-by-play."
     )
     df = load_csv_if_exists("footballguys_depth.csv")
 
@@ -1961,14 +1963,16 @@ def page_depth_charts():
     photo_map = load_player_photos()
 
     team_names = df.drop_duplicates("team_abbr").set_index("team_name")["team_abbr"].sort_index()
-    chosen_team_name = st.selectbox("Team", team_names.index)
-    team_abbr = team_names[chosen_team_name]
-    team_df = df[df["team_abbr"] == team_abbr]
-    team_abbr_std = _DEPTH_ABBR_ALIASES.get(team_abbr, team_abbr)
+    with st.container(border=True):
+        chosen_team_name = st.selectbox("Team", team_names.index)
+        team_abbr = team_names[chosen_team_name]
+        team_df = df[df["team_abbr"] == team_abbr]
+        team_abbr_std = _DEPTH_ABBR_ALIASES.get(team_abbr, team_abbr)
 
-    with st.expander("Team identity — scheme & personnel", expanded=False):
-        _render_team_identity(team_abbr_std)
+        with st.expander("Team identity — scheme & personnel", expanded=False):
+            _render_team_identity(team_abbr_std)
 
+    yard_divider(f"{chosen_team_name} depth chart")
     tabs = st.tabs(["Offense", "Defense", "Special Teams", "Practice Squad & Reserve",
                     "Contracts", "Coaching Staff"])
     with tabs[0]:
