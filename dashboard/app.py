@@ -204,6 +204,21 @@ def _confidence_badge(model_prob: float, conf: float):
         st.badge(f"{pct} confident", icon="⚪", color="gray")
 
 
+def _side_tier(side_prob: float) -> None:
+    """Parlay Builder side card: confidence tier label + thin probability bar (design
+    handoff). Tier by distance from a coinflip, conf = |p - 0.5| * 2: HIGH >= 0.6,
+    SOLID >= 0.4, LEAN >= 0.2, else COINFLIP."""
+    conf = abs(side_prob - 0.5) * 2
+    tier = "HIGH" if conf >= 0.6 else "SOLID" if conf >= 0.4 else "LEAN" if conf >= 0.2 else "COINFLIP"
+    color = {"HIGH": "#d2cefd", "SOLID": "#b5abfc", "LEAN": "#9397ab", "COINFLIP": "#75798c"}[tier]
+    st.markdown(
+        f"<div style='display:flex;flex-direction:column;gap:4px;margin:2px 0 4px'>"
+        f"<span style='font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:{color}'>"
+        f"{tier}</span><div style='height:3px;border-radius:2px;background:#292b31'>"
+        f"<div style='width:{side_prob * 100:.0f}%;height:3px;border-radius:2px;background:#9184d9'></div></div></div>",
+        unsafe_allow_html=True)
+
+
 _pretty_stat = pretty_stat_name  # local alias -- shared with generate_weekly_bet_slip.py, see utils.pretty_stat_name
 
 
@@ -523,17 +538,20 @@ def page_parlay_builder():
         # weekly stat exists to estimate variance from, otherwise its stored
         # proxy-line probability.
         st.subheader("Confidence filter")
+        # The old "~78% accurate at 0.4" claim came from the outcome-selected training
+        # population (fixed 2026-10-02) -- it isn't achievable live, so it's gone.
         st.caption(
-            "There's nothing wrong with being confident — validated testing showed roughly "
-            "78% accuracy at the 0.4 threshold, pooled across 5 real seasons. Being confident "
-            "here means the model has a real, tested reason, not a guess."
+            "Confidence is how far the model's probability for Underdog's real line sits from a "
+            "coin flip (0 = 50/50, 1 = certain). Higher is the model's stronger opinion, not a "
+            "guaranteed hit rate — see Model Performance → Real-line backtest for how picks have "
+            "actually done against real Underdog lines."
         )
         # A range, not just a floor -- a floor-only filter can't isolate a middle
         # band (e.g. "show me the 0.4-0.7 picks, not the >0.7 ones I've already
         # bet"). Defaults to [0.4, 1.0].
         min_confidence, max_confidence = st.slider(
             "Confidence range to show", 0.0, 1.0, (0.4, 1.0), 0.05,
-            help="0 = coinflips included. 0.4 historically ~78% accurate. Drag both ends to isolate a band instead of just a floor.",
+            help="0 = coinflips included. Drag both ends to isolate a band instead of just a floor.",
         )
         opt_a, opt_b, opt_c = st.columns([2, 2, 3])
         with opt_a:
@@ -792,6 +810,7 @@ def page_parlay_builder():
                                 # answered a different question (proxy line) than the
                                 # one now being displayed (real Underdog line).
                                 _confidence_badge(side_prob, abs(side_prob - 0.5) * 2)
+                                _side_tier(side_prob)
                             else:
                                 st.caption("No model prediction")
                             price = side_row.get(mult_col) if mult_col else None
