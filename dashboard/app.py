@@ -88,6 +88,7 @@ from player_page import page_player  # noqa: E402
 from usage import page_usage  # noqa: E402
 from matchups import page_matchups  # noqa: E402
 from bankroll import page_bankroll  # noqa: E402
+from home import page_home  # noqa: E402
 import nav_registry  # noqa: E402
 from bet_entries import (  # noqa: E402
     _with_entries, _entry_payout, _payout_multiple, _RESULT_TO_STATUS, _STATUS_TO_RESULT,
@@ -2090,7 +2091,8 @@ def page_run_pulls():
 # run before nav.run() executes any page body, so the reference is always valid by
 # the time a page function actually uses it.
 
-PAGE_WEEKLY_BET_SLIP = st.Page(page_weekly_bet_slip, title="Weekly Bet Slip", icon="🎯", default=True)
+PAGE_HOME = st.Page(page_home, title="Home", icon=":material/home:", default=True)
+PAGE_WEEKLY_BET_SLIP = st.Page(page_weekly_bet_slip, title="Weekly Bet Slip", icon="🎯")
 PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon="🧩")
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
 PAGE_BANKROLL = st.Page(page_bankroll, title="Bankroll", icon=":material/account_balance_wallet:")
@@ -2120,6 +2122,7 @@ nav_registry.PAGES.update({
 })
 
 nav = st.navigation({
+    "Overview": [PAGE_HOME],
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG, PAGE_BANKROLL],
     "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
