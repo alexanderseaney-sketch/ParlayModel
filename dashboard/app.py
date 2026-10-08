@@ -2135,7 +2135,10 @@ def page_run_pulls():
     st.title("🔄 Run Data Pulls")
     st.caption("Runs the actual pull scripts. Output streams below once finished (can take a minute).")
 
-    if st.button("▶️ Run All", type="primary", width="stretch"):
+    with st.container(border=True):
+        st.markdown(f"**Everything** · runs all {len(PULL_SCRIPTS)} pulls below, one after another")
+        run_all = st.button("▶️ Run All", type="primary", width="stretch")
+    if run_all:
         n = len(PULL_SCRIPTS)
         progress = st.progress(0.0, text="Starting...")
         results = []
@@ -2156,15 +2159,20 @@ def page_run_pulls():
 
     yard_divider("MANUAL PULLS")
 
-    for label, cmd in PULL_SCRIPTS.items():
-        if st.button(f"Run: {label}"):
-            with st.spinner(f"Running {label}..."):
-                success, output = run_pull_script(cmd)
-            if success:
-                st.success(f"{label} completed.")
-            else:
-                st.error(f"{label} failed or had errors.")
-            st.code(output or "(no output)")
+    clicked = None
+    with st.container(border=True):
+        cols = st.columns(3)
+        for i, label in enumerate(PULL_SCRIPTS):
+            if cols[i % 3].button(f"Run: {label}", width="stretch"):
+                clicked = label
+    if clicked is not None:
+        with st.spinner(f"Running {clicked}..."):
+            success, output = run_pull_script(PULL_SCRIPTS[clicked])
+        if success:
+            st.success(f"{clicked} completed.")
+        else:
+            st.error(f"{clicked} failed or had errors.")
+        st.code(output or "(no output)")
 
 
 # ==================================================================== Navigation
