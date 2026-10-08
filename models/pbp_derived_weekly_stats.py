@@ -58,6 +58,8 @@ PBP_STATS_COLS = [
     "rusher_player_id", "rusher_player_name", "rushing_yards", "rush_touchdown",
     "receiver_player_id", "receiver_player_name", "receiving_yards", "complete_pass", "pass_touchdown",
     "passer_player_id", "passer_player_name", "passing_yards", "interception",
+    "td_player_id", "lateral_receiver_player_id", "lateral_receiving_yards",
+    "lateral_rusher_player_id", "lateral_rushing_yards",
 ]
 
 
@@ -75,10 +77,17 @@ def build_weekly_stats_from_pbp(years: list[int]) -> pd.DataFrame:
     rush_fumble_lost = (pbp["fumble_lost"] == 1) & (pbp["fumbled_1_player_id"] == pbp["rusher_player_id"])
     rushing = pbp[pbp["rush_attempt"] == 1].dropna(subset=["rusher_player_id"]).assign(
         _fumble_lost=rush_fumble_lost)
+    # Laterals (found 2026-10-07 by data/verify_weekly_stats.py vs ESPN): on a
+    # catch-then-lateral the play's TD belongs to whoever scored (td_player_id) and the
+    # post-lateral yards to the lateral receiver/rusher -- e.g. 2026 wk3 Purdy -> Evans
+    # 2 yds -> lateral to Deebo Samuel 80 yds TD was booked as Evans 2 TDs / Deebo 0.
+    rushing = rushing.assign(
+        _rush_td=rushing["rush_touchdown"].fillna(0)
+        * (rushing["td_player_id"].isna() | (rushing["td_player_id"] == rushing["rusher_player_id"])))
     rushing = rushing.groupby(["rusher_player_id"] + key).agg(
         carries=("rush_attempt", "size"),
         rushing_yards=("rushing_yards", "sum"),
-        rushing_tds=("rush_touchdown", "sum"),
+        rushing_tds=("_rush_td", "sum"),
         rushing_epa=("epa", "sum"),
         rushing_fumbles_lost=("_fumble_lost", "sum"),
     ).reset_index().rename(columns={"rusher_player_id": "player_id"})
@@ -86,17 +95,35 @@ def build_weekly_stats_from_pbp(years: list[int]) -> pd.DataFrame:
     rec_fumble_lost = (pbp["fumble_lost"] == 1) & (pbp["fumbled_1_player_id"] == pbp["receiver_player_id"])
     targeted = pbp[(pbp["pass_attempt"] == 1) & pbp["receiver_player_id"].notna()].assign(
         _fumble_lost=rec_fumble_lost)
+    targeted = targeted.assign(
+        _rec_td=targeted["pass_touchdown"].fillna(0)
+        * (targeted["td_player_id"].isna() | (targeted["td_player_id"] == targeted["receiver_player_id"])))
     receiving = targeted.groupby(["receiver_player_id"] + key).agg(
         targets=("pass_attempt", "size"),
         receptions=("complete_pass", "sum"),
         receiving_yards=("receiving_yards", "sum"),
-        receiving_tds=("pass_touchdown", "sum"),
+        receiving_tds=("_rec_td", "sum"),
         receiving_air_yards=("air_yards", "sum"),
         receiving_epa=("epa", "sum"),
         receiving_fumbles_lost=("_fumble_lost", "sum"),
     ).reset_index().rename(columns={"receiver_player_id": "player_id"})
 
     team_targets = targeted.groupby(key).size().rename("_team_targets").reset_index()
+
+    # Lateral receivers / rushers: yards after the lateral, plus the TD if they scored.
+    def _laterals(id_col: str, yds_col: str, td_flag: str, yds_name: str, td_name: str) -> pd.DataFrame:
+        lat = pbp[pbp[id_col].notna()]
+        lat = lat.assign(_td=lat[td_flag].fillna(0) * (lat["td_player_id"] == lat[id_col]))
+        return lat.groupby([id_col] + key).agg(**{yds_name: (yds_col, "sum"), td_name: ("_td", "sum")})             .reset_index().rename(columns={id_col: "player_id"})
+
+    lat_rec = _laterals("lateral_receiver_player_id", "lateral_receiving_yards", "pass_touchdown",
+                        "receiving_yards", "receiving_tds")
+    lat_rush = _laterals("lateral_rusher_player_id", "lateral_rushing_yards", "rush_touchdown",
+                         "rushing_yards", "rushing_tds")
+    receiving = (pd.concat([receiving, lat_rec], ignore_index=True)
+                 .groupby(["player_id"] + key, as_index=False).sum(min_count=1))
+    rushing = (pd.concat([rushing, lat_rush], ignore_index=True)
+               .groupby(["player_id"] + key, as_index=False).sum(min_count=1))
 
     sack_fumble_lost = (pbp["fumble_lost"] == 1) & (pbp["fumbled_1_player_id"] == pbp["passer_player_id"])
     passer_plays = pbp[pbp["passer_player_id"].notna()].assign(_fumble_lost=sack_fumble_lost)

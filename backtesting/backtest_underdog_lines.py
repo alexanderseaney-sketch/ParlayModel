@@ -86,34 +86,47 @@ def _target_weeks(schedules: pd.DataFrame) -> pd.DataFrame:
 
 
 def collect_closing_lines(schedules: pd.DataFrame) -> pd.DataFrame:
-    """Last snapshot before each REG week, game-scope model-graded stats only."""
+    """Every snapshot pulled in the run-up to (or during) each REG week, tagged with its
+    pull time in US/Eastern. grade() then keeps, per player/stat/side, the LAST line
+    pulled before that player's own kickoff -- the closing line for his game -- so a
+    Sunday game is graded at Saturday's lines, not at a Tuesday snapshot (2026-10-07;
+    previously one snapshot per week, skipping any pulled after the week's first game)."""
     weeks = _target_weeks(schedules)
-    picked: dict[tuple, str] = {}
+    by_week: dict[tuple, list] = {}
     for f in _snapshot_files():
         head = pd.read_csv(f, nrows=1, usecols=lambda c: c == "pulled_at")
         if head.empty:
             continue
-        # pulled_at is UTC; schedule dates are US-local -- shift so an evening-PT pull
-        # isn't read as the next day.
-        ts = pd.to_datetime(head["pulled_at"].iloc[0], utc=True).tz_convert("US/Pacific").tz_localize(None)
-        upcoming = weeks[weeks["max"] >= ts.normalize()]
+        ts = pd.to_datetime(head["pulled_at"].iloc[0], utc=True).tz_convert("US/Eastern").tz_localize(None)
+        upcoming = weeks[weeks["max"] + pd.Timedelta(days=1) > ts]
         if upcoming.empty:
             continue
         tgt = upcoming.iloc[0]
-        if ts.normalize() > tgt["min"] + pd.Timedelta(days=1):
-            continue  # pulled mid-week: early games already played, lines would be mixed
-        picked[(int(tgt["season"]), int(tgt["week"]))] = f  # later file wins = closest to kickoff
+        if ts < tgt["min"] - pd.Timedelta(days=7):
+            continue  # preseason / too early to be this week's board
+        by_week.setdefault((int(tgt["season"]), int(tgt["week"])), []).append((ts, f))
     frames = []
-    for (season, week), f in sorted(picked.items()):
-        df = pd.read_csv(f, low_memory=False)
-        df = df[df["stat_name"].isin(ACTUALS.keys())].copy()
-        if "match_type" in df.columns:
-            df = df[df["match_type"].fillna("Game") == "Game"]
-        df = add_underdog_market_probs(df)
-        df["season"], df["week"], df["snapshot"] = season, week, os.path.basename(f)
-        frames.append(df)
-        print(f"[lines] {season} wk{week}: {len(df)} options from {os.path.basename(f)}")
+    for (season, week), snaps in sorted(by_week.items()):
+        for ts, f in snaps:
+            df = pd.read_csv(f, low_memory=False)
+            df = df[df["stat_name"].isin(ACTUALS.keys())].copy()
+            if "match_type" in df.columns:
+                df = df[df["match_type"].fillna("Game") == "Game"]
+            df = add_underdog_market_probs(df)
+            df["season"], df["week"], df["snapshot"], df["snapshot_et"] = season, week, os.path.basename(f), ts
+            frames.append(df)
+        print(f"[lines] {season} wk{week}: {len(snaps)} snapshot(s): " + ", ".join(os.path.basename(f)[15:30] for _, f in snaps))
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _kickoffs(schedules: pd.DataFrame) -> pd.DataFrame:
+    """(season, week, team) -> kickoff, US/Eastern naive (schedules' gametime is ET)."""
+    s = schedules.copy()
+    s["kickoff"] = pd.to_datetime(s["gameday"].astype(str) + " " + s["gametime"].fillna("13:00").astype(str),
+                                  errors="coerce")
+    home = s[["season", "week", "home_team", "kickoff"]].rename(columns={"home_team": "team"})
+    away = s[["season", "week", "away_team", "kickoff"]].rename(columns={"away_team": "team"})
+    return pd.concat([home, away], ignore_index=True)
 
 
 def point_in_time_predictions(season: int, week: int) -> pd.DataFrame:
@@ -135,16 +148,25 @@ def grade(lines: pd.DataFrame, weekly: pd.DataFrame) -> pd.DataFrame:
     for (season, week), wk_lines in lines.groupby(["season", "week"]):
         preds = point_in_time_predictions(season, week)
         prior_stats = weekly[(weekly["season"] < season) | ((weekly["season"] == season) & (weekly["week"] < week))]
-        board = score_underdog_board(wk_lines, preds, prior_stats)
+        # Raw (unadjusted) probabilities: the real-line adjustment is FITTED from these.
+        board = score_underdog_board(wk_lines, preds, prior_stats, real_line_adjust=False)
 
         actual_rows = weekly[(weekly["season"] == season) & (weekly["week"] == week)].copy()
         actual_rows["_k"] = actual_rows["player_display_name"].apply(normalize_name)
         actual_rows = actual_rows.drop_duplicates("_k")
         for stat, fn in ACTUALS.items():
             actual_rows[f"_act_{stat}"] = fn(actual_rows)
-        board = board.merge(actual_rows[["_k"] + [f"_act_{s}" for s in ACTUALS]], on="_k", how="inner")
+        board = board.merge(actual_rows[["_k", "recent_team"] + [f"_act_{s}" for s in ACTUALS]].rename(
+            columns={"recent_team": "_team"}), on="_k", how="inner", suffixes=("", "_act"))
         board["actual"] = board.apply(lambda r: r.get(f"_act_{r['stat_name']}"), axis=1)
         board = board.drop(columns=[f"_act_{s}" for s in ACTUALS])
+        # Closing line per player: last snapshot pulled before HIS game's kickoff.
+        ko = _kickoffs(SCHEDULES)
+        ko = ko[(ko["season"] == season) & (ko["week"] == week)][["team", "kickoff"]]
+        board = board.merge(ko.rename(columns={"team": "_team"}), on="_team", how="left")
+        board = board[board["snapshot_et"] < board["kickoff"]]
+        board = (board.sort_values("snapshot_et")
+                 .drop_duplicates(["_k", "stat_name", "choice"], keep="last"))
         graded.append(board)
     if not graded:
         return pd.DataFrame()
@@ -208,8 +230,38 @@ def summarise(g: pd.DataFrame) -> dict:
     return out
 
 
+SCHEDULES = pd.read_csv(os.path.join(RAW, "schedules.csv"))
+
+
+def fit_real_line_adjustment(g: pd.DataFrame) -> None:
+    """Fit the single logit shift that best calibrates the model's raw P(over) on every
+    graded week (over-side rows, dashboard-gated), report how it does when fitted on
+    the other weeks only, and save it for calibration.adjust_over_prob()."""
+    from calibration import REAL_LINE_ADJ_PATH, REAL_LINE_MAX_SHIFT
+    ov = g[g["gated"] & g["is_over"] & g["market_fair_prob_over"].notna()]
+    if len(ov) < 100:
+        print("[real-line adjustment] fewer than 100 graded props -- not refitted.")
+        return
+    cs = np.linspace(-REAL_LINE_MAX_SHIFT, REAL_LINE_MAX_SHIFT, 201)
+
+    def best(d):
+        m = np.clip(d["model_prob_over"].to_numpy(float), 1e-4, 1 - 1e-4)
+        z, y = np.log(m / (1 - m)), d["went_over"].to_numpy()
+        return float(cs[int(np.argmin([log_loss(1 / (1 + np.exp(-(z + c))), y) for c in cs]))])
+
+    per_week = {f"{int(s)}-wk{int(w)}": best(d) for (s, w), d in ov.groupby(["season", "week"])}
+    c = best(ov)
+    out = {"logit_shift": c, "n_props": int(len(ov)), "per_week_fit": per_week,
+           "raw_mean_p_over": float(ov["model_prob_over"].mean()), "actual_over_rate": float(ov["went_over"].mean()),
+           "fitted_at": pd.Timestamp.now(tz="UTC").isoformat()}
+    with open(REAL_LINE_ADJ_PATH, "w") as f:
+        json.dump(out, f, indent=2)
+    print(f"[real-line adjustment] logit shift {c:+.3f} (per week {per_week}) on {len(ov)} props; "
+          f"raw mean P(over) {out['raw_mean_p_over']:.3f} vs actual {out['actual_over_rate']:.3f} -> {REAL_LINE_ADJ_PATH}")
+
+
 def main():
-    schedules = pd.read_csv(os.path.join(RAW, "schedules.csv"))
+    schedules = SCHEDULES
     weekly = pd.read_csv(os.path.join(RAW, "weekly_stats.csv"), low_memory=False)
     lines = collect_closing_lines(schedules)
     if lines.empty:
@@ -219,13 +271,14 @@ def main():
     if g.empty:
         print("Nothing gradable yet (weeks not played?).")
         return
-    keep = ["gated", "season", "week", "snapshot", "full_name", "stat_name", "stat_value", "choice", "decimal",
+    keep = ["gated", "season", "week", "snapshot", "snapshot_et", "kickoff", "_team", "full_name", "stat_name", "stat_value", "choice", "decimal",
             "implied_prob", "market_fair_prob", "market_fair_prob_over", "has_model", "model_prob_over",
             "side_prob", "real_line_used", "proxy_line", "prop_type", "actual", "went_over", "won"]
     g[[c for c in keep if c in g.columns]].to_csv(OUT_CSV, index=False)
     summary = summarise(g)
     with open(OUT_JSON, "w") as f:
         json.dump(summary, f, indent=2)
+    fit_real_line_adjustment(g)
 
     o = summary["overall"]
     print(f"\nGraded weeks: {summary['weeks']}  |  props scored (over side, model+market): {o['n']}")

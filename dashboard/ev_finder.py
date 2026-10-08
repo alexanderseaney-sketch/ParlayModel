@@ -333,8 +333,8 @@ def page_ev_finder():
         else:
             best = best[best["valid"]]
             for i, row in best.head(12).iterrows():
-                title = (f"{row['n_legs']} picks · EV {row['ev']*100:+.1f}% · hit {row['joint_prob']*100:.1f}% "
-                         f"· {row['payout']:.2f}x")
+                title = (f"{row['n_legs']} picks · EV {row['ev']*100:+.1f}% · hits {row['joint_prob']*100:.1f}% "
+                         f"(about 1 in {max(1, round(1 / row['joint_prob']))}) · {row['payout']:.2f}x")
                 with st.expander(title, expanded=(i == 0)):
                     for l in row["legs"]:
                         st.markdown(f"- **{l['player']}** ({l['team']}) {str(l['choice']).upper()} {l['line']} "

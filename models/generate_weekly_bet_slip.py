@@ -187,6 +187,12 @@ def load_matched_props(props: pd.DataFrame | None = None) -> pd.DataFrame:
         return recomputed if recomputed is not None else row["my_prob"]  # fall back to proxy-based if std unavailable
 
     merged["my_prob"] = merged.apply(_recompute_row, axis=1)
+    # Real-line under-lean correction (calibration.adjust_over_prob), applied in
+    # P(over) space then mapped back to the side the model favors.
+    from calibration import adjust_over_prob
+    p_over = np.where(merged["my_side"] == "over", merged["my_prob"], 1 - merged["my_prob"])
+    p_over = adjust_over_prob(p_over)
+    merged["my_prob"] = np.where(merged["my_side"] == "over", p_over, 1 - p_over)
     # Blend with the de-vigged market (2026-10-02): on real Underdog lines the blend
     # beat both the model and the market alone, and it tames the model's worst
     # failure -- 99%+ calls where the line sits far from the player's baseline

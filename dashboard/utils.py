@@ -588,7 +588,8 @@ _STAT_WEEKLY_COL = {
 
 
 def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
-                         weekly_stats: pd.DataFrame | None) -> pd.DataFrame:
+                         weekly_stats: pd.DataFrame | None,
+                         real_line_adjust: bool = True) -> pd.DataFrame:
     """The Underdog pick'em board, one row per prop option (over + under), with the
     model attached: `model_prob_over` recomputed against the REAL Underdog line
     where a continuous weekly stat exists (else the model's stored proxy-line
@@ -643,6 +644,11 @@ def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
     scored = board.apply(_row_prob_over, axis=1, result_type="expand")
     board["model_prob_over"] = scored[0]
     board["real_line_used"] = scored[1].fillna(False)
+    if real_line_adjust:
+        # Corrects the model's measured under-lean vs real lines (calibration.py).
+        from calibration import adjust_over_prob
+        has = board["model_prob_over"].notna()
+        board.loc[has, "model_prob_over"] = adjust_over_prob(board.loc[has, "model_prob_over"].astype(float))
 
     choice = board["choice"].astype(str).str.lower()
     side_prob = board["model_prob_over"].where(choice != "under",

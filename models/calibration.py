@@ -182,3 +182,34 @@ def load_all_metrics() -> dict[str, dict]:
             if saved:
                 out[fn[:-4]] = saved["metrics"]
     return out
+
+
+# ---------------------------------------------------------------- real-line adjustment
+# Added 2026-10-07. Graded against real Underdog closing lines (weeks 1 + 4 of 2026,
+# 589 props), the model's P(over the real line) ran ~5 points low on average -- 42.8%
+# vs a 47.2% actual over rate (receptions 41% vs 48%, receiving yards 44% vs 50%) -- so
+# the +EV Finder / AI Assistant surfaced mostly unders. A single logit shift fitted on
+# one week and scored on the other fixed it (model log loss 0.6827 -> 0.6790, now
+# better than the market's 0.6828); per-stat shifts overfit. The value lives in
+# REAL_LINE_ADJ_PATH, refitted on every graded week by
+# backtesting/backtest_underdog_lines.py, and is capped at +/-REAL_LINE_MAX_SHIFT.
+REAL_LINE_ADJ_PATH = os.path.join(os.path.dirname(__file__), "real_line_adjustment.json")
+REAL_LINE_MAX_SHIFT = 0.5
+
+
+def real_line_logit_shift() -> float:
+    try:
+        import json
+        with open(REAL_LINE_ADJ_PATH) as f:
+            c = float(json.load(f)["logit_shift"])
+        return max(-REAL_LINE_MAX_SHIFT, min(REAL_LINE_MAX_SHIFT, c))
+    except (OSError, KeyError, ValueError):
+        return 0.0
+
+
+def adjust_over_prob(p_over, shift: float | None = None):
+    """Apply the fitted real-line logit shift to P(over the real line)."""
+    c = real_line_logit_shift() if shift is None else shift
+    p = np.clip(np.asarray(p_over, dtype=float), 1e-4, 1 - 1e-4)
+    out = 1 / (1 + np.exp(-(np.log(p / (1 - p)) + c)))
+    return out if out.ndim else float(out)
