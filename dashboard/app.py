@@ -86,6 +86,7 @@ from injuries import page_injuries  # noqa: E402
 from game_center import page_game_center  # noqa: E402
 from player_page import page_player  # noqa: E402
 from usage import page_usage  # noqa: E402
+from matchups import page_matchups  # noqa: E402
 import nav_registry  # noqa: E402
 
 inject_theme()
@@ -2137,6 +2138,7 @@ PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon=
 PAGE_GAME_CENTER = st.Page(page_game_center, title="Game Center", icon=":material/stadium:")
 PAGE_PLAYER = st.Page(page_player, title="Player Pages", icon=":material/person:")
 PAGE_INJURIES = st.Page(page_injuries, title="Injury Tracker", icon=":material/healing:")
+PAGE_MATCHUPS = st.Page(page_matchups, title="Matchup Heatmap", icon=":material/grid_view:")
 PAGE_USAGE = st.Page(page_usage, title="Usage Trends", icon=":material/trending_up:")
 PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈")
 PAGE_COMPARE = st.Page(page_compare, title="Compare", icon="⚖️")
@@ -2155,7 +2157,7 @@ nav_registry.PAGES.update({
 
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
-    "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_INJURIES, PAGE_USAGE, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
+    "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
     "Admin": [PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
 })
