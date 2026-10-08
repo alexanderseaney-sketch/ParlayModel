@@ -15,6 +15,8 @@ page_compare() and registers it as a page (same split precedent as theme.py).
 import pandas as pd
 import streamlit as st
 
+import ui
+
 from utils import load_csv_if_exists, normalize_name
 
 # (raw column, label) stat sets; a player's position picks which sets apply.
@@ -114,7 +116,8 @@ def _render_players_tab():
 
     ordered_ids = sorted(latest_rows.index, key=lambda pid: latest_rows.loc[pid, "player_display_name"])
 
-    pick = st.columns(2)
+    controls = st.container(border=True)
+    pick = controls.columns(2)
     with pick[0]:
         pid_a = st.selectbox("Player A", ordered_ids, format_func=label_for,
                              index=ordered_ids.index(default_ids[0]) if default_ids else 0,
@@ -127,7 +130,7 @@ def _render_players_tab():
         st.info("Pick two different players.")
         return
 
-    filt = st.columns([2, 1])
+    filt = controls.columns([2, 1])
     with filt[0]:
         seasons_all = sorted(weekly["season"].unique(), reverse=True)
         seasons_sel = st.multiselect("Seasons (empty = all)", seasons_all, default=[], key="cmp_player_seasons")
@@ -160,14 +163,14 @@ def _render_players_tab():
     games_b, tot_b = agg_for(pid_b)
 
     scope = f"{len(seasons_sel)} selected season(s)" if seasons_sel else "career (all pulled seasons)"
-    st.markdown(f"##### Totals — {scope}")
+    ui.section(f"Totals — {scope}")
     total_rows = {"Games": [games_a, games_b]}
     for _, label in stats:
         total_rows[label] = [_fmt(tot_a[label], 1 if "EPA" in label or "Fantasy" in label else 0),
                              _fmt(tot_b[label], 1 if "EPA" in label or "Fantasy" in label else 0)]
     st.table(_compare_grid(total_rows, [name_a, name_b]).T)
 
-    st.markdown("##### Per game")
+    ui.section("Per game")
     pg_rows = {}
     for _, label in stats:
         pg_rows[label] = [
@@ -176,7 +179,7 @@ def _render_players_tab():
         ]
     st.table(_compare_grid(pg_rows, [name_a, name_b]).T)
 
-    st.markdown("##### Season by season")
+    ui.section("Season by season")
     chart_options = [label for _, label in stats]
     chart_stat = st.selectbox("Stat", chart_options, key="cmp_player_chart_stat")
     chart_col = next(col for col, label in stats if label == chart_stat)
@@ -233,7 +236,8 @@ def _render_teams_tab():
     games = _team_games_long(schedules)
     teams = sorted(games["team"].unique())
 
-    pick = st.columns(2)
+    controls = st.container(border=True)
+    pick = controls.columns(2)
     with pick[0]:
         team_a = st.selectbox("Team A", teams, index=teams.index("KC") if "KC" in teams else 0,
                               key="cmp_team_a")
@@ -245,9 +249,10 @@ def _render_teams_tab():
         return
 
     seasons_all = sorted(games["season"].unique(), reverse=True)
-    seasons_sel = st.multiselect("Seasons (empty = all)", seasons_all,
-                                 default=seasons_all[:3], key="cmp_team_seasons")
-    reg_only = st.checkbox("Regular season only", value=True, key="cmp_team_reg")
+    filt = controls.columns([2, 1])
+    seasons_sel = filt[0].multiselect("Seasons (empty = all)", seasons_all,
+                                      default=seasons_all[:3], key="cmp_team_seasons")
+    reg_only = filt[1].checkbox("Regular season only", value=True, key="cmp_team_reg")
 
     sel = games if not seasons_sel else games[games["season"].isin(seasons_sel)]
     if reg_only and "game_type" in sel.columns:
@@ -289,14 +294,14 @@ def _render_teams_tab():
                 out["Rush yds / game"] = _fmt(wsub.rushing_yards.sum() / team_games, 1)
         return out
 
-    st.markdown(f"##### {'Selected seasons' if seasons_sel else 'All pulled seasons'}")
+    ui.section(f"{'Selected seasons' if seasons_sel else 'All pulled seasons'}")
     stats_a, stats_b = team_stats(team_a), team_stats(team_b)
     all_keys = list(dict.fromkeys(list(stats_a) + list(stats_b)))
     table = _compare_grid({team_a: [stats_a.get(k, "—") for k in all_keys],
                            team_b: [stats_b.get(k, "—") for k in all_keys]}, all_keys)
     st.table(table)
 
-    st.markdown("##### Season by season")
+    ui.section("Season by season")
     by_season = (sel[sel["team"].isin([team_a, team_b])]
                  .groupby(["season", "team"])
                  .agg(G=("won", "count"), W=("won", "sum"),
@@ -306,7 +311,7 @@ def _render_teams_tab():
     pivot = by_season.pivot(index="season", columns="team", values="Record").sort_index(ascending=False)
     st.dataframe(pivot, width="stretch")
 
-    st.markdown("##### Head to head")
+    ui.section("Head to head")
     h2h = sel[(sel["team"] == team_a) & (sel["opponent"] == team_b)]
     if h2h.empty:
         st.caption("No meetings in the selected span.")
@@ -338,7 +343,7 @@ def _render_coaches_tab():
         return f"{c} ({int(s['first'])}–{int(s['last'])}, {int(s['games'])} gms)"
 
     most_games = span.sort_values("games", ascending=False).index[:2].tolist()
-    pick = st.columns(2)
+    pick = st.container(border=True).columns(2)
     with pick[0]:
         coach_a = st.selectbox("Coach A", coaches, format_func=label_for,
                                index=coaches.index(most_games[0]), key="cmp_coach_a")
@@ -379,7 +384,7 @@ def _render_coaches_tab():
                            coach_b: [stats_b[k] for k in keys]}, keys)
     st.table(table)
 
-    st.markdown("##### Season by season")
+    ui.section("Season by season")
     both = hist[hist["coach"].isin([coach_a, coach_b])]
     reg = both[both["season_type"] == "REG"]
     # Column is "Ties", not "T" -- r.T on a row Series is pandas' transpose
@@ -396,7 +401,7 @@ def _render_coaches_tab():
     pivot = by_season.pivot(index="season", columns="coach", values="Record").sort_index(ascending=False)
     st.dataframe(pivot, width="stretch")
 
-    st.markdown("##### Head to head")
+    ui.section("Head to head")
     h2h = hist[(hist["coach"] == coach_a) & (hist["opp_coach"] == coach_b)]
     if h2h.empty:
         st.caption("These two have never faced each other (in the pulled seasons).")
