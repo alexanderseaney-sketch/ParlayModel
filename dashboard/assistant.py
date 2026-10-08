@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
+
+import ui
 from anthropic import beta_tool
 
 from utils import (
@@ -333,7 +335,9 @@ def _render_pending_bets():
     if not pending:
         return
     with st.container(border=True):
-        st.markdown(f"**Log {len(pending)} bet leg(s)?** Nothing is saved until you confirm.")
+        st.markdown(ui.badge("NOT SAVED YET", ui.ROSE_FILL, ui.ROSE, ui.ROSE_BAR) + "&nbsp; "
+                    f"**Log {len(pending)} bet leg(s)?** Nothing is saved until you confirm.",
+                    unsafe_allow_html=True)
         view = pd.DataFrame(pending).rename(columns={"_entry_label": "entry"})
         st.dataframe(view[["entry", "date", "player", "stat", "choice", "line", "stake", "entry_payout", "notes"]],
                      hide_index=True, use_container_width=True)
@@ -381,10 +385,15 @@ def page_assistant():
     history = st.session_state.setdefault("assistant_history", [])
 
     if not history:
-        st.markdown("**Try:** “Best 3-pick entry for the 1pm games?” · “Why is the model on the under "
-                    "for Ja'Marr Chase?” · “Compare Puka Nacua and Davante Adams receiving yards” · "
-                    "“How has the model done against real lines?” · “Log my bet: Chase over 6.5 "
-                    "receptions, $10 2-pick with Kelce”")
+        examples = ["Best 3-pick entry for the 1pm games?", "Why is the model on the under for Ja'Marr Chase?",
+                    "Compare Puka Nacua and Davante Adams receiving yards",
+                    "How has the model done against real lines?",
+                    "Log my bet: Chase over 6.5 receptions, $10 2-pick with Kelce"]
+        with st.container(border=True):
+            ui.section("Try asking")
+            st.html("<div style='display:flex;flex-wrap:wrap;gap:8px'>" + "".join(
+                f"<span style='font-size:12px;padding:6px 10px;border-radius:8px;background:{ui.ROW};"
+                f"box-shadow:0 0 0 1px {ui.EDGE};color:{ui.N1}'>“{ui.esc(e)}”</span>" for e in examples) + "</div>")
 
     for m in history:
         if m["role"] == "user" and isinstance(m["content"], str):
