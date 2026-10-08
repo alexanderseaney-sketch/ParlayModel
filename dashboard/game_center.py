@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 import ui
-from research_data import week_games, injury_report, TEAM_NAMES
+from research_data import week_games, injury_report, priced_candidates, TEAM_NAMES
 
 
 def _ml(v) -> str:
@@ -37,11 +37,9 @@ def _team_block(abbr: str, implied, align: str) -> str:
 @st.cache_data(ttl=60, show_spinner=False)
 def _game_props(away: str, home: str) -> pd.DataFrame:
     """Best side of every model-backed single-game Underdog prop for either team."""
-    from ev_finder import build_candidates, _apply_prob_source
-    c, _ = build_candidates()
+    c = priced_candidates("Blend")
     if c.empty:
         return c
-    c = _apply_prob_source(c, "Blend")
     c = c[c["team"].isin([away, home])]
     c = c.sort_values("prob", ascending=False).drop_duplicates(["player", "stat_name", "line"])
     c = c[c["prob"] >= 0.5]  # the favored side only (Underdog sometimes prices just one side)

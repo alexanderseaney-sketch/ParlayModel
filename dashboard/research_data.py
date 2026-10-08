@@ -233,3 +233,18 @@ def _injury_report(inj_m: float, ros_m: float, hist_m: float) -> pd.DataFrame:
 
 def injury_report() -> pd.DataFrame:
     return _injury_report(_mtime("injuries.csv"), _mtime("nfl_rosters.csv"), _mtime("underdog_line_history.csv"))
+
+
+# ------------------------------------------------------------------ priced props
+@st.cache_data(ttl=60, show_spinner=False)
+def priced_candidates(prob_source: str = "Blend") -> pd.DataFrame:
+    """The +EV Finder's priced, comparable single-game Underdog options (both sides),
+    with `prob` = blended (default) or model probability for that side vs the real line.
+    Shared by Game Center, Player Pages and Home; refreshed with the live board."""
+    from ev_finder import build_candidates, _apply_prob_source
+    c, _ = build_candidates()
+    if c.empty:
+        return c
+    c = _apply_prob_source(c, prob_source)
+    c["_k"] = c["player"].map(normalize_name)
+    return c
