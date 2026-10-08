@@ -17,6 +17,8 @@ import os
 
 import pandas as pd
 import streamlit as st
+
+import ui
 import streamlit.components.v1 as components
 
 from utils import (
@@ -285,7 +287,7 @@ def _render_matchups(scoring: str):
         for off, dfn in ((g["away_team"], g["home_team"]), (g["home_team"], g["away_team"])):
             lines.append({"Offense": off, "vs D": dfn,
                           **{p: f"#{rank_lookup.get((dfn, p), '?')}" for p in POSITIONS}})
-    st.markdown(f"##### Week {wk} — defensive rank each offense faces per position")
+    ui.section(f"Week {wk} — defensive rank each offense faces per position")
     st.caption("#1 = toughest defense vs that position … #32 = softest (best to target).")
     st.dataframe(pd.DataFrame(lines), hide_index=True, width="stretch")
 
@@ -451,10 +453,8 @@ def _render_player_card(scoring: str):
             if bits:
                 st.caption("Contract (Spotrac): " + "  ·  ".join(bits))
 
-    st.divider()
-
     # ---- this week's projection + fantasy point breakdown
-    st.subheader("This week's projection")
+    ui.section("This week's projection")
     c = st.columns([1, 2])
     c[0].metric(f"Projected points ({SCORING_LABELS[scoring]})", f"{p['proj']:.1f}")
     c[0].metric("Model lean (0–100)", _lean_score(p["lean"]),
@@ -470,10 +470,9 @@ def _render_player_card(scoring: str):
         bd["Scoring rule"] = bd["Scoring rule"].astype("string")
         c[1].dataframe(bd, hide_index=True, width="stretch")
 
-    st.divider()
 
     # ---- matchup
-    st.subheader("Matchup")
+    ui.section("Matchup")
     mrank, mpg = _matchup_rank(matchups, p["opp"], position, scoring)
     team_total, game_total = _implied_team_total(sched, team)
     mc = st.columns(4)
@@ -491,13 +490,12 @@ def _render_player_card(scoring: str):
         st.caption(f"**{verdict.title()} matchup** — {p['opp']} ranks #{mrank} of 32 against "
                    f"{position}s this season ({mpg:.1f} {SCORING_LABELS[scoring]} pts/game allowed).")
 
-    st.divider()
 
     # ---- recent form + season profile
     if weekly is not None:
         wk = _player_weekly(weekly, pid, scoring)
         if not wk.empty:
-            st.subheader("Recent form")
+            ui.section("Recent form")
             last = wk.tail(6)
             chart = last.assign(Game=last["season"].astype(str).str[-2:] + " wk" + last["week"].astype(str))
             st.bar_chart(chart.set_index("Game")["fp"], height=200, y_label=f"{SCORING_LABELS[scoring]} pts")
@@ -507,7 +505,7 @@ def _render_player_card(scoring: str):
                            f" (season avg {wk[wk['season'] == wk['season'].max()]['fp'].mean():.1f})"
                            if (wk["season"] == wk["season"].max()).any() else ""))
 
-            st.subheader("Season profile")
+            ui.section("Season profile")
             cur, prev = wk["season"].max(), wk["season"].max() - 1
             cur_fp, prev_fp = wk[wk["season"] == cur]["fp"], wk[wk["season"] == prev]["fp"]
             hist = wk[wk["season"] >= prev]["fp"]  # last two seasons for the distribution
@@ -531,10 +529,9 @@ def _render_player_card(scoring: str):
                              help=f"Share of games ≥ {BOOM.get(position, 20)} pts / ≤ "
                                   f"{BUST.get(position, 6)} pts, over the last two seasons.")
 
-            st.divider()
 
             # ---- usage & role
-            st.subheader("Usage & role")
+            ui.section("Usage & role")
             cs = wk[wk["season"] == cur]
             u = st.columns(4)
             if snaps is not None:
@@ -561,12 +558,11 @@ def _render_player_card(scoring: str):
             elif position == "QB":
                 u[1].metric("Pass att / game", f"{cs['attempts'].mean():.1f}" if len(cs) else "—")
                 u[2].metric("Rush att / game", f"{cs['carries'].mean():.1f}" if len(cs) else "—")
-                u[3].metric("Pass yд / game", f"{cs['passing_yards'].mean():.0f}" if len(cs) else "—")
+                u[3].metric("Pass yds / game", f"{cs['passing_yards'].mean():.0f}" if len(cs) else "—")
 
     # ---- rest-of-season schedule
     if sched is not None and matchups is not None:
-        st.divider()
-        st.subheader("Next 4 weeks — schedule strength")
+        ui.section("Next 4 weeks — schedule strength")
         unplayed = sched[sched["home_score"].isna()].sort_values(["season", "week"])
         mine = unplayed[(unplayed["home_team"] == team) | (unplayed["away_team"] == team)].head(4)
         rank_lookup = matchups.set_index(["def_team", "position"])[
@@ -894,7 +890,7 @@ def _render_draft_board(scoring: str, teams: int, starters: dict, league_key: st
 
     avail = df[~df["player"].isin(taken)]
 
-    st.subheader("Best available")
+    ui.section("Best available")
     top = avail.head(12).assign(
         Pos=lambda d: d["position"] + d["pos_rank"].astype(str),
         Src=lambda d: d["source"].map({"market": "mkt", "model": "mdl"}))
@@ -904,7 +900,7 @@ def _render_draft_board(scoring: str, teams: int, starters: dict, league_key: st
                      "bye": "Bye", "proj": "Proj", "vbd": "VBD"}),
         hide_index=True, width="stretch")
 
-    st.subheader("Best available by position")
+    ui.section("Best available by position")
     st.caption("Top 5 left at each spot. The header counts how many are still on the "
                "board in that position's current-best tier — a low number means the next "
                "pick there is a real step down. *mdl* = model projection (past Underdog's board).")
@@ -925,7 +921,7 @@ def _render_draft_board(scoring: str, teams: int, starters: dict, league_key: st
                 st.caption(f"{r.player} · {r.proj:.0f} · T{int(r.tier)}{src}")
 
     if mine:
-        st.subheader("My roster")
+        ui.section("My roster")
         roster = df[df["player"].isin(mine)]
         counts = roster["position"].value_counts().to_dict()
         need = [p for p in POSITIONS
@@ -1253,11 +1249,11 @@ def page_fantasy():
         st.session_state["ff_scoring"] = "PPR" if lsettings["scoring"] == "ppr" else "Half-PPR"
         st.session_state["_ff_scoring_seeded"] = league_key
 
-    label = st.radio("Scoring", ["PPR", "Half-PPR"], horizontal=True, key="ff_scoring")
+    ctl = st.container(border=True).columns(2)
+    label = ctl[0].radio("Scoring", ["PPR", "Half-PPR"], horizontal=True, key="ff_scoring")
     scoring = "ppr" if label == "PPR" else "half"
 
-    mode = st.radio("Mode", ["In-season", "Draft prep"], horizontal=True, key="ff_mode",
-                    label_visibility="collapsed")
+    mode = ctl[1].radio("Mode", ["In-season", "Draft prep"], horizontal=True, key="ff_mode")
 
     if mode == "Draft prep":
         st.caption(
