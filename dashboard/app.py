@@ -85,6 +85,8 @@ from assistant import page_assistant  # noqa: E402
 from injuries import page_injuries  # noqa: E402
 from game_center import page_game_center  # noqa: E402
 from player_page import page_player  # noqa: E402
+from usage import page_usage  # noqa: E402
+import nav_registry  # noqa: E402
 
 inject_theme()
 
@@ -2135,6 +2137,7 @@ PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon=
 PAGE_GAME_CENTER = st.Page(page_game_center, title="Game Center", icon=":material/stadium:")
 PAGE_PLAYER = st.Page(page_player, title="Player Pages", icon=":material/person:")
 PAGE_INJURIES = st.Page(page_injuries, title="Injury Tracker", icon=":material/healing:")
+PAGE_USAGE = st.Page(page_usage, title="Usage Trends", icon=":material/trending_up:")
 PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈")
 PAGE_COMPARE = st.Page(page_compare, title="Compare", icon="⚖️")
 PAGE_FANTASY = st.Page(page_fantasy, title="Fantasy", icon="🏆")
@@ -2144,9 +2147,15 @@ PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
 PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
 PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
 
+# Lets page modules link to each other (st.switch_page) without importing app.py.
+nav_registry.PAGES.update({
+    "game_center": PAGE_GAME_CENTER, "player": PAGE_PLAYER, "injuries": PAGE_INJURIES, "usage": PAGE_USAGE,
+    "ev_finder": PAGE_EV_FINDER, "bet_log": PAGE_BET_LOG, "parlay_builder": PAGE_PARLAY_BUILDER,
+})
+
 nav = st.navigation({
     "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG],
-    "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_INJURIES, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
+    "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_INJURIES, PAGE_USAGE, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
                  PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
     "Admin": [PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
 })

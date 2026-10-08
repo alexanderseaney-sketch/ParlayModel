@@ -77,8 +77,11 @@ def page_player():
     st.title("👤 Player Pages")
     players = _players(_mtime("weekly_stats.csv"), "")
     names = list(players["name"])
-    if st.session_state.get("player_sel") not in names:
-        st.session_state["player_sel"] = names[0] if names else None
+    sel = st.session_state.get("player_sel")
+    if sel not in names:
+        # Links from other pages may carry another source's spelling ("Jr.", periods).
+        by_key = dict(zip(players["_k"], players["name"]))
+        st.session_state["player_sel"] = by_key.get(normalize_name(sel or ""), names[0] if names else None)
     name = st.selectbox("Player", names, key="player_sel", placeholder="Search a player")
     if not name:
         return
