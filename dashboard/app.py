@@ -1018,6 +1018,11 @@ def page_parlay_builder():
 
 _STATE_BADGE = {"won": ("WON", "green"), "lost": ("LOST", "red"), "push": ("PUSH", "gray"),
                 "live": ("LIVE", "blue"), "pending": ("PENDING", "orange")}
+# Nocturne badge colours (bg, fg, border) per entry state, and progress-bar colour per pick status.
+_STATE_STYLE = {"won": ("#2b2741", "#d2cefd", "#5d5294"), "lost": ("#3d2530", "#d1798a", "#a8566a"),
+                "push": ("#292b31", "#b2b6ca", "#3f424d"), "live": ("#3d2530", "#d1798a", "#d1798a"),
+                "pending": ("#292b31", "#9397ab", "#3f424d")}
+_BAR_COLOR = {"hit": "#9184d9", "alive": "#5d5294", "miss": "#a8566a", "push": "#75798c"}
 
 
 def _save_results(edited: pd.DataFrame) -> None:
@@ -1047,37 +1052,55 @@ def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: 
     payout = _entry_payout(legs)
 
     with st.container(border=True):
-        if selectable:
-            h0, h1, h2 = st.columns([0.35, 5, 1.4])
-            h0.checkbox("Select entry", key=f"sel_{entry_id}", label_visibility="collapsed")
-        else:
-            h1, h2 = st.columns([5, 1.4])
+        import ui
         bits = [str(legs["date"].iloc[0])]
-        # Escaped "$": a bare "$...$" pair renders as a LaTeX formula in st.markdown.
         if pd.notna(stake):
-            bits.append(f"\\${stake:,.2f}")
+            bits.append(f"${stake:,.2f}")
         if payout:
-            bits.append(f"{payout:g}x" + (f" → \\${stake * payout:,.2f}" if pd.notna(stake) else ""))
-        h1.markdown(f"**{'Single pick' if n == 1 else f'{n}-pick entry'}** · " + " · ".join(bits))
-        label, color = _STATE_BADGE[state]
-        with h2:
-            st.badge(f"{label} · {n_hit}/{n} hit" if n > 1 else label, color=color)
-
+            bits.append(f"{payout:g}x" + (f" → ${stake * payout:,.2f}" if pd.notna(stake) else ""))
+        label = _STATE_BADGE[state][0]
+        bg, fg, bd = _STATE_STYLE[state]
+        header = (f"<div style='display:flex;align-items:center;gap:10px'>"
+                  f"<span style='flex:1;min-width:0;font-size:12.5px;color:{ui.N3}'>"
+                  f"<span style='font-size:13.5px;font-weight:500;color:{ui.TEXT}'>"
+                  f"{'Single pick' if n == 1 else f'{n}-pick entry'}</span> · "
+                  f"<span style='font-family:{ui.MONO}'>{ui.esc(' · '.join(bits))}</span></span>"
+                  + ui.badge(f"{label} · {n_hit}/{n} hit" if n > 1 else label, bg, fg, bd) + "</div>")
+        rows = []
         for idx, leg, t, status in tracked:
-            c1, c2, c3 = st.columns([3.2, 2.2, 3])
             pick = f"{str(leg['choice']).upper()} {leg['line']} {_pretty_stat(leg['stat'])}"
-            c1.markdown(f"{ICON[status]} **{leg['player']}**  \n{pick}")
+            bar = ""
             if t is not None and t["value"] is not None:
+                value = f"{t['value']:g} / {leg['line']}" + (f" · pace {t['pace']:g}" if t.get("pace") else "")
                 line_val = pd.to_numeric(leg["line"], errors="coerce")
-                c2.markdown(f"**{t['value']:g}** / {leg['line']}" + (f" · pace {t['pace']:g}" if t.get("pace") else ""))
                 if pd.notna(line_val) and line_val > 0:
-                    c2.progress(min(float(t["value"]) / float(line_val), 1.0))
+                    pct = min(float(t["value"]) / float(line_val), 1.0) * 100
+                    bar = (f"<div style='height:3px;border-radius:2px;background:{ui.EDGE}'><div style='height:3px;"
+                           f"border-radius:2px;background:{_BAR_COLOR.get(status, ui.N4)};width:{pct:.0f}%'></div></div>")
+                sub = t["text"]
             elif t is not None:
-                c2.caption(t["text"] or "—")
+                value, sub = (t["text"] or "—"), ""
             else:
-                c2.caption(f"result: {leg['result']}")
-            if t is not None:
-                c3.caption(" · ".join(x for x in ((t["text"] if t["value"] is not None else ""), t["game"]) if x))
+                value, sub = f"result: {leg['result']}", ""
+            game = " · ".join(x for x in (sub if t is not None and t["value"] is not None else "",
+                                          t["game"] if t is not None else "") if x)
+            rows.append(
+                f"<div style='display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2.2fr) minmax(0,2fr);"
+                f"align-items:center;gap:12px;padding:8px 0;border-top:1px solid rgba(233,233,237,.06)'>"
+                f"<div style='display:flex;align-items:center;gap:9px;min-width:0'><span style='flex:none'>{ICON[status]}"
+                f"</span><div style='display:flex;flex-direction:column;gap:1px;min-width:0'>"
+                f"<span style='font-size:12.5px;font-weight:500'>{ui.esc(leg['player'])}</span>"
+                f"<span style='font-size:11px;color:{ui.N3}'>{ui.esc(pick)}</span></div></div>"
+                f"<div style='display:flex;flex-direction:column;gap:4px'><span style='font-size:12px;color:{ui.N1};"
+                f"font-family:{ui.MONO}'>{ui.esc(value)}</span>{bar}</div>"
+                f"<span style='font-size:10.5px;color:{ui.N4};font-family:{ui.MONO}'>{ui.esc(game)}</span></div>")
+        html = header + "<div style='display:flex;flex-direction:column;gap:2px;margin-top:10px'>" + "".join(rows) + "</div>"
+        if selectable:
+            h0, h1 = st.columns([0.35, 9.65], vertical_alignment="top")
+            h0.checkbox("Select entry", key=f"sel_{entry_id}", label_visibility="collapsed")
+            h1.html(html)
+        else:
+            st.html(html)
 
         live_legs = [(idx, t) for idx, _, t, _ in tracked if t is not None]
         if live_legs and all(t["state"] == "final" for _, t in live_legs):
