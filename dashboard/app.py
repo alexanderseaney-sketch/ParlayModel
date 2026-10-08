@@ -1321,7 +1321,29 @@ def page_overview():
                 "Source script": source,
             })
 
-    st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
+    import ui
+    pulled = sum(r["Status"].startswith("✅") for r in rows)
+    yard_divider(f"{pulled} of {len(rows)} files pulled")
+    cards = []
+    for r in rows:
+        ok = r["Status"].startswith("✅")
+        cards.append(
+            f"<div style='display:flex;align-items:center;gap:16px;padding:10px 16px;border-radius:8px;"
+            f"background:{ui.ROW};box-shadow:0 0 0 1px {ui.EDGE};margin-bottom:6px'>"
+            f"<span title='{'pulled' if ok else 'not pulled'}' style='width:6px;height:6px;border-radius:50%;flex:none;"
+            f"background:{ui.ACCENT if ok else ui.ROSE}'></span>"
+            f"<span style='flex:1;min-width:0;display:flex;flex-direction:column;gap:1px'>"
+            f"<span style='font-size:12.5px;font-family:{ui.MONO};color:{ui.N1}'>{ui.esc(r['File'])}</span>"
+            f"<span style='font-size:10.5px;color:{ui.N5}'>{ui.esc(r['Source script'])}</span></span>"
+            f"<span style='font-size:11.5px;color:{ui.N4};font-family:{ui.MONO};width:90px;text-align:right'>"
+            f"{ui.esc(r['Rows'])}{' rows' if ok else ''}</span>"
+            f"<span style='font-size:11.5px;color:{ui.N4};font-family:{ui.MONO};width:80px;text-align:right'>"
+            f"{ui.esc(r['Size'])}</span>"
+            f"<span style='font-size:11.5px;color:{ui.N3};font-family:{ui.MONO};width:130px;text-align:right'>"
+            f"{ui.esc(r['Last pulled'])}</span></div>")
+    st.html("<div style='max-width:900px'>" + "".join(cards) + "</div>")
+    with st.expander("As a table"):
+        st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
 
     n_missing = sum(1 for r in rows if r["Status"].startswith("⬜"))
     if n_missing:
