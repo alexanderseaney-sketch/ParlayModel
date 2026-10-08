@@ -23,7 +23,9 @@ A_MID = "#5d5294"
 ROSE = "#d1798a"
 ROSE_FILL = "#3d2530"
 ROSE_BAR = "#a8566a"
-MONO = "'JetBrains Mono',ui-monospace,monospace"
+# Unquoted on purpose: every helper drops this into a single-quoted style='...' attribute,
+# where a quoted 'JetBrains Mono' would end the attribute and lose the rest of the style.
+MONO = "JetBrains Mono,ui-monospace,monospace"
 
 INJ_BADGE = {"—": (EDGE, N2), "TBD": (EDGE, N3), "Q": (A_DEEP, A_TEXT), "D": (ROSE_FILL, ROSE),
              "O": (ROSE_FILL, ROSE), "IR": (ROSE_FILL, ROSE)}

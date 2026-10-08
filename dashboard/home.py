@@ -70,8 +70,8 @@ def page_home():
             col.markdown(
                 f"<div style='display:flex;flex-direction:column;gap:5px;padding:12px 14px;border-radius:8px;"
                 f"background:{ui.ROW};box-shadow:0 0 0 1px {ui.EDGE}'>"
-                f"<span style='font-size:9.5px;letter-spacing:.14em;color:{ui.N4};font-family:{ui.MONO}'>{ui.esc(g.kick_label)}</span>"
-                f"<span style='font-size:15px;font-weight:500;font-family:{ui.MONO}'>{ui.esc(g.matchup)}</span>"
+                f"<span style='font-size:9.5px;letter-spacing:.1em;color:{ui.N4};font-family:{ui.MONO};white-space:nowrap'>{ui.esc(g.kick_label)}</span>"
+                f"<span style='font-size:14px;font-weight:500;font-family:{ui.MONO};white-space:nowrap'>{ui.esc(g.matchup)}</span>"
                 f"<span style='font-size:11px;color:{ui.N3};font-family:{ui.MONO}'>{ui.esc(g.spread_txt)} · O/U {total}</span>"
                 f"<span style='font-size:10.5px;color:{ui.N4}'>{ui.esc(g.weather_txt)}</span></div>",
                 unsafe_allow_html=True)
