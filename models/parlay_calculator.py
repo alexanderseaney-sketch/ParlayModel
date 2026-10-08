@@ -47,8 +47,13 @@ def load_leg_correlations(path: str = LEG_CORRELATIONS_PATH) -> dict[frozenset, 
     return {frozenset([r["position_prop_a"], r["position_prop_b"]]): r["phi"] for _, r in df.iterrows()}
 
 
+def _is_under(leg: dict) -> bool:
+    return str(leg.get("choice") or "").lower() in ("under", "lower")
+
+
 def joint_probability(legs: list[dict], correlations: dict[frozenset, float] | None = None) -> dict:
-    """legs: [{"prob": float, "team": str|None, "position_prop": str|None}, ...].
+    """legs: [{"prob": float, "team": str|None, "position_prop": str|None,
+    "choice": "over"|"under"|None}, ...].
     Returns {"naive_prob", "adjusted_prob", "adjustments": [(a, b, phi), ...]}."""
     if correlations is None:
         correlations = load_leg_correlations()
@@ -63,6 +68,12 @@ def joint_probability(legs: list[dict], correlations: dict[frozenset, float] | N
         phi = correlations.get(frozenset([a["position_prop"], b["position_prop"]]))
         if phi is None:
             continue
+        # The measured phi is between two OVER outcomes. An under is the complement
+        # event, and corr(A, not B) = -corr(A, B): flip once per under leg in the pair
+        # (same identity models/generate_weekly_bet_slip.py applies). Legs without a
+        # "choice" are treated as overs, as before.
+        if (_is_under(a) + _is_under(b)) % 2 == 1:
+            phi = -phi
         pa, pb = a["prob"], b["prob"]
         joint = pa * pb + phi * np.sqrt(max(pa * (1 - pa) * pb * (1 - pb), 0))
         joint = min(max(joint, max(0.0, pa + pb - 1)), min(pa, pb))

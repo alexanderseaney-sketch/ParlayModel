@@ -940,7 +940,8 @@ def page_parlay_builder():
             st.info("No legs with a real model prediction yet — nothing to combine.")
         else:
             legs_for_corr = [
-                {"team": leg.get("team"), "position_prop": leg.get("position_prop"), "prob": leg["my_prob"]}
+                {"team": leg.get("team"), "position_prop": leg.get("position_prop"), "prob": leg["my_prob"],
+                 "choice": leg.get("choice")}
                 for leg in model_backed_legs
             ]
             corr_result = correlation_adjusted_parlay_probability(legs_for_corr)
