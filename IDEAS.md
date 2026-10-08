@@ -5,54 +5,19 @@ Newest at the top. Move items to **Done** (with date) once built.
 
 ## Open
 
-### Live tracking of placed parlays (added 2026-10-03)
-Watch placed entries during games: each leg's current stat vs its line, hit/miss/pending,
-and whether the entry is still alive.
+### AI Assistant: remaining extensions (split out 2026-10-07)
+The assistant itself shipped (see Done). Not built yet:
+- Running data pulls from chat (should need a confirm click, like logging bets).
+- Fantasy page data as a tool (projections, start/sit, matchups).
+- A live-tracker tool ("how's my parlay doing?") on top of `dashboard/live_tracker.py`.
+- Cost: pick the model per task (Opus for analysis, a cheaper model for simple lookups).
 
-**Where it fits:**
-- A bet log already exists: `bet_logs/bets.csv` (`date, player, stat, choice, line,
-  multiplier_or_odds, stake, result, ...`) via `load_bet_log()` / `append_bet()` in
-  `dashboard/utils.py`. It's **empty so far** and stores one row per leg, with no ID
-  grouping legs into one parlay. That needs an `entry_id` column first.
-- Needs an **in-game** stats feed. nflverse only updates after games, so a live source is
-  required (e.g. ESPN's public scoreboard/box-score JSON, which is free and unofficial). Player names
-  must map to it the same way Underdog names were mapped.
-
-**Open questions:**
-- How do bets get in? Manual entry, one click from the +EV Finder/slip builder, or
-  importing from the betting app (no official APIs, so probably manual or screenshot).
-- Refresh: auto-poll every ~1 min during game windows vs a refresh button.
-- Extras: pace projection ("on pace for 74 yds vs 68.5"), notifications when a leg hits or
-  busts, and auto-grading `result` after games, which feeds real ROI tracking on the
-  Model Performance page.
-
-### AI chat assistant inside the app (added 2026-10-03)
-A chatbot in the dashboard that answers questions and does tasks for you, e.g. "best 3-leg
-entry tonight", "why is the model on the under for X", "compare these two WRs",
-"log this bet", "run the data pulls".
-
-**Where it fits:**
-- Claude is already wired in: `models/interpreter.py` (Opus 5.5, `ANTHROPIC_API_KEY`)
-  writes the pick/entry summaries on the +EV Finder. A chat would build on the same setup.
-- Give it **tools** that call existing project functions instead of letting it guess:
-  predictions, +EV Finder results, consensus lines, player game logs, depth charts,
-  the Fantasy page data, `append_bet()`. Same rule as the interpreter: only cite numbers
-  the tools return.
-- Natural UI: a Streamlit `st.chat_message` page or sidebar panel.
-
-**Progress (2026-10-04):** built as the **AI Assistant** page (`dashboard/assistant.py`):
-Claude Opus 5.5 via the SDK tool runner with 10 tools -- best picks, best entries, a
-player's props, model predictions + top features, game logs, depth charts, live news,
-the real-line track record, the bet log, and `stage_bet_log` (staged; saved only after a
-Confirm click). Needs `ANTHROPIC_API_KEY`. Not yet: running data pulls from chat, Fantasy
-page data, live parlay tracking.
-
-**Open questions:**
-- Which tasks should it be able to *do* vs just answer? Actions like logging bets or running
-  pulls should probably need a confirm click.
-- Cost: every message is an API call, so pick the model per task (Opus for analysis,
-  a cheaper model for simple lookups).
-- Ties into the live-tracking idea above ("how's my parlay doing?").
+### Redesign follow-ups (added 2026-10-07)
+- **Practice history chips (W·T·F)** on the Injury Tracker: nflverse `injuries.csv` keeps only
+  the latest practice status per player-week, so the page shows one status. Needs a per-day
+  practice-report source.
+- **Quarter / half models** reset their rolling features each season; a retrain on the
+  corrected weekly stats would fix early-season periods.
 
 ### Multi-book lines: choose which betting app's lines/picks you see (added 2026-10-02)
 Let the dashboard show lines and parlay picks from different apps (e.g. PrizePicks,
@@ -87,6 +52,26 @@ pulled_at`), one puller per app writing to it, and a book selector in the dashbo
 slip builder then validates against that book's rules.
 
 ## Done
+
+- **2026-10 redesign (Nocturne handoff)** (2026-10-07). New pages: **Home** (bankroll, open
+  entries, best edges, injury movers, this week's games), **Bankroll** (balance, drawdown, ROI by
+  stat / entry size, saved starting bankroll), **Game Center**, **Player Pages**, **Matchup
+  Heatmap**, **Injury Tracker** (status changes + line moves from the new committed
+  `data/raw/underdog_line_history.csv`), **Usage Trends**. Navigation is grouped Overview /
+  Betting / Research / Admin. Polish passes on Weekly Bet Slip (budget presets), Parlay Builder
+  (confidence tiers), Bet Log (entry cards), Data Status, NFL Stats, Depth Charts, Run Data
+  Pulls, News, Compare, Fantasy and AI Assistant. No existing feature removed.
+- **Live tracking of placed parlays** (2026-10-03). Bet Log live tracker from ESPN box scores
+  (`dashboard/live_tracker.py`, 60 s auto-refresh): per-pick value vs line, pace, hit / miss /
+  alive, game clock. Picks are grouped into entries (`entry_id`), with one-click "Save final
+  results" grading and delete-selected / clear-all.
+- **AI chat assistant** (2026-10-03). **AI Assistant** page (`dashboard/assistant.py`): Claude
+  Opus 5.5 with tools for best picks / entries, a player's props, predictions + top features,
+  game logs, depth charts, news, the real-line track record, the bet log, and
+  `stage_bet_log` (saved only after a Confirm click). Remaining ideas are under Open.
+- **Hosted bet persistence + live Underdog feed** (2026-10-03). Bets and settings saved to a
+  private GitHub repo when `BET_LOG_GITHUB_TOKEN` is set; Underdog lines fetched live with a
+  60 s auto-refresh.
 
 - **+EV Finder, Model Performance page, real-line backtest, leakage audit** (2026-10-02) —
   see the README's 2026-10-02 log entry.
