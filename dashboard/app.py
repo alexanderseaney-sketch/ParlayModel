@@ -2078,7 +2078,7 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
         st.warning(f"`{filename}` hasn't been pulled yet. Run it from **Run Data Pulls**.")
         return
 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.container(border=True).columns(2)
     with col1:
         groups = sorted(df[group_col].dropna().unique()) if group_col in df.columns else []
         group_filter = st.multiselect(group_label, groups)
@@ -2097,12 +2097,16 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
 
     if "published" in filtered.columns:
         filtered = filtered.sort_values("published", ascending=False)
-    st.caption(f"{len(filtered):,} of {len(df):,} items")
+    yard_divider(f"{len(filtered):,} of {len(df):,} items")
+    import ui
     for _, row in filtered.iterrows():
         with st.container(border=True):
             st.markdown(f"**{row.get('headline', '(no headline)')}**")
-            parts = [str(row[c]) for c in (group_col, *caption_cols) if c in row.index and pd.notna(row.get(c))]
-            st.caption(" · ".join(dict.fromkeys(parts)))  # dedupe while preserving order
+            group = row.get(group_col) if group_col in row.index and pd.notna(row.get(group_col)) else None
+            parts = [str(row[c]) for c in caption_cols if c in row.index and pd.notna(row.get(c))]
+            parts = [p for p in dict.fromkeys(parts) if p != str(group)]  # dedupe while preserving order
+            st.markdown((ui.badge(str(group)) + "&nbsp; " if group is not None else "")
+                        + ui.mono(" · ".join(parts), size="11px"), unsafe_allow_html=True)
             body = row.get("summary") if pd.notna(row.get("summary")) else row.get("description")
             if pd.notna(body):
                 st.write(body)
