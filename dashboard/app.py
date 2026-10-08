@@ -1354,15 +1354,17 @@ def page_overview():
 
 def page_nfl_stats():
     st.title("📊 NFL Stats (nflverse)")
+    st.caption("Browse the raw nflverse tables the models are built on.")
 
+    filters = st.container(border=True)
     dataset_files = list(DATASET_DISPLAY_COLUMNS.keys())
-    dataset = st.selectbox("Dataset", dataset_files, format_func=lambda f: DATASET_LABELS.get(f, f))
+    dataset = filters.selectbox("Dataset", dataset_files, format_func=lambda f: DATASET_LABELS.get(f, f))
     df = load_csv_if_exists(dataset)
 
     if df is None:
         st.warning(f"**{DATASET_LABELS.get(dataset, dataset)}** hasn't been pulled yet. Run it from **Run Data Pulls**.")
     else:
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3 = filters.columns(3)
         with col1:
             if "season" in df.columns:
                 seasons = sorted(df["season"].dropna().unique(), reverse=True)
@@ -1389,11 +1391,11 @@ def page_nfl_stats():
             mask = filtered.astype(str).apply(lambda col: col.str.contains(search, case=False, na=False)).any(axis=1)
             filtered = filtered[mask]
 
-        show_all = st.checkbox(
+        show_all = filters.checkbox(
             "Show all columns", help="Every raw column from the source file, including internal IDs and "
                                       "cross-reference keys most people never need.")
 
-        st.caption(f"{len(filtered):,} of {len(df):,} rows")
+        yard_divider(f"{DATASET_LABELS.get(dataset, dataset)} · {len(filtered):,} of {len(df):,} rows")
 
         if show_all:
             display_df = filtered.rename(columns=_pretty_col)
