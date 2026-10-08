@@ -353,17 +353,30 @@ def page_weekly_bet_slip():
     )
     with st.expander("How this works, and what to trust"):
         st.write(
-            "Model confidence is validated against each player's own rolling average "
-            "(a proxy line), **not** a real historical Underdog line — that archive is "
-            "still accumulating. Real accuracy against actual market prices is "
-            "unvalidated. Sizing uses Kelly-fraction edge ranking against REAL live "
-            "prices (not assumed odds), with a strict line-divergence check so a "
-            "prediction is never used against a materially different number than what "
-            "it was actually computed against. Only wager what you can afford to lose."
+            "Each pick's probability is the model's estimate for Underdog's **real** line, "
+            "corrected for the model's measured under-lean and blended 35/65 with the "
+            "de-vigged market price — the combination that has scored best against real "
+            "Underdog closing lines so far (see **Model Performance → Real-line backtest**; "
+            "still only a few graded weeks). Picks must also clear the model's own "
+            "confidence bar and a line-divergence check, so a prediction is never used "
+            "against a materially different number than it was computed for. Stakes are "
+            "Kelly-fraction sized against the live prices. Parlays multiply every leg's "
+            "error — most multi-pick entries lose even when the picks are good. Only "
+            "wager what you can afford to lose."
         )
 
     underdog_freshness_bar(load_underdog_props(), key="slip")
-    budget = st.number_input("Weekly budget ($)", min_value=1.0, value=10.0, step=1.0)
+    if "wbs_budget" not in st.session_state:
+        st.session_state["wbs_budget"] = 10.0
+
+    def _preset():
+        pick = st.session_state.get("wbs_budget_preset")
+        if pick:
+            st.session_state["wbs_budget"] = float(pick.strip("$"))
+
+    b1, b2 = st.columns([3, 2])
+    b1.pills("Budget", ["$5", "$10", "$25", "$50"], key="wbs_budget_preset", on_change=_preset)
+    budget = b2.number_input("Weekly budget ($)", min_value=1.0, step=1.0, key="wbs_budget")
 
     if st.button("Generate this week's bets", type="primary", width="content"):
         try:
