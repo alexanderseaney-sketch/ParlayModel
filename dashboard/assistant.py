@@ -1,12 +1,16 @@
 """
 AI Assistant page (added 2026-10-04, from IDEAS.md): a chat with Claude that answers
 questions about tonight's board by calling the project's own functions as tools --
-live Underdog lines, model predictions, the +EV Finder's pricing, the entry search,
-game logs, depth charts, news and the real-line backtest -- instead of guessing.
+live Underdog lines, model predictions, the +EV Finder's pricing, the entry search and
+entry checker, game logs, usage trends, injuries, line movement, depth charts, news,
+this week's games, defense-vs-position ranks, fantasy projections, the real-line
+backtest, data freshness, and the user's bet log (live tracking + bankroll) -- instead
+of guessing.
 
 Rules it runs under (same as models/interpreter.py): every number it states must come
-from a tool result; it never places bets. The one write action, logging a bet, is
-only STAGED by the tool -- nothing is written until you click Confirm on the page.
+from a tool result; it never places bets. The two write actions -- logging a bet and
+running a data pull -- are only STAGED by the tools; nothing is written or run until
+you click Confirm on the page.
 
 Needs ANTHROPIC_API_KEY (env / .env locally, Streamlit secrets when hosted).
 """
@@ -42,8 +46,14 @@ and was worse than the market on receiving and rushing yards -- be honest about 
 when it matters, and don't oversell edges.
 - Entry EV multiplies leg edges; treat big entry EVs as a ranking, not a forecast.
 - For every entry you suggest, state its chance of winning in plain terms from the tool's joint_prob ("hits about 1 in 11"). When the user asks for several 4+ pick entries, say plainly that most of them will lose even when the picks are good -- e.g. ten 4-pick entries at ~8% each all lose about 40% of the time -- and offer 2-3 pick entries as the lower-variance option. Don't stack the same side by default: mix overs and unders when the edges support it.
+- For a time slot ("the 1pm games", "Sunday night"), get the teams from this_weeks_games \
+and pass them to get_best_picks / find_best_entries. When the user proposes their own picks \
+or entry, price it with check_entry rather than estimating. Before recommending a player, \
+check injury_report (and line_movement if their line moved or was pulled); usage_trends and \
+defense_vs_position explain role and matchup.
 - You cannot place bets. To record a bet the user says they placed, use stage_bet_log; \
-it only stages the bet and the user confirms it on the page.
+it only stages the bet and the user confirms it on the page. Data pulls work the same way \
+(stage_data_pull). Never say a bet was logged or a pull ran -- say it's waiting for their Confirm.
 - Be concise: short paragraphs or a compact list. Use markdown tables only for 3+ rows."""
 
 
@@ -83,10 +93,28 @@ def _candidates(prob_source: str) -> pd.DataFrame:
     return _apply_prob_source(cands, prob_source) if not cands.empty else cands
 
 
+def _side_of(choice: pd.Series) -> pd.Series:
+    """Underdog's higher/lower (or over/under) -> OVER/UNDER."""
+    c = choice.astype(str).str.lower()
+    return pd.Series(["OVER" if v in ("over", "higher") else "UNDER" if v in ("under", "lower") else v.upper()
+                      for v in c], index=choice.index)
+
+
+def _side_str(choice) -> str:
+    return _side_of(pd.Series([choice])).iloc[0]
+
+
+def _filter_teams(c: pd.DataFrame, teams: list[str]) -> pd.DataFrame:
+    if not teams or c.empty:
+        return c
+    want = {t.upper() for t in teams}
+    return c[c["team"].astype(str).str.upper().isin(want)]
+
+
 def _cand_view(c: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
         "player": c["player"], "team": c["team"], "stat": c["stat_name"], "line": c["line"],
-        "side": c["choice"].astype(str).str.upper(), "prob": c["prob"], "model_prob": c["model_prob"],
+        "side": _side_of(c["choice"]), "prob": c["prob"], "model_prob": c["model_prob"],
         "market_fair_prob": c["market_prob"], "edge": c["edge"], "decimal_price": c["decimal"],
         "ev_per_dollar": c["ev"],
     })
@@ -96,29 +124,33 @@ def build_tools(prob_source: str) -> list:
     """Tools are rebuilt per request so they close over the page's probability source."""
 
     @beta_tool
-    def get_best_picks(min_edge: float = 0.02, stat: str = "", team: str = "", limit: int = 15) -> str:
+    def get_best_picks(min_edge: float = 0.02, stat: str = "", teams: list[str] = [], side: str = "",
+                       limit: int = 15) -> str:
         """Best single Underdog picks right now, ranked by edge over the de-vigged market.
         Uses live Underdog lines (refreshed every 60 s) and only props where the model's
-        baseline is comparable to the real line.
+        baseline is comparable to the real line. To restrict to a time slot (e.g. "the 1pm
+        games"), get the teams from this_weeks_games first and pass them in `teams`.
 
         Args:
             min_edge: Minimum probability edge over the market's fair probability (0.02 = 2 points).
             stat: Optional Underdog stat filter, e.g. receiving_yds, rushing_yds, passing_yds, receiving_rec, rush_rec_tds, passing_tds.
-            team: Optional team abbreviation filter, e.g. KC, PHI.
+            teams: Optional team abbreviations to keep, e.g. ["KC", "PHI"].
+            side: Optional "OVER" or "UNDER" to keep one side only.
             limit: Max rows to return (<= 25).
         """
         c = _candidates(prob_source)
         if c.empty:
             return json.dumps({"rows": [], "note": "no comparable model-backed props right now"})
-        c = c[c["edge"] >= min_edge]
+        c = _filter_teams(c[c["edge"] >= min_edge], teams)
         if stat:
             c = c[c["stat_name"] == stat]
-        if team:
-            c = c[c["team"].astype(str).str.upper() == team.upper()]
+        if side:
+            c = c[_side_of(c["choice"]) == side.upper()]
         return _records(_cand_view(c.sort_values("edge", ascending=False)), min(limit, MAX_ROWS))
 
     @beta_tool
-    def find_best_entries(min_legs: int = 2, max_legs: int = 3, min_leg_edge: float = 0.02, limit: int = 5) -> str:
+    def find_best_entries(min_legs: int = 2, max_legs: int = 3, min_leg_edge: float = 0.02, limit: int = 5,
+                          teams: list[str] = [], exclude_players: list[str] = []) -> str:
         """Search for the highest-EV valid Underdog pick'em entries (one pick per player, at
         least 2 teams), using correlation-adjusted joint probability and the product of the
         picks' decimal prices as payout.
@@ -128,9 +160,13 @@ def build_tools(prob_source: str) -> list:
             max_legs: Largest entry size (<= 5; 4-5 is slower).
             min_leg_edge: Each leg's minimum edge over the market.
             limit: Number of entries to return (<= 10).
+            teams: Optional team abbreviations to build from, e.g. the teams in the 1pm games.
+            exclude_players: Players to leave out (e.g. ones the user already has or dislikes).
         """
         from parlay_calculator import find_best_entries as _search
-        c = _candidates(prob_source)
+        c = _filter_teams(_candidates(prob_source), teams)
+        for name in exclude_players:
+            c = c[~_match_player(c["player"], name)]
         if c.empty:
             return json.dumps({"entries": [], "note": "no candidates"})
         best = _search(c, n_legs_range=(max(2, min_legs), min(5, max(min_legs, max_legs))), top_k=limit,
@@ -140,7 +176,7 @@ def build_tools(prob_source: str) -> list:
         best = best[best["valid"]].head(min(limit, 10))
         return json.dumps({"entries": [{
             "legs": [{"player": l["player"], "team": l["team"], "stat": l["stat_name"], "line": l["line"],
-                      "side": str(l["choice"]).upper(), "prob": round(l["prob"], 3),
+                      "side": _side_str(l["choice"]), "prob": round(l["prob"], 3),
                       "market_fair_prob": round(l["market_prob"], 3), "price": l["decimal"]} for l in r.legs],
             "joint_prob": round(r.joint_prob, 4), "naive_joint_prob": round(r.naive_prob, 4),
             "payout_multiple": round(r.payout, 2), "ev_per_dollar": round(r.ev, 3),
@@ -168,7 +204,7 @@ def build_tools(prob_source: str) -> list:
             cv = c[["player", "stat_name", "line", "choice", "prob", "market_prob", "edge"]].rename(
                 columns={"stat_name": "stat", "choice": "side", "market_prob": "market_fair_prob"})
             view = view.merge(cv, on=["player", "stat", "line", "side"], how="left")
-        view["side"] = view["side"].astype(str).str.upper()
+        view["side"] = _side_of(view["side"])
         return _records(view.drop_duplicates(), 40)
 
     @beta_tool
@@ -289,8 +325,317 @@ def build_tools(prob_source: str) -> list:
         st.session_state.setdefault("assistant_pending_bets", []).append(row)
         return json.dumps({"status": "staged -- waiting for the user to click Confirm on the page", "bet": row})
 
-    return [get_best_picks, find_best_entries, player_props, model_prediction, player_game_log,
-            depth_chart, player_news, model_track_record, my_bet_log, stage_bet_log]
+    @beta_tool
+    def check_entry(picks: list[dict], payout_mode: str = "product") -> str:
+        """Evaluate an entry the USER proposes: each pick's probability and market price, the
+        correlation-adjusted chance all picks hit, the payout, EV per $1, whether it is a valid
+        Underdog entry (2-8 picks, one per player, at least 2 teams) and the riskiest pick.
+
+        Args:
+            picks: The picks, e.g. [{"player": "Ja'Marr Chase", "stat": "receiving_yds", "side": "OVER", "line": 74.5}]. "line" is optional (the live line is used if omitted).
+            payout_mode: "product" (Underdog's odds-based payout: product of the picks' prices) or "standard" (legacy fixed multipliers).
+        """
+        from parlay_calculator import evaluate_entry, riskiest_leg
+        c = _candidates(prob_source)
+        legs, missing = [], []
+        for pk in picks:
+            name, stat, side = str(pk.get("player", "")), str(pk.get("stat", "")), str(pk.get("side", "")).upper()
+            m = c
+            if not m.empty:
+                m = m[_match_player(m["player"], name) & (m["stat_name"] == stat) & (_side_of(m["choice"]) == side)]
+            if pk.get("line") not in (None, "") and not m.empty:
+                m = m[pd.to_numeric(m["line"], errors="coerce") == float(pk["line"])]
+            if m.empty:
+                missing.append(f"{name} {side} {pk.get('line', '')} {stat}".replace("  ", " "))
+            else:
+                legs.append(m.iloc[0].to_dict())
+        if missing:
+            return json.dumps({
+                "not_found": missing,
+                "found": [f"{l['player']} {_side_str(l['choice'])} {l['line']} {l['stat_name']}" for l in legs],
+                "note": "These picks aren't on the live board with a comparable model price (wrong stat name or "
+                        "line, not offered, or not model-backed). Check player_props for the exact stat and line."})
+        res = evaluate_entry(legs, payout_mode, load_leg_correlations())
+        risk = riskiest_leg(legs)
+        return json.dumps({
+            "picks": [{"player": l["player"], "team": l["team"], "stat": l["stat_name"], "line": l["line"],
+                       "side": _side_str(l["choice"]), "prob": round(l["prob"], 3),
+                       "market_fair_prob": round(l["market_prob"], 3), "price": l["decimal"]} for l in legs],
+            "valid": res["valid"], "validity_note": res["validity_note"],
+            "joint_prob": round(res["joint_prob"], 4), "naive_joint_prob": round(res["naive_prob"], 4),
+            "market_joint_prob": None if res["market_joint_prob"] is None else round(res["market_joint_prob"], 4),
+            "payout_multiple": None if res["payout"] is None else round(res["payout"], 2),
+            "ev_per_dollar": None if res["ev"] is None else round(res["ev"], 3),
+            "correlation_adjustments": [list(a) for a in res["adjustments"]],
+            "riskiest_pick": risk["player"] if risk else None,
+        })
+
+    @beta_tool
+    def this_weeks_games(teams: list[str] = []) -> str:
+        """This week's games: kickoff (ET), matchup, spread, total, each team's implied points
+        and the weather forecast. Use it for schedule questions and to turn a time slot
+        ("1pm games", "Sunday night") into team abbreviations for the pick and entry tools.
+
+        Args:
+            teams: Optional team abbreviations to keep.
+        """
+        from research_data import week_games
+        g = week_games()
+        if g.empty:
+            return json.dumps({"rows": [], "note": "no upcoming games in schedules.csv"})
+        if teams:
+            want = {t.upper() for t in teams}
+            g = g[g["home_team"].isin(want) | g["away_team"].isin(want)]
+            if g.empty:
+                return json.dumps({"rows": [], "note": f"{', '.join(sorted(want))}: no game this week (bye)"})
+        view = g[["kick_label", "gameday", "gametime", "away_team", "home_team", "spread_txt", "total_line",
+                  "away_implied", "home_implied", "weather_txt"]].rename(
+            columns={"kick_label": "kickoff", "spread_txt": "spread", "weather_txt": "weather"})
+        return _records(view, 20)
+
+    @beta_tool
+    def injury_report(team: str = "", player: str = "", changes_only: bool = False, limit: int = 25) -> str:
+        """This week's injury report for QB/RB/WR/TE: last week's and this week's game status
+        (Q questionable, D doubtful, O out, IR; "TBD" = the team hasn't posted game statuses
+        yet, which happens the day before its game; "—" = no designation), latest practice
+        participation (DNP/LP/FP), and how the player's main Underdog line moved this week
+        (line_pulled = the line came off the board). Biggest line moves and most serious
+        statuses first.
+
+        Args:
+            team: Optional team abbreviation.
+            player: Optional player name.
+            changes_only: Only players whose status got worse or better since last week.
+            limit: Max rows (<= 25).
+        """
+        from research_data import injury_report as _report
+        r = _report()
+        if r.empty:
+            return json.dumps({"rows": [], "note": "no injury report for this week yet"})
+        if team:
+            r = r[r["team"].astype(str).str.upper() == team.upper()]
+        if player:
+            r = r[_match_player(r["full_name"], player)]
+        if changes_only:
+            r = r[r["dir"] != "same"]
+        view = r.drop(columns=["abs_move", "sev_now"]).rename(columns={
+            "full_name": "player", "prev": "status_last_week", "now": "status_now", "dir": "direction",
+            "practice": "latest_practice", "stat": "main_stat"})
+        return _records(view, min(limit, MAX_ROWS))
+
+    @beta_tool
+    def usage_trends(player: str = "", team: str = "", position: str = "", fallers_first: bool = False,
+                     limit: int = 15) -> str:
+        """Role trends from each player's last 8 games: offensive snap share and target share
+        per game (oldest -> newest, in %), the latest values, and the snap-share change over
+        the last 3 games. Default order puts the biggest risers first.
+
+        Args:
+            player: Optional player name.
+            team: Optional team abbreviation.
+            position: Optional QB, RB, WR or TE.
+            fallers_first: Put the biggest snap-share drops first instead.
+            limit: Max rows (<= 25).
+        """
+        from research_data import _mtime
+        from usage import _usage
+        u = _usage(_mtime("snap_counts.csv"), _mtime("weekly_stats.csv"))
+        if u.empty:
+            return json.dumps({"rows": [], "note": "no snap counts pulled"})
+        if player:
+            u = u[_match_player(u["Player"], player)]
+        if team:
+            u = u[u["Team"].astype(str).str.upper() == team.upper()]
+        if position:
+            u = u[u["Pos"] == position.upper()]
+        if fallers_first:
+            u = u.sort_values("3-game snap change", na_position="last")
+        view = u.drop(columns=["Trend"]).rename(columns={
+            "Player": "player", "Team": "team", "Pos": "position", "Snap share · 8 games": "snap_pct_last8",
+            "Snap now": "snap_share_now", "Target share · 8 games": "target_pct_last8",
+            "Target now": "target_share_now", "3-game snap change": "snap_change_3g_pts"})
+        return _records(view, min(limit, MAX_ROWS))
+
+    @beta_tool
+    def defense_vs_position(defense: str = "", position: str = "", scoring: str = "half",
+                            softest_first: bool = True, limit: int = 12) -> str:
+        """How defenses rank against a position this season by fantasy points allowed per
+        game: rank 1 = toughest, 32 = softest (best to target), plus who each plays this week.
+
+        Args:
+            defense: Optional defense team abbreviation.
+            position: Optional QB, RB, WR or TE.
+            scoring: "half" (Half-PPR), "ppr" or "std".
+            softest_first: Softest defenses first (else toughest first).
+            limit: Max rows (<= 32).
+        """
+        m = load_csv_if_exists("fantasy_matchups.csv")
+        if m is None or m.empty:
+            return json.dumps({"rows": [], "note": "no matchup table built yet"})
+        sc = scoring.lower() if scoring.lower() in ("half", "ppr", "std") else "half"
+        if defense:
+            m = m[m["def_team"].astype(str).str.upper() == defense.upper()]
+        if position:
+            m = m[m["position"] == position.upper()]
+        from research_data import week_games
+        opp = {}
+        for r in week_games().itertuples():
+            opp[r.home_team], opp[r.away_team] = f"vs {r.away_team}", f"@ {r.home_team}"
+        view = pd.DataFrame({"defense": m["def_team"], "position": m["position"], "rank": m[f"rank_{sc}"],
+                             "fantasy_pts_allowed_pg": m[f"fp_{sc}_pg"], "games": m["team_games"],
+                             "this_week": m["def_team"].map(opp).fillna("bye")})
+        return _records(view.sort_values("rank", ascending=not softest_first), min(limit, 32))
+
+    @beta_tool
+    def line_movement(player: str, stat: str = "") -> str:
+        """How a player's Underdog lines have moved: each recorded open / move / pulled event
+        (UTC) from the line-history archive, plus the live line and prices now. A pulled line
+        often means injury news or a role change.
+
+        Args:
+            player: Player name.
+            stat: Optional Underdog stat, e.g. receiving_yds.
+        """
+        from research_data import line_history, live_over_lines
+        h = line_history()
+        h = h[_match_player(h["full_name"], player)]
+        live = live_over_lines()
+        live = live[_match_player(live["full_name"], player)]
+        if stat:
+            h, live = h[h["stat_name"] == stat], live[live["stat_name"] == stat]
+        h = h.sort_values("seen_at").tail(40).assign(seen_at=lambda d: d["seen_at"].astype(str))
+        return json.dumps({
+            "history": json.loads(h[["stat_name", "line", "event", "seen_at"]].to_json(orient="records")),
+            "live_now": json.loads(live[["stat_name", "line", "over_price", "under_price"]].to_json(orient="records")),
+        })
+
+    @beta_tool
+    def fantasy_projections(player: str = "", position: str = "", team: str = "", scoring: str = "half",
+                            limit: int = 15) -> str:
+        """This week's fantasy projections (the Fantasy page's numbers): projected points,
+        position rank, tier, opponent and the projected stat line, plus the prop model's lean
+        (0-100, 50 = neutral). Use for start/sit and other fantasy questions.
+
+        Args:
+            player: Optional player name.
+            position: Optional QB, RB, WR or TE.
+            team: Optional team abbreviation.
+            scoring: "half" (Half-PPR) or "ppr".
+            limit: Max rows (<= 25).
+        """
+        from fantasy import _projections, _pred_mtime
+        p = _projections(_pred_mtime(), "ppr" if scoring.lower() == "ppr" else "half")
+        if p.empty:
+            return json.dumps({"rows": [], "note": "no current predictions"})
+        if player:
+            p = p[_match_player(p["player"], player)]
+        if position:
+            p = p[p["position"] == position.upper()]
+        if team:
+            p = p[p["team"].astype(str).str.upper() == team.upper()]
+        cols = ["player", "position", "team", "opp", "week", "proj", "pos_rank", "tier", "overall_rank", "lean",
+                "pass_yds", "passing_tds", "rush_yds", "rec", "rec_yds", "td"]
+        view = p[[c for c in cols if c in p.columns]].rename(columns={"proj": "projected_points", "opp": "opponent"})
+        view["lean"] = (pd.to_numeric(view["lean"], errors="coerce") * 100).round()
+        return _records(view, min(limit, MAX_ROWS))
+
+    @beta_tool
+    def track_open_entries() -> str:
+        """Live status of the user's OPEN logged entries from ESPN box scores: each pick's
+        current stat vs its line, pace, hit / miss / alive / pending, the game score and
+        clock, and whether each entry is still alive. Use for "how's my parlay doing?"."""
+        from bet_entries import _with_entries, _entry_payout, _RESULT_TO_STATUS
+        from live_tracker import track_leg, entry_status
+        log = load_bet_log()
+        if log.empty:
+            return json.dumps({"entries": [], "note": "the bet log is empty"})
+        out = []
+        for _, legs in _with_entries(log).groupby("entry_id", sort=False):
+            if not (legs["result"] == "pending").any():
+                continue
+            rows = []
+            for _, leg in legs.iterrows():
+                base = {"player": leg["player"], "stat": leg["stat"], "side": _side_str(leg["choice"]),
+                        "line": leg["line"]}
+                if leg["result"] == "pending":
+                    t = track_leg(leg["player"], leg["stat"], leg["choice"], leg["line"])
+                    rows.append({**base, "value": t["value"], "pace": t["pace"], "status": t["status"],
+                                 "note": t["text"], "game": t["game"]})
+                else:
+                    rows.append({**base, "status": _RESULT_TO_STATUS.get(leg["result"], "pending"),
+                                 "note": "already graded in the log"})
+            stake = pd.to_numeric(legs["stake"], errors="coerce").max()
+            out.append({"date": str(legs["date"].iloc[0]), "notes": str(legs["notes"].iloc[0] or ""),
+                        "stake": None if pd.isna(stake) else float(stake), "payout_multiple": _entry_payout(legs),
+                        "entry_status": entry_status([r["status"] for r in rows]), "picks": rows})
+        if not out:
+            return json.dumps({"entries": [], "note": "no open entries"})
+        return json.dumps({"open_entries": len(out), "entries": out[:10]}, default=str)
+
+    @beta_tool
+    def bankroll_summary() -> str:
+        """The user's results from SETTLED entries in the bet log: bankroll now (starting
+        bankroll + P/L), total P/L, amount staked, ROI, entries won / lost, the latest week's
+        P/L and results by entry size. Won entries count only once a payout multiple is logged."""
+        from bankroll import settled_entries, starting_bankroll
+        s, start = settled_entries(), starting_bankroll()
+        if s.empty:
+            return json.dumps({"starting_bankroll": start, "note": "no settled entries yet"})
+        weekly = s.groupby("week")["pnl"].sum()
+        size = (s.assign(picks=s["legs"].clip(upper=4).map(lambda n: "4+" if n >= 4 else str(n)))
+                .groupby("picks").agg(entries=("entry_id", "count"), won=("state", lambda x: int((x == "won").sum())),
+                                      staked=("stake", "sum"), pnl=("pnl", "sum")).reset_index())
+        staked = s["stake"].sum()
+        return json.dumps({
+            "starting_bankroll": start, "bankroll_now": round(start + s["pnl"].sum(), 2),
+            "total_pnl": round(s["pnl"].sum(), 2), "total_staked": round(staked, 2),
+            "roi": round(s["pnl"].sum() / staked, 3) if staked else None,
+            "entries_won": int((s["state"] == "won").sum()), "entries_lost": int((s["state"] == "lost").sum()),
+            "latest_week": weekly.index[-1], "latest_week_pnl": round(float(weekly.iloc[-1]), 2),
+            "by_entry_size": json.loads(size.round(2).to_json(orient="records")),
+        })
+
+    @beta_tool
+    def data_freshness() -> str:
+        """When the app's data was last updated: the live Underdog board's pull time, the
+        predictions file, and each core data file's age (stats, injuries, rosters). Check this
+        before leaning on injuries or stats close to kickoff."""
+        from utils import data_freshness_check, file_status
+        f = data_freshness_check()
+        props = load_csv_if_exists("underdog_props.csv")
+        pulled = props["pulled_at"].iloc[0] if props is not None and len(props) and "pulled_at" in props.columns else None
+        preds = os.path.join(ROOT_DIR, "models", "current_player_predictions.csv")
+        return json.dumps({
+            "underdog_board_pulled_at": pulled,
+            "predictions_updated": datetime.fromtimestamp(os.path.getmtime(preds)).isoformat(timespec="minutes")
+            if os.path.exists(preds) else None,
+            "files_updated": {fn: file_status(fn)["modified"].isoformat(timespec="minutes") for fn in f["ok"]},
+            "files_stale_hours": {fn: round(h, 1) for fn, h in f["stale"]}, "files_missing": f["missing"],
+            "note": "Data refreshes automatically every 6 hours; Underdog lines are fetched live.",
+        }, default=str)
+
+    @beta_tool
+    def stage_data_pull(pull: str) -> str:
+        """Stage one of the app's data pulls. Runs nothing: the page shows a Confirm button and
+        the pull runs only if the user clicks it (it can take a minute). Only use when the user
+        asks to refresh data -- Underdog lines are already live.
+
+        Args:
+            pull: The pull's exact name; pass "list" to get the available names.
+        """
+        from utils import PULL_SCRIPTS
+        if pull not in PULL_SCRIPTS:
+            return json.dumps({"available_pulls": list(PULL_SCRIPTS),
+                               "note": "" if pull == "list" else f"unknown pull '{pull}' -- use one of these names"})
+        staged = st.session_state.setdefault("assistant_pending_pulls", [])
+        if pull not in staged:
+            staged.append(pull)
+        return json.dumps({"status": "staged -- waiting for the user to click Confirm on the page", "pull": pull})
+
+    return [get_best_picks, find_best_entries, check_entry, player_props, model_prediction, player_game_log,
+            usage_trends, injury_report, line_movement, depth_chart, player_news, this_weeks_games,
+            defense_vs_position, fantasy_projections, model_track_record, data_freshness, my_bet_log,
+            track_open_entries, bankroll_summary, stage_bet_log, stage_data_pull]
 
 
 def _run_turn(client, history: list, prob_source: str, status) -> tuple[list, str | None]:
@@ -310,7 +655,7 @@ def _run_turn(client, history: list, prob_source: str, status) -> tuple[list, st
         # request on a fallback model chosen by refusal category.
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
-        max_iterations=12,
+        max_iterations=16,
     )
     for message in runner:
         stop_reason = message.stop_reason
@@ -358,11 +703,36 @@ def _render_pending_bets():
             st.rerun()
 
 
+def _render_pending_pulls():
+    """Data pulls the assistant staged -- run only after the user confirms."""
+    pending = st.session_state.get("assistant_pending_pulls") or []
+    if not pending:
+        return
+    from utils import PULL_SCRIPTS, run_pull_script
+    with st.container(border=True):
+        st.markdown(ui.badge("NOT RUN YET", ui.ROSE_FILL, ui.ROSE, ui.ROSE_BAR) + "&nbsp; "
+                    f"**Run {len(pending)} data pull(s)?** " + " · ".join(f"`{p}`" for p in pending),
+                    unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        if c1.button("▶️ Confirm and run", type="primary", key="assistant_pull_confirm"):
+            st.session_state["assistant_pending_pulls"] = []
+            for label in pending:
+                with st.spinner(f"Running {label}..."):
+                    ok, output = run_pull_script(PULL_SCRIPTS[label])
+                (st.success if ok else st.error)(f"{label} {'completed' if ok else 'failed or had errors'}.")
+                with st.expander(f"Output — {label}"):
+                    st.code(output or "(no output)")
+            st.cache_data.clear()  # new files -> fresh tool results on the next question
+        if c2.button("✖ Discard", key="assistant_pull_discard"):
+            st.session_state["assistant_pending_pulls"] = []
+            st.rerun()
+
+
 def page_assistant():
     st.title("💬 AI Assistant")
     st.caption("Ask about tonight's board — it looks things up with the app's own data "
-               "(live Underdog lines, model predictions, +EV pricing, game logs, depth charts, news) "
-               "and never places bets.")
+               "(live Underdog lines, model predictions, +EV pricing, injuries, usage, line moves, matchups, "
+               "game logs, depth charts, news, your bet log) and never places bets.")
 
     key = _api_key()
     if not key:
@@ -378,6 +748,7 @@ def page_assistant():
         if st.button("🗑 New conversation"):
             st.session_state["assistant_history"] = []
             st.session_state["assistant_pending_bets"] = []
+            st.session_state["assistant_pending_pulls"] = []
             st.rerun()
         st.caption("Each message is a Claude Opus 5.5 call with a few tool lookups — "
                    "typically a few cents to ~$0.20.")
@@ -387,6 +758,8 @@ def page_assistant():
     if not history:
         examples = ["Best 3-pick entry for the 1pm games?", "Why is the model on the under for Ja'Marr Chase?",
                     "Compare Puka Nacua and Davante Adams receiving yards",
+                    "Check my entry: Chase over 74.5 rec yds + Kelce over 5.5 receptions",
+                    "Who's trending up in snaps this week?", "How's my parlay doing?",
                     "How has the model done against real lines?",
                     "Log my bet: Chase over 6.5 receptions, $10 2-pick with Kelce"]
         with st.container(border=True):
@@ -406,6 +779,7 @@ def page_assistant():
                     st.markdown(text)
 
     _render_pending_bets()
+    _render_pending_pulls()
 
     prompt = st.chat_input("Ask about picks, players, entries…")
     if not prompt:
@@ -445,5 +819,5 @@ def page_assistant():
             text = f"{text}\n\n{note}" if text else note
         st.markdown(text or "_(no answer — try rephrasing)_")
     history.extend(new)
-    if st.session_state.get("assistant_pending_bets"):
+    if st.session_state.get("assistant_pending_bets") or st.session_state.get("assistant_pending_pulls"):
         st.rerun()

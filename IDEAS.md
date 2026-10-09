@@ -5,11 +5,8 @@ Newest at the top. Move items to **Done** (with date) once built.
 
 ## Open
 
-### AI Assistant: remaining extensions (split out 2026-10-07)
-The assistant itself shipped (see Done). Not built yet:
-- Running data pulls from chat (should need a confirm click, like logging bets).
-- Fantasy page data as a tool (projections, start/sit, matchups).
-- A live-tracker tool ("how's my parlay doing?") on top of `dashboard/live_tracker.py`.
+### AI Assistant: per-task model choice (split out 2026-10-07)
+The assistant and its full tool set shipped (see Done). Still open:
 - Cost: pick the model per task (Opus for analysis, a cheaper model for simple lookups).
 
 ### Redesign follow-ups (added 2026-10-07)
@@ -68,7 +65,10 @@ slip builder then validates against that book's rules.
 - **AI chat assistant** (2026-10-03). **AI Assistant** page (`dashboard/assistant.py`): Claude
   Opus 5.5 with tools for best picks / entries, a player's props, predictions + top features,
   game logs, depth charts, news, the real-line track record, the bet log, and
-  `stage_bet_log` (saved only after a Confirm click). Remaining ideas are under Open.
+  `stage_bet_log` (saved only after a Confirm click). **2026-10-08:** 21 tools -- added an
+  entry checker for the user's own picks, this week's games (time-slot filtering), injury
+  report, usage trends, line movement, defense-vs-position ranks, fantasy projections, live
+  tracking of open entries, bankroll summary, data freshness, and confirm-gated data pulls.
 - **Hosted bet persistence + live Underdog feed** (2026-10-03). Bets and settings saved to a
   private GitHub repo when `BET_LOG_GITHUB_TOKEN` is set; Underdog lines fetched live with a
   60 s auto-refresh.
