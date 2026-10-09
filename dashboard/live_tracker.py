@@ -83,10 +83,36 @@ STAT_FUNCS = {
 ZERO_OK = set(STAT_FUNCS)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _week_ends(sched_mtime: float) -> pd.DataFrame:
+    s = load_csv_if_exists("schedules.csv")
+    if s is None:
+        return pd.DataFrame(columns=["season", "week", "last_day"])
+    reg = s[s["game_type"] == "REG"].assign(gd=lambda d: pd.to_datetime(d["gameday"], errors="coerce"))
+    return (reg.groupby(["season", "week"])["gd"].max().rename("last_day").reset_index()
+            .sort_values(["season", "week"]))
+
+
+def bet_week(bet_date) -> tuple[int, int] | None:
+    """(season, week) a bet placed on `bet_date` belongs to: the first regular-season week
+    whose last game is on or after that date (a Tuesday bet is for the coming week)."""
+    d = pd.to_datetime(bet_date, errors="coerce")
+    if pd.isna(d):
+        return None
+    import os
+    from utils import RAW_DIR
+    p = os.path.join(RAW_DIR, "schedules.csv")
+    ends = _week_ends(os.path.getmtime(p) if os.path.exists(p) else 0.0)
+    hit = ends[ends["last_day"] >= d.normalize()]
+    return (int(hit.iloc[0]["season"]), int(hit.iloc[0]["week"])) if not hit.empty else None
+
+
 @st.cache_data(ttl=LIVE_TTL, show_spinner=False)
-def fetch_games() -> pd.DataFrame:
-    """This week's games: id, home/away abbr, state (pre/in/post), detail, period, clock."""
-    resp = requests.get(SCOREBOARD, headers=HEADERS, timeout=15)
+def fetch_games(season: int | None = None, week: int | None = None) -> pd.DataFrame:
+    """A week's games (default: ESPN's current week): id, home/away abbr, state
+    (pre/in/post), detail, period, clock."""
+    params = {"dates": season, "seasontype": 2, "week": week} if season and week else None
+    resp = requests.get(SCOREBOARD, params=params, headers=HEADERS, timeout=15)
     resp.raise_for_status()
     rows = []
     for e in resp.json().get("events", []):
@@ -150,9 +176,13 @@ def _minutes_elapsed(period: int, clock: str) -> float | None:
     return min(60.0, (min(period, 4) - 1) * 15 + (15 - left)) if period <= 4 else 60.0
 
 
-def track_leg(player: str, stat: str, choice: str, line) -> dict:
+def track_leg(player: str, stat: str, choice: str, line, bet_date=None) -> dict:
     """{'state': upcoming|live|final|untracked|unknown, 'value', 'status': hit|miss|push|
-    void|alive|pending, 'text', 'game', 'pace'}"""
+    void|alive|pending, 'text', 'game', 'pace'}
+
+    `bet_date` (the log's date) picks the NFL week the bet was for, so a pick from an
+    earlier week is graded from that week's final box score -- not tracked against this
+    week's game. Without it, ESPN's current week is used."""
     line = _num(line)
     stat = str(stat or "")
     over = str(choice).lower() in ("over", "higher")
@@ -161,7 +191,8 @@ def track_leg(player: str, stat: str, choice: str, line) -> dict:
         out.update(state="untracked", text="not tracked live — check Underdog")
         return out
     try:
-        games = fetch_games()
+        wk = bet_week(bet_date) if bet_date is not None else None
+        games = fetch_games(*wk) if wk else fetch_games()
     except Exception as e:  # noqa: BLE001
         out["text"] = f"live feed unavailable ({type(e).__name__})"
         return out

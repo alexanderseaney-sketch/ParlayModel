@@ -1045,7 +1045,7 @@ def _render_entry(entry_id: str, legs: pd.DataFrame, bets: pd.DataFrame, track: 
     tracked = []
     for idx, leg in legs.iterrows():
         stored = str(leg["result"])
-        t = (track_leg(leg["player"], leg["stat"], leg["choice"], leg["line"])
+        t = (track_leg(leg["player"], leg["stat"], leg["choice"], leg["line"], leg.get("date"))
              if track and stored == "pending" else None)
         status = t["status"] if t is not None else _RESULT_TO_STATUS.get(stored, "pending")
         tracked.append((idx, leg, t, status))

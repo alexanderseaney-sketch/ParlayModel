@@ -541,9 +541,12 @@ def build_tools(prob_source: str) -> list:
 
     @beta_tool
     def track_open_entries() -> str:
-        """Live status of the user's OPEN logged entries from ESPN box scores: each pick's
-        current stat vs its line, pace, hit / miss / alive / pending, the game score and
-        clock, and whether each entry is still alive. Use for "how's my parlay doing?"."""
+        """Status of the user's OPEN (not fully graded) logged entries from ESPN box scores:
+        each pick's stat vs its line, pace, hit / miss / alive / pending, the game score and
+        clock, and whether each entry is still alive. Picks are checked against the week each
+        bet was placed for, so ungraded bets from an earlier week come back final (hit / miss);
+        tell the user they can save those on the Bet Log page with "Save final results".
+        Use for "how's my parlay doing?"."""
         from bet_entries import _with_entries, _entry_payout, _RESULT_TO_STATUS
         from live_tracker import track_leg, entry_status
         log = load_bet_log()
@@ -558,7 +561,7 @@ def build_tools(prob_source: str) -> list:
                 base = {"player": leg["player"], "stat": leg["stat"], "side": _side_str(leg["choice"]),
                         "line": leg["line"]}
                 if leg["result"] == "pending":
-                    t = track_leg(leg["player"], leg["stat"], leg["choice"], leg["line"])
+                    t = track_leg(leg["player"], leg["stat"], leg["choice"], leg["line"], leg.get("date"))
                     rows.append({**base, "value": t["value"], "pace": t["pace"], "status": t["status"],
                                  "note": t["text"], "game": t["game"]})
                 else:
@@ -669,6 +672,11 @@ def _run_turn(client, history: list, prob_source: str, status) -> tuple[list, st
     return new, stop_reason
 
 
+def _md(text: str) -> str:
+    """Escape $ so "$0.35 per $1" isn't rendered as a LaTeX formula by st.markdown."""
+    return str(text).replace("$", "\\$")
+
+
 def _text_of(content) -> str:
     if isinstance(content, str):
         return content
@@ -771,12 +779,12 @@ def page_assistant():
     for m in history:
         if m["role"] == "user" and isinstance(m["content"], str):
             with st.chat_message("user"):
-                st.markdown(m["content"])
+                st.markdown(_md(m["content"]))
         elif m["role"] == "assistant":
             text = _text_of(m["content"])
             if text:
                 with st.chat_message("assistant"):
-                    st.markdown(text)
+                    st.markdown(_md(text))
 
     _render_pending_bets()
     _render_pending_pulls()
@@ -785,7 +793,7 @@ def page_assistant():
     if not prompt:
         return
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(_md(prompt))
     history.append({"role": "user", "content": prompt})
 
     import anthropic
@@ -817,7 +825,7 @@ def page_assistant():
         elif stop_reason == "tool_use":
             note = "_Stopped after too many lookups — ask a narrower question._"
             text = f"{text}\n\n{note}" if text else note
-        st.markdown(text or "_(no answer — try rephrasing)_")
+        st.markdown(_md(text) or "_(no answer — try rephrasing)_")
     history.extend(new)
     if st.session_state.get("assistant_pending_bets") or st.session_state.get("assistant_pending_pulls"):
         st.rerun()
