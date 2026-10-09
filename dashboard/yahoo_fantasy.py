@@ -415,7 +415,7 @@ def _starters_from_slots(slots: dict[str, int]) -> dict[str, int]:
     return out
 
 
-def my_team_key(league_key: str) -> str | None:
+def _my_team(league_key: str) -> dict | None:
     data = _cached("users;use_login=1/games;game_keys=nfl/teams")
     for u in _items(data["fantasy_content"]["users"]):
         user = _flatten(u.get("user", []))
@@ -423,10 +423,27 @@ def my_team_key(league_key: str) -> str | None:
             game = _flatten(g.get("game", []))
             for t in _items(game.get("teams", {})):
                 team = _flatten(t.get("team", []))
-                tk = team.get("team_key", "")
-                if tk.startswith(league_key + ".t."):
-                    return tk
+                if team.get("team_key", "").startswith(league_key + ".t."):
+                    return team
     return None
+
+
+def my_team_key(league_key: str) -> str | None:
+    team = _my_team(league_key)
+    return team.get("team_key") if team else None
+
+
+def my_team_url(league_key: str) -> str:
+    """Web URL of the user's team page in this league. Uses Yahoo's own `url`
+    field, else builds /f1/<league_id>/<team_id> from the team key, else falls
+    back to the league page."""
+    team = _my_team(league_key) or {}
+    if team.get("url"):
+        return team["url"]
+    league_id = league_key.split(".l.")[-1]
+    base = f"https://football.fantasysports.yahoo.com/f1/{league_id}"
+    tk = team.get("team_key", "")
+    return f"{base}/{tk.split('.t.')[-1]}" if ".t." in tk else base
 
 
 def _parse_players(node: Any) -> pd.DataFrame:

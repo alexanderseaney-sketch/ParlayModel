@@ -1023,7 +1023,6 @@ def _yahoo_panel() -> tuple[str | None, dict | None]:
                 st.json(yf.diagnostics())
             return None, None
 
-        st.link_button("Yahoo account", "https://football.fantasysports.yahoo.com/", disabled=True)
         try:
             lg = yf.leagues()
         except Exception as e:  # noqa: BLE001
@@ -1039,6 +1038,10 @@ def _yahoo_panel() -> tuple[str | None, dict | None]:
         pick = st.selectbox("League", list(names), key="ff_yh_league_pick")
         league_key = names[pick]
         st.session_state["yahoo_league_key"] = league_key
+        try:
+            st.link_button("Open my Yahoo team ↗", yf.my_team_url(league_key))
+        except Exception:  # noqa: BLE001
+            pass
 
         try:
             settings = yf.league_settings(league_key)
