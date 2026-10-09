@@ -17,9 +17,15 @@ best real-time estimate available given that gap, not a proven number.
 Kelly criterion: for a bet with true win probability p and decimal odds d, the
 bankroll-growth-optimal fraction is f* = p - (1-p)/(d-1), positive only when p*d > 1
 (genuinely +EV at that REAL price -- a high model confidence alone doesn't guarantee
-this, since the real price may already reflect similar information). Using this
-project's own correlation_adjusted_parlay_probability for 2-leg same-team
-combinations rather than assuming independence.
+this, since the real price may already reflect similar information).
+
+Every suggestion is a placeable Underdog pick'em entry: 2-3 picks, one pick per
+player, players from at least 2 teams. Entries are searched and scored by
+models/parlay_calculator.py (find_best_entries / evaluate_entry / entry_validity) --
+the same rules and correlation-adjusted joint probability the Parlay Builder and +EV
+Finder use -- so a correlated same-team pair can still ride in an entry, as long as
+a pick from another team comes with it. There are no one-pick "singles": Underdog
+doesn't take them.
 
 The weekly budget here is a small, fixed dollar amount ($10 by default), not a
 bankroll to take a Kelly percentage OF -- so f* is used for what it's actually good
@@ -28,8 +34,9 @@ the fixed budget splits across them, not as a literal fraction-of-bankroll dolla
 formula (that scale mismatch would produce cents-sized "correct" Kelly stakes against
 a $10 budget, which isn't what a fixed weekly amount is for). Prudence against
 uncertain edge estimates is applied differently here: a minimum Kelly-edge bar
-(MIN_KELLY_EDGE) an opportunity must clear before it's even considered, and spreading
-the budget across up to 3 opportunities rather than concentrating it on one.
+(MIN_KELLY_EDGE) an entry must clear before it's even considered, and spreading
+the budget across up to 3 entries that share no player rather than concentrating it
+on one.
 
 Usage:
     python models/generate_weekly_bet_slip.py --budget 10
@@ -51,6 +58,7 @@ from utils import (
     prop_scope, is_low_noise_line,
 )  # noqa: E402
 from odds_utils import add_underdog_market_probs, blend_with_market  # noqa: E402
+from parlay_calculator import entry_validity, find_best_entries  # noqa: E402
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(ROOT_DIR, "data", "raw")
@@ -66,6 +74,8 @@ MIN_KELLY_EDGE = 0.02   # the real prudence lever: raw Kelly fraction must clear
                          # goal of not over-betting an uncertain edge estimate.
 TOP_N_OPPORTUNITIES = 3
 MIN_STAKE = 0.50
+ENTRY_LEGS = (2, 3)      # Underdog's minimum is 2; past 3 picks every leg's error compounds
+LEG_POOL_SIZE = 18       # best legs by edge, searched exhaustively (~970 combos at 2-3 picks)
 
 
 def _leg_detail(row: dict) -> dict:
@@ -80,9 +90,29 @@ def _leg_detail(row: dict) -> dict:
         "line": row["stat_value"],
         "decimal_price": row["decimal_price"],
         "my_prob": row["my_prob"],
-        "team": row["recent_team"],
+        "team": row["team"],
         "position_prop": f"{row['position']} {row['prop_type']}",
     }
+
+
+def _current_team(merged: pd.DataFrame) -> pd.Series:
+    """Team per row for Underdog's 2-team rule. Underdog's own team_id is what that
+    rule checks, so each id is labelled with its players' most common current
+    abbreviation (32 club team sites, else weekly_stats' recent_team, which goes
+    stale for anyone traded since their last game) -- equal labels <=> equal ids, so
+    a stale roster row can't split one real team into two."""
+    team = merged["recent_team"]
+    roster_path = os.path.join(RAW_DIR, "nfl_rosters.csv")
+    if os.path.exists(roster_path):
+        ros = pd.read_csv(roster_path)
+        ros = ros.assign(_k=ros["player"].apply(normalize_name)).sort_values(
+            "roster_status", key=lambda s: ~s.fillna("").str.startswith("Active"))
+        team = merged["_match_key"].map(ros.drop_duplicates("_k").set_index("_k")["team_abbr"]).fillna(team)
+    if "team_id" in merged.columns and merged["team_id"].notna().any():
+        label = team.groupby(merged["team_id"]).agg(
+            lambda s: s.mode().iat[0] if s.notna().any() else None)
+        team = merged["team_id"].map(label).where(merged["team_id"].notna(), team)
+    return team
 
 
 def kelly_fraction(p: float, decimal_odds: float) -> float:
@@ -202,97 +232,83 @@ def load_matched_props(props: pd.DataFrame | None = None) -> pd.DataFrame:
     merged["model_prob"] = merged["my_prob"]
     merged["my_prob"] = blend_with_market(merged["my_prob"], merged["market_fair_prob"])
     merged["confidence"] = (merged["model_prob"] - 0.5).abs() * 2
+    merged["team"] = _current_team(merged)
 
     return merged
 
 
-def build_single_leg_candidates(matched: pd.DataFrame) -> list[dict]:
-    qualifying = matched[matched["confidence"] >= MIN_CONFIDENCE].copy()
+def build_leg_pool(matched: pd.DataFrame) -> pd.DataFrame:
+    """Picks entries are built from -- not bets on their own (Underdog pick'em needs
+    2+ picks). Columns follow parlay_calculator.find_best_entries; "choice" is the side
+    the model favors, which joint_probability needs to sign each correlation. Legs
+    without a known team are dropped: the 2-team rule can't be checked for them."""
+    q = matched[(matched["confidence"] >= MIN_CONFIDENCE) & matched["team"].notna()]
+    if q.empty:
+        return pd.DataFrame()
+    # One-sided options have no de-vigged price; the raw implied probability (margin
+    # included) stands in, which understates their edge rather than inflating it.
+    market = q["market_fair_prob"].fillna(q["implied_prob"])
+    return q.assign(
+        player=q["full_name"], line=q["stat_value"], choice=q["my_side"], prob=q["my_prob"],
+        decimal=q["decimal_price"], market_prob=market, edge=q["my_prob"] - market,
+        position_prop=q["position"].astype(str) + " " + q["prop_type"].astype(str),
+    )
 
+
+def _entry_description(legs: list[dict], adjustments: list) -> str:
+    picks = " + ".join(f"{l['player']} ({l['team']} · {pretty_stat_name(l['stat_name'])} "
+                       f"{l['choice']} {l['line']})" for l in legs)
+    weeks = sorted({int(l["next_week"]) for l in legs if pd.notna(l.get("next_week"))})
+    days = sorted({str(l["next_gameday"]) for l in legs if pd.notna(l.get("next_gameday"))})
+    when = " · ".join(([f"Wk {'/'.join(map(str, weeks))}"] if weeks else []) + days)
+    corr = "".join(f", {a} / {b} correlation {phi:+.2f}" for a, b, phi in adjustments)
+    return f"{picks} [{when}{corr}]"
+
+
+def build_entry_candidates(matched: pd.DataFrame, correlations: dict | None = None) -> list[dict]:
+    """Highest-EV valid Underdog entries (2-3 picks, 2+ teams, one pick per player)
+    from the leg pool, kept only if the entry's Kelly fraction at its real payout
+    clears MIN_KELLY_EDGE."""
+    pool = build_leg_pool(matched)
+    if pool.empty:
+        return []
+    best = find_best_entries(pool, n_legs_range=ENTRY_LEGS, top_k=50, pool_size=LEG_POOL_SIZE,
+                             min_leg_edge=0.0,
+                             correlations=load_leg_correlations() if correlations is None else correlations)
+    if best.empty:
+        return []
     candidates = []
-    for _, row in qualifying.iterrows():
-        p = row["my_prob"]
-        d = row["decimal_price"]
-        f = kelly_fraction(p, d)
-        if f < MIN_KELLY_EDGE:
-            continue  # not enough edge at the REAL price to justify a slice of the budget
+    for r in best.itertuples():
+        f = kelly_fraction(r.joint_prob, r.payout)
+        if not r.valid or f < MIN_KELLY_EDGE:
+            continue
         candidates.append({
-            "type": "single",
-            "description": f"{row['full_name']} — {pretty_stat_name(row['stat_name'])} {row['my_side']} {row['stat_value']} "
-                            f"[Wk {int(row['next_week'])} · {row['next_gameday']}]",
-            "legs": [row["full_name"]],
-            "leg_details": [_leg_detail(row)],
-            "model_prob": p,
-            "decimal_odds": d,
+            "type": f"{r.n_legs}-pick entry",
+            "description": _entry_description(r.legs, r.adjustments),
+            "legs": [l["player"] for l in r.legs],
+            "leg_details": [_leg_detail(l) for l in r.legs],
+            "model_prob": r.joint_prob,
+            "decimal_odds": r.payout,
             "kelly_fraction": f,
-            "team": row["recent_team"],
+            "teams": sorted({l["team"] for l in r.legs}),
         })
     return candidates
 
 
-def _joint_prob_with_phi(p_a: float, p_b: float, phi: float) -> float:
-    """Same phi-coefficient identity as dashboard/utils.py's
-    correlation_adjusted_parlay_probability, exposed here so a sign-corrected phi can
-    be passed directly (see note below on over/under sign flipping)."""
-    std_term = np.sqrt(max(p_a * (1 - p_a) * p_b * (1 - p_b), 0))
-    joint = p_a * p_b + phi * std_term
-    return min(max(joint, max(0.0, p_a + p_b - 1)), min(p_a, p_b))
-
-
-def build_parlay_candidates(matched: pd.DataFrame) -> list[dict]:
-    qualifying = matched[matched["confidence"] >= MIN_CONFIDENCE].copy()
-    correlations = load_leg_correlations()
-
-    candidates = []
-    teams = qualifying["recent_team"].dropna().unique()
-    for team in teams:
-        team_legs = qualifying[qualifying["recent_team"] == team]
-        if len(team_legs) < 2:
-            continue
-        rows = team_legs.to_dict("records")
-        for i in range(len(rows)):
-            for j in range(i + 1, len(rows)):
-                a, b = rows[i], rows[j]
-                key = frozenset([f"{a['position']} {a['prop_type']}", f"{b['position']} {b['prop_type']}"])
-                phi = correlations.get(key)
-                if phi is None:
-                    continue  # only surface parlays where we have a REAL measured correlation, not a guess
-
-                # Measured phi is for two "over" (over_proxy_line) outcomes. If a leg's
-                # model-favored side is actually "under", that's the complementary
-                # event -- corr(A, 1-B) = -corr(A, B), a standard identity for binary
-                # variables. Flip once per leg that's on the "under" side.
-                n_under = (a["my_side"] == "under") + (b["my_side"] == "under")
-                effective_phi = -phi if n_under % 2 == 1 else phi
-
-                p_joint = _joint_prob_with_phi(a["my_prob"], b["my_prob"], effective_phi)
-                d_parlay = a["decimal_price"] * b["decimal_price"]
-                f = kelly_fraction(p_joint, d_parlay)
-                if f < MIN_KELLY_EDGE:
-                    continue
-                candidates.append({
-                    "type": "parlay",
-                    # a and b are always a same-team same-game pair (see the team loop
-                    # above), so their next_week/next_gameday are identical -- only
-                    # need to show it once.
-                    "description": f"{a['full_name']} ({pretty_stat_name(a['stat_name'])} {a['my_side']}) + "
-                                    f"{b['full_name']} ({pretty_stat_name(b['stat_name'])} {b['my_side']}) "
-                                    f"[{team}, Wk {int(a['next_week'])} · {a['next_gameday']}, "
-                                    f"correlation {effective_phi:+.2f}]",
-                    "legs": [a["full_name"], b["full_name"]],
-                    "leg_details": [_leg_detail(a), _leg_detail(b)],
-                    "model_prob": p_joint,
-                    "decimal_odds": d_parlay,
-                    "kelly_fraction": f,
-                    "team": team,
-                })
-    return candidates
-
-
 def allocate_budget(candidates: list[dict], budget: float, top_n: int = TOP_N_OPPORTUNITIES) -> list[dict]:
+    # Last line of defence: nothing reaches the slip unless Underdog would accept it.
+    candidates = [c for c in candidates if entry_validity(c["leg_details"])[0]]
     if not candidates:
         return []
-    ranked = sorted(candidates, key=lambda c: c["kelly_fraction"], reverse=True)[:top_n]
+    # The best entries tend to share the same top legs; three entries riding on one
+    # player is one bet tripled, not a spread budget. Each player appears once.
+    ranked, used = [], set()
+    for c in sorted(candidates, key=lambda c: c["kelly_fraction"], reverse=True):
+        if used.isdisjoint(c["legs"]):
+            ranked.append(c)
+            used.update(c["legs"])
+        if len(ranked) == top_n:
+            break
     total_fraction = sum(c["kelly_fraction"] for c in ranked)
     if total_fraction <= 0:
         return []
@@ -329,20 +345,21 @@ def main():
     matched = load_matched_props()
     print(f"{len(matched)} live prop rows matched to a model prediction this week.\n")
 
-    candidates = build_single_leg_candidates(matched) + build_parlay_candidates(matched)
-    print(f"{len(candidates)} genuinely +EV opportunities found (model prob x real price > 1).\n")
+    candidates = build_entry_candidates(matched)
+    print(f"{len(candidates)} valid +EV Underdog entries found (2-3 picks, 2+ teams, "
+          f"joint prob x real payout > 1).\n")
 
     allocated = allocate_budget(candidates, args.budget)
 
     if not allocated:
-        print("No +EV opportunities clear the bar this week. Suggestion: skip this week.")
+        print("No valid +EV entries clear the bar this week. Suggestion: skip this week.")
         return
 
     print(f"Suggested split of ${args.budget:.2f}:\n")
     for c in allocated:
         edge = c["model_prob"] * c["decimal_odds"] - 1
-        print(f"[{c['type'].upper():6s}] ${c['suggested_stake']:.2f}  {c['description']}")
-        print(f"          model prob: {c['model_prob']*100:.1f}%   real price: {c['decimal_odds']:.2f}x   "
+        print(f"[{c['type'].upper()}] ${c['suggested_stake']:.2f}  {c['description']}")
+        print(f"          joint prob: {c['model_prob']*100:.1f}%   real payout: {c['decimal_odds']:.2f}x   "
               f"implied edge: {edge*100:+.1f}%   raw Kelly fraction: {c['kelly_fraction']*100:.2f}% (of a full bankroll -- "
               f"used here for relative ranking, not as a literal fraction of this fixed weekly budget)")
         print()
@@ -350,7 +367,7 @@ def main():
     total = sum(c["suggested_stake"] for c in allocated)
     print(f"Total suggested: ${total:.2f} of ${args.budget:.2f} budget.")
     if total < args.budget:
-        print(f"(${args.budget - total:.2f} unallocated -- not enough qualifying +EV opportunities to use the full budget this week. That's fine; forcing it isn't.)")
+        print(f"(${args.budget - total:.2f} unallocated -- not enough qualifying +EV entries to use the full budget this week. That's fine; forcing it isn't.)")
 
 
 if __name__ == "__main__":

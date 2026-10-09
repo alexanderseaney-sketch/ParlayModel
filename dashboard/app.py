@@ -62,7 +62,7 @@ _MODELS_DIR = os.path.normpath(
 if _MODELS_DIR not in sys.path:  # Streamlit re-executes this file on every rerun
     sys.path.insert(0, _MODELS_DIR)
 from generate_weekly_bet_slip import (  # noqa: E402
-    load_matched_props, build_single_leg_candidates, build_parlay_candidates, allocate_budget,
+    load_matched_props, build_entry_candidates, allocate_budget,
 )
 
 st.set_page_config(page_title="ParlayModel", page_icon="🏈", layout="wide")
@@ -374,10 +374,13 @@ def page_weekly_bet_slip():
             "Underdog closing lines so far (see **Model Performance → Real-line backtest**; "
             "still only a few graded weeks). Picks must also clear the model's own "
             "confidence bar and a line-divergence check, so a prediction is never used "
-            "against a materially different number than it was computed for. Stakes are "
-            "Kelly-fraction sized against the live prices. Parlays multiply every leg's "
-            "error — most multi-pick entries lose even when the picks are good. Only "
-            "wager what you can afford to lose."
+            "against a materially different number than it was computed for.\n\n"
+            "Every suggestion is an entry Underdog will actually take: 2–3 picks, one per "
+            "player, from at least 2 teams — the same rules and correlation-adjusted odds "
+            "as the Parlay Builder and +EV Finder. No suggested entries share a player. "
+            "Stakes are Kelly-fraction sized against the entry's real payout. Every pick "
+            "in an entry has to hit, so each one multiplies the error — most entries lose "
+            "even when the picks are good. Only wager what you can afford to lose."
         )
 
     underdog_freshness_bar(load_underdog_props(), key="slip")
@@ -397,7 +400,7 @@ def page_weekly_bet_slip():
         try:
             with st.spinner("Pulling live predictions and current Underdog prices..."):
                 matched = load_matched_props(load_underdog_props())
-                candidates = build_single_leg_candidates(matched) + build_parlay_candidates(matched)
+                candidates = build_entry_candidates(matched)
                 allocated = allocate_budget(candidates, budget)
             st.session_state["bet_slip_result"] = {
                 "matched_count": len(matched), "candidate_count": len(candidates),
@@ -418,11 +421,11 @@ def page_weekly_bet_slip():
     yard_divider("MATCHED PROPS")
     st.caption(
         f"{result['matched_count']} live props matched to a model prediction and passed "
-        f"the line-divergence check · {result['candidate_count']} genuinely +EV at real prices."
+        f"the line-divergence check · {result['candidate_count']} valid Underdog entries +EV at real prices."
     )
 
     if not result["allocated"]:
-        st.info("No +EV opportunities clear the bar right now. Suggestion: skip this week rather than force a weak bet.")
+        st.info("No valid +EV entries clear the bar right now. Suggestion: skip this week rather than force a weak bet.")
         return
 
     for i, c in enumerate(result["allocated"]):
@@ -431,7 +434,7 @@ def page_weekly_bet_slip():
             head, badge_col, action = st.columns([5, 1, 1])
             with head:
                 st.markdown(f"**${c['suggested_stake']:.2f}** — {c['description']}")
-                st.caption(f"{c['type']} · model {c['model_prob']*100:.1f}% · price {c['decimal_odds']:.2f}x")
+                st.caption(f"{c['type']} · all hit {c['model_prob']*100:.1f}% · payout {c['decimal_odds']:.2f}x")
             with badge_col:
                 st.badge(f"{edge*100:+.1f}% edge", color="green" if edge > 0 else "red")
             with action:
