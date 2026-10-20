@@ -66,7 +66,7 @@ def load_ngs(kind: str) -> pd.DataFrame:
 
 def cross_season_rolling(df: pd.DataFrame, group_col: str, value_col: str,
                          window: int | None = None, min_periods: int = 1,
-                         team_col: str | None = None) -> pd.Series:
+                         team_col: str | None = None, count_col: str | None = None) -> pd.Series:
     """Trailing rolling average of value_col within group_col, using only strictly
     PRIOR rows (shift(1)) in (season, week) order -- carries across a season
     boundary instead of resetting there. `df` must already be sorted by
@@ -88,9 +88,12 @@ def cross_season_rolling(df: pd.DataFrame, group_col: str, value_col: str,
     window=None -> expanding (all available prior history, unbounded);
     window=N -> trailing N-game average. Bounded windows are used for anything
     that should react to a real role/scheme change within a season rather than
-    being diluted by years of older data (see call sites)."""
-    if team_col is not None:
-        return _stint_rolling(df, group_col, value_col, window, min_periods, team_col)
+    being diluted by years of older data (see call sites).
+
+    team_col: see _stint_rolling. count_col: a boolean column; only rows where it is
+    True enter the average (see _stint_rolling)."""
+    if team_col is not None or count_col is not None:
+        return _stint_rolling(df, group_col, value_col, window, min_periods, team_col, count_col)
     g = df.groupby(group_col)[value_col]
     if window is None:
         return g.apply(lambda s: lag(s).expanding(min_periods=min_periods).mean()).reset_index(level=0, drop=True)
@@ -102,24 +105,51 @@ def cross_season_rolling(df: pd.DataFrame, group_col: str, value_col: str,
 MIN_STINT_GAMES = 3
 
 
-def _stint_rolling(df, group_col, value_col, window, min_periods, team_col) -> pd.Series:
-    """cross_season_rolling, but a player who changed teams is averaged over his games
-    for the NEW team only, once he has MIN_STINT_GAMES of them (added 2026-10-20).
+def _rolling_over_counted(df, keys, value_col, window, min_periods, count_col) -> pd.Series:
+    """Per group: mean of the last `window` counted prior rows (inference mode: up to and
+    including the latest row, like lag()). Uncounted rows carry the previous value."""
+    import inference_mode
+    v = df[value_col].where(df[count_col]) if count_col else df[value_col]
+    if not inference_mode.INCLUDE_LATEST_GAME:
+        v = v.groupby(keys).shift(1)
 
-    Found on Isaiah Likely: a backup in Baltimore (about 2.5 catches a game in 2025),
-    a starter for the Giants in 2026 (6.5 a game). The 16-game window was still 10
-    parts Baltimore after six Giants games, so the model put his receptions baseline at
-    4.1 and leaned Under 5.5 every week. Until the new stint has enough games, the old
-    cross-team average is still the best guess, so it falls back to that."""
+    def roll(x):
+        r = x.dropna().rolling(window or 10_000, min_periods=min_periods).mean()
+        return r.reindex(x.index).ffill()
+    return v.groupby(keys, group_keys=False).apply(roll).reindex(df.index)
+
+
+def _n_counted(df, keys, count_col) -> pd.Series:
+    import inference_mode
+    c = (df[count_col] if count_col else pd.Series(True, index=df.index)).astype(int)
+    n = c.groupby(keys).cumsum()
+    return n if inference_mode.INCLUDE_LATEST_GAME else n - c
+
+
+def _stint_rolling(df, group_col, value_col, window, min_periods, team_col, count_col=None) -> pd.Series:
+    """cross_season_rolling, but:
+
+    team_col: a player who changed teams is averaged over his games for the NEW team
+    only, once he has MIN_STINT_GAMES of them (added 2026-10-20). Found on Isaiah
+    Likely: a backup in Baltimore (about 2.5 catches a game in 2025), a starter for
+    the Giants in 2026 (6.5 a game). The 16-game window was still 10 parts Baltimore
+    after six Giants games, so the model put his receptions baseline at 4.1 and leaned
+    Under 5.5 every week. Until the new stint has enough games, the old cross-team
+    average is still the best guess, so it falls back to that.
+
+    count_col: only games where it is True count (added 2026-10-20). Found on Tanner
+    McKee: a backup's box score includes games he only held for kicks or took a knee
+    (0 attempts), so his passing baseline was 116 yards and 0.9 TDs while his actual
+    starts averaged ~240 and 1.3. Underdog only posts QB lines for the starter, so a
+    QB's baseline is his games actually playing QB."""
+    if team_col is None:
+        return _rolling_over_counted(df, df[group_col], value_col, window, min_periods, count_col)
     team = df[team_col]
     stint = (team != df.groupby(group_col)[team_col].shift(1)).astype(int).groupby(df[group_col]).cumsum()
     keys = [df[group_col], stint]
-    lagged = df.groupby(keys)[value_col].shift(1)
-    roll = (lagged.groupby(keys).rolling(window or 10_000, min_periods=min_periods).mean()
-            .reset_index(level=[0, 1], drop=True).sort_index())
-    n_prior = df.groupby(keys).cumcount()
-    across = cross_season_rolling(df, group_col, value_col, window, min_periods)
-    return roll.where(n_prior >= MIN_STINT_GAMES, across)
+    roll = _rolling_over_counted(df, keys, value_col, window, min_periods, count_col)
+    across = _rolling_over_counted(df, df[group_col], value_col, window, min_periods, count_col)
+    return roll.where(_n_counted(df, keys, count_col) >= MIN_STINT_GAMES, across)
 
 
 def build_team_week_offense(weekly_stats: pd.DataFrame) -> pd.DataFrame:

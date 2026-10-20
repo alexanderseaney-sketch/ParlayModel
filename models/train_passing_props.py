@@ -28,6 +28,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from player_prop_passing_features import build_passing_yards_dataset
 from game_context_features import build_game_context
 from calibration_report import print_calibration_report
+from matchup_context_features import MATCHUP_FEATURES, FINAL_FIT_MAX_SEASON, add_matchup_context
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
@@ -37,7 +38,7 @@ FEATURES = [
     "completion_percentage_above_expectation_rolling", "avg_intended_air_yards_rolling",
     "aggressiveness_rolling", "avg_time_to_throw_rolling", "def_epa_allowed_rolling",
     "temp", "wind", "is_dome",
-]
+] + MATCHUP_FEATURES
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
 
@@ -46,6 +47,7 @@ def _build_dataset() -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
     context = build_game_context(schedules).rename(columns={"team": "recent_team"})
     df = df.merge(context, on=["recent_team", "season", "week"], how="left")
+    df = add_matchup_context(df, "passing_yards", "attempts_last3", "attempts_rolling")
     return df
 
 
@@ -85,6 +87,8 @@ def main():
         if mask.sum() > 0:
             print(f"  >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} rows, {mask.mean()*100:.1f}%)")
 
+    # Final fit stops at FINAL_FIT_MAX_SEASON so 2026 real lines stay a held-out test.
+    df = df[df["season"] <= FINAL_FIT_MAX_SEASON]
     X_all, y_all = df[FEATURES], df["over_proxy_line"]
     rng = np.random.RandomState(42)
     n = len(X_all)
