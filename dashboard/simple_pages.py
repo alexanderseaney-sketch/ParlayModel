@@ -191,6 +191,7 @@ def _pick_label(choice: str, line, stat_name: str) -> str:
 
 def page_picks():
     _css()
+    recent_form.css()
     st.title("Today's picks")
     st.caption("The best-value props on Underdog right now, ranked by how much better our "
                "chance is than the price. Tap **Add** to put a pick on your parlay.")
@@ -255,6 +256,7 @@ def page_picks():
     <div class="ph-sub">{r.get('team') or ''} {r.get('position') or ''}{' · ' + games[r['game']] if r.get('game') in games else ''}{record}</div>
     <div class="ph-pick">{_pick_label(r['choice'], r['line'], r['stat_name'])}</div>
     <div style="margin-top:6px">{tags}</div>
+    {recent_form.chart_html(recent_form.recent_games(r['player'], r['stat_name']), r['line'], r['choice'])}
   </div>
   <div>
     <div class="ph-big">{_pct(r['chance'])}</div>

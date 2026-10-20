@@ -2054,8 +2054,16 @@ def page_underdog_props():
         display_df["Movement"] = display_df["line_movement"].apply(
             lambda v: f"{v:+g}" if pd.notna(v) and v != 0 else "")
         display_df = display_df.drop(columns=["line_movement"])
+        if {"full_name", "stat_name", "stat_value", "choice"} <= set(filtered.columns):
+            import recent_form
+            last5, hits5 = recent_form.table_columns(filtered["full_name"], filtered["stat_name"],
+                                                     filtered["stat_value"], filtered["choice"])
+            display_df["Last 5"], display_df["Hit L5"] = last5, hits5
 
-        st.dataframe(display_df, width='stretch', height=500, hide_index=True)
+        st.dataframe(display_df, width='stretch', height=500, hide_index=True, column_config={
+            "Last 5": st.column_config.BarChartColumn(help="His last 5 games for this stat, oldest first", y_min=0),
+            "Hit L5": st.column_config.TextColumn(help="How many of his last 5 games went this side's way"),
+        })
 
 
 def _news_page(title: str, icon: str, caption: str, filename: str, group_col: str, group_label: str,

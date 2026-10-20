@@ -369,15 +369,20 @@ def page_ev_finder():
     with tab_legs:
         view = cands[cands["edge"] >= min_edge].sort_values("edge", ascending=False)
         st.markdown(f"**{len(view)}** picks clear a {min_edge:.0%} edge.")
+        import recent_form
+        last5, hits5 = recent_form.table_columns(view["player"], view["stat_name"], view["line"], view["choice"])
         show = pd.DataFrame({
             "Player": view["player"], "Team": view["team"],
             "Pick": view["choice"].str.upper() + " " + view["line"].astype(str) + " " + view["stat_name"].map(pretty_stat_name),
+            "Last 5": last5, "Hit L5": hits5,
             prob_source: view["prob"], "Market": view["market_prob"], "Edge": view["edge"],
             "Fair odds": view["prob"].map(_odds_label), "Price": view["decimal"], "EV/$1": view["ev"],
             "Books": view["n_books"],
         })
         st.dataframe(show, hide_index=True, use_container_width=True, height=520, column_config={
             prob_source: st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
+            "Last 5": st.column_config.BarChartColumn(help="His last 5 games for this stat, oldest first", y_min=0),
+            "Hit L5": st.column_config.TextColumn(help="How many of his last 5 games went this pick's way"),
             "Market": st.column_config.NumberColumn(format="percent"),
             "Edge": st.column_config.NumberColumn(format="percent"),
             "Price": st.column_config.NumberColumn(format="%.2f"),
