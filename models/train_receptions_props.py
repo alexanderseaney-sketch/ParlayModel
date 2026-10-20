@@ -27,6 +27,7 @@ from xgboost import XGBClassifier
 from player_prop_receptions_features import build_receptions_dataset
 from individual_context_features import build_game_flags
 from calibration_report import print_calibration_report
+from matchup_context_features import MATCHUP_FEATURES, FINAL_FIT_MAX_SEASON, add_matchup_context
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
@@ -35,7 +36,7 @@ FEATURES = [
     "target_share_rolling", "receiving_air_yards_rolling", "catch_rate_rolling",
     "avg_separation_rolling", "avg_cushion_rolling", "catch_percentage_rolling",
     "def_epa_allowed_rolling", "div_game",
-]
+] + MATCHUP_FEATURES
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
 
@@ -48,6 +49,7 @@ def _build_dataset() -> pd.DataFrame:
     schedules = pd.read_csv(os.path.join(RAW_DIR, "schedules.csv"))
     flags = build_game_flags(schedules).rename(columns={"team": "recent_team"})
     df = df.merge(flags, on=["recent_team", "season", "week"], how="left")
+    df = add_matchup_context(df, "receptions", "targets_last3", "targets_rolling")
     return df
 
 
@@ -87,6 +89,8 @@ def main():
         if mask.sum() > 0:
             print(f"  >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} rows, {mask.mean()*100:.1f}%)")
 
+    # Final fit stops at FINAL_FIT_MAX_SEASON so 2026 real lines stay a held-out test.
+    df = df[df["season"] <= FINAL_FIT_MAX_SEASON]
     X_all, y_all = df[FEATURES], df["over_proxy_line"]
     rng = np.random.RandomState(42)
     n = len(X_all)

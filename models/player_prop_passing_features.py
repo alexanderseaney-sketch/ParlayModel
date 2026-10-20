@@ -37,10 +37,14 @@ def build_passing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # filtering low-attempt games out before this rolling average meant a QB's own
     # baseline silently excluded their mop-up/emergency games, not just this week's
     # label. Applied below instead, after the rolling features are computed.
+    # Baselines count only games he actually played QB (MIN_ATTEMPTS_TO_QUALIFY+
+    # attempts): a backup's kneel-downs and holder snaps aren't evidence of how he
+    # plays as the starter, which is the only QB Underdog posts lines for.
+    qb["_played_qb"] = qb["attempts"].fillna(0) >= MIN_ATTEMPTS_TO_QUALIFY
     for col in ["passing_yards", "attempts", "passing_tds", "interceptions"]:
         qb[f"{col}_rolling"] = cross_season_rolling(qb, "player_id", col, window=_ROLLING_WINDOW,
-                                 team_col="recent_team")
-        qb[f"{col}_last3"] = cross_season_rolling(qb, "player_id", col, window=3)
+                                 team_col="recent_team", count_col="_played_qb")
+        qb[f"{col}_last3"] = cross_season_rolling(qb, "player_id", col, window=3, count_col="_played_qb")
 
     # NGS passing: CPOE and avg intended air yards — skill + aggression signals
     ngs = ngs_passing.rename(columns={"player_gsis_id": "player_id"})

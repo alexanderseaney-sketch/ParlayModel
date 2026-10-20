@@ -239,6 +239,7 @@ PROP_CONFIGS = {
     "rushing_yards": {
         "stat_name": "rushing_yds",
         "model_path": "player_prop_rushing_yards_model.pkl",
+        "matchup": ("rushing_yards", "carries_last3", "carries_rolling"),
         "positions": ["RB"],
         "proxy_col": "rushing_yards_rolling",
         "context": ["game_flags", "game_context", "snap_share"],
@@ -270,6 +271,7 @@ PROP_CONFIGS = {
     "passing_yards": {
         "stat_name": "passing_yds",
         "model_path": "player_prop_passing_yards_model.pkl",
+        "matchup": ("passing_yards", "attempts_last3", "attempts_rolling"),
         "positions": ["QB"],
         "proxy_col": "passing_yards_rolling",
         "context": ["game_context"],
@@ -277,6 +279,7 @@ PROP_CONFIGS = {
     "receptions": {
         "stat_name": "receptions",
         "model_path": "player_prop_receptions_model.pkl",
+        "matchup": ("receptions", "targets_last3", "targets_rolling"),
         "positions": ["WR", "TE"],
         "proxy_col": "receptions_rolling",
         "context": ["game_flags"],
@@ -339,6 +342,7 @@ PROP_CONFIGS = {
     "passing_tds": {
         "stat_name": "passing_tds",
         "model_path": "player_prop_passing_tds_model.pkl",
+        "matchup": ("passing_tds", "attempts_last3", "attempts_rolling"),
         "positions": ["QB"],
         "proxy_col": "proxy_line",
         "context": [],
@@ -346,6 +350,7 @@ PROP_CONFIGS = {
     "passing_ints": {
         "stat_name": "passing_ints",
         "model_path": "player_prop_passing_ints_model.pkl",
+        "matchup": ("interceptions", "attempts_last3", "attempts_rolling"),
         "positions": ["QB"],
         "proxy_col": "proxy_line",
         "context": [],
@@ -617,6 +622,13 @@ def score_prop(prop_type: str, config: dict, min_week: int = 1,
         context = build_game_context(schedules).rename(
             columns={"team": "recent_team", "season": "next_season", "week": "next_week"})
         latest = latest.merge(context, on=["recent_team", "next_season", "next_week"], how="left")
+
+    if config.get("matchup"):
+        # The UPCOMING game's opponent defense, spread and injury report
+        # (matchup_context_features.py).
+        from matchup_context_features import add_matchup_context
+        latest = add_matchup_context(latest, *config["matchup"], season_col="next_season",
+                                     week_col="next_week")
 
     model_path = os.path.join(os.path.dirname(__file__), config["model_path"])
     with open(model_path, "rb") as f:

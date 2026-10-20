@@ -24,14 +24,17 @@ def build_game_context(schedules: pd.DataFrame) -> pd.DataFrame:
                        "spread_line", "temp", "wind", "roof", "home_rest", "away_rest"]].copy()
     home["team"] = home["home_team"]
     home["is_home"] = 1
-    home["team_implied_total"] = (home["total_line"] / 2) - (home["spread_line"] / 2)
+    # nflverse spread_line > 0 means the HOME team is favoured (checked 2026-10-20:
+    # corr(spread_line, home margin) = +0.43). This had the signs flipped, giving the
+    # favourite the LOWER implied total.
+    home["team_implied_total"] = (home["total_line"] / 2) + (home["spread_line"] / 2)
     home["rest_days"] = home["home_rest"]
 
     away = schedules[["game_id", "season", "week", "home_team", "away_team", "total_line",
                        "spread_line", "temp", "wind", "roof", "home_rest", "away_rest"]].copy()
     away["team"] = away["away_team"]
     away["is_home"] = 0
-    away["team_implied_total"] = (away["total_line"] / 2) + (away["spread_line"] / 2)
+    away["team_implied_total"] = (away["total_line"] / 2) - (away["spread_line"] / 2)
     away["rest_days"] = away["away_rest"]
 
     context = pd.concat([home, away], ignore_index=True)

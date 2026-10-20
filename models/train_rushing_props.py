@@ -26,6 +26,7 @@ from player_prop_rushing_features import build_rushing_yards_dataset
 from individual_context_features import build_game_flags
 from game_context_features import build_game_context, add_snap_share
 from calibration_report import print_calibration_report
+from matchup_context_features import MATCHUP_FEATURES, FINAL_FIT_MAX_SEASON, add_matchup_context
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
@@ -35,7 +36,7 @@ FEATURES = [
     "rush_yards_over_expected_per_att_rolling", "percent_attempts_gte_eight_defenders_rolling",
     "efficiency_rolling", "def_epa_allowed_rolling",
     "team_implied_total", "temp", "wind", "is_dome", "offense_pct_rolling", "is_primetime",
-]
+] + MATCHUP_FEATURES
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
 
@@ -54,6 +55,7 @@ def _build_dataset() -> pd.DataFrame:
     df = df.merge(flags, on=["recent_team", "season", "week"], how="left")
     df = df.merge(context, on=["recent_team", "season", "week"], how="left")
     df = add_snap_share(df)
+    df = add_matchup_context(df, "rushing_yards", "carries_last3", "carries_rolling")
     return df
 
 
@@ -93,6 +95,8 @@ def main():
         if mask.sum() > 0:
             print(f"  >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} rows, {mask.mean()*100:.1f}%)")
 
+    # Final fit stops at FINAL_FIT_MAX_SEASON so 2026 real lines stay a held-out test.
+    df = df[df["season"] <= FINAL_FIT_MAX_SEASON]
     X_all, y_all = df[FEATURES], df["over_proxy_line"]
     rng = np.random.RandomState(42)
     n = len(X_all)

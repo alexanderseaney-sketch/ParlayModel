@@ -16,6 +16,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 
 from player_prop_passing_features import build_passing_yards_dataset
 from calibration_report import print_calibration_report
+from matchup_context_features import MATCHUP_FEATURES, FINAL_FIT_MAX_SEASON, add_matchup_context
 
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 
@@ -24,13 +25,15 @@ CONFIGS = {
         "stat_col": "passing_tds",
         "features": ["passing_tds_rolling", "passing_tds_last3", "attempts_rolling", "attempts_last3",
                       "completion_percentage_above_expectation_rolling", "avg_intended_air_yards_rolling",
-                      "def_epa_allowed_rolling"],
+                      "def_epa_allowed_rolling"] + MATCHUP_FEATURES,
+        "matchup_stat": "passing_tds",
     },
     "passing_ints": {
         "stat_col": "interceptions",
         "features": ["interceptions_rolling", "interceptions_last3", "attempts_rolling", "attempts_last3",
                       "aggressiveness_rolling", "completion_percentage_above_expectation_rolling",
-                      "def_epa_allowed_rolling"],
+                      "def_epa_allowed_rolling"] + MATCHUP_FEATURES,
+        "matchup_stat": "interceptions",
     },
 }
 
@@ -40,6 +43,7 @@ def train_one(prop_type: str, config: dict) -> None:
     df = build_passing_yards_dataset(min_week=1)
     df["proxy_line"] = df[f"{stat_col}_rolling"]
     df["over_proxy_line"] = (df[stat_col] > df["proxy_line"]).astype(int)
+    df = add_matchup_context(df, config["matchup_stat"], "attempts_last3", "attempts_rolling")
     df = df.dropna(subset=features)
     print(f"\n=== {prop_type} ===")
     print(f"Dataset: {len(df)} QB player-games")
@@ -71,6 +75,8 @@ def train_one(prop_type: str, config: dict) -> None:
         if mask.sum() > 0:
             print(f"    >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} rows, {mask.mean()*100:.1f}%)")
 
+    # Final fit stops at FINAL_FIT_MAX_SEASON so 2026 real lines stay a held-out test.
+    df = df[df["season"] <= FINAL_FIT_MAX_SEASON]
     X_all, y_all = df[features], df["over_proxy_line"]
     rng = np.random.RandomState(42)
     n = len(X_all)
