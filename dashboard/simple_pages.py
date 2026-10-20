@@ -14,7 +14,7 @@ import json
 import os
 import sys
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -398,7 +398,7 @@ def page_build():
                  disabled=not ev["valid"]):
         entry_id, now = uuid.uuid4().hex[:10], datetime.now().isoformat()
         rows = [{
-            "date": date.today().isoformat(), "sport": "NFL", "player": l["player"],
+            "date": pd.Timestamp.now(tz="US/Eastern").date().isoformat(), "sport": "NFL", "player": l["player"],
             "stat": l["stat_name"], "choice": l["choice"], "line": l["line"],
             "multiplier_or_odds": l.get("decimal"), "stake": stake, "result": "pending",
             "notes": "Saved from My parlay", "logged_at": now, "entry_id": entry_id,
@@ -409,27 +409,80 @@ def page_build():
             st.error(err)
         else:
             legs.clear()
-            st.success("Saved. Mark it won or lost on **My Bets** once the games finish.")
+            st.success("Saved. **My Bets** settles it automatically once the games finish.")
     st.caption("This app never places bets: place the entry on Underdog yourself, then save it here.")
 
 
 # -------------------------------------------------------------------------- My Bets
 
+_LEG_ICON = {"won": "✅", "lost": "❌", "push": "⚪", "pending": "⏳"}
+
+
 def _entries(log: pd.DataFrame) -> pd.DataFrame:
-    from bet_entries import _with_entries, _entry_payout
+    from bet_entries import _with_entries, settle_entry
     b = _with_entries(log)
     out = []
     for eid, legs in b.groupby("entry_id", sort=False):
-        res = legs["result"].astype(str).str.lower()
-        status = "lost" if (res == "lost").any() else "won" if (res == "won").all() else \
-            "push" if (res.isin(["won", "push"])).all() else "pending"
+        status, payout = settle_entry(legs)
         stake = pd.to_numeric(legs["stake"], errors="coerce").iloc[0]
-        payout = _entry_payout(legs)
         profit = (stake * payout - stake if status == "won" and payout else
                   -stake if status == "lost" else 0.0)
         out.append({"entry_id": eid, "date": legs["date"].iloc[0], "legs": legs, "status": status,
                     "stake": stake, "payout": payout, "profit": profit})
     return pd.DataFrame(out)
+
+
+def _auto_grade(log: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Settle every pending leg whose game is final (bet_grading), save any change, and
+    return (log, live tracker output for legs still pending)."""
+    from bet_grading import grade_pending
+    if not log["result"].fillna("pending").astype(str).str.lower().isin(["pending", ""]).any():
+        return log, {}
+    with st.spinner("Checking box scores…"):
+        graded, n, live = grade_pending(log)
+    if n:
+        try:
+            save_bet_results(graded, message=f"Auto-grade {n} pick(s) from final box scores")
+            st.toast(f"Settled {n} pick{'s' if n != 1 else ''} from final box scores.")
+        except Exception as ex:  # noqa: BLE001
+            st.warning(f"Graded {n} pick(s) but couldn't save them: {ex}")
+    return graded, live
+
+
+def _leg_line(l: pd.Series, t: dict | None) -> str:
+    from bet_grading import can_grade
+    res = str(l.get("result") or "pending").lower()
+    text = f"{l['player']}: {_pick_label(l['choice'], float(l['line']), l['stat'])}"
+    actual = pd.to_numeric(l.get("actual"), errors="coerce")
+    if res != "pending":
+        detail = ("voided, didn't play or landed on the line" if res == "push" and pd.isna(actual)
+                  else "landed on the line" if res == "push"
+                  else f"finished with {actual:g}" if pd.notna(actual) else "")
+        return f"{_LEG_ICON.get(res, '⏳')} {text}" + (f" · {detail}" if detail else "")
+    if not can_grade(l["stat"]):
+        return f"⏳ {text} · can't be graded automatically, settle it by hand below"
+    if t and t.get("state") == "live":
+        now = f"has {t['value']:g}" if t.get("value") is not None else "in progress"
+        return f"🟡 {text} · {now}" + (f", {t['text']}" if t.get("text") else "")
+    if t and t.get("state") == "upcoming":
+        return f"⏳ {text} · {t['text']}"
+    return f"⏳ {text} · waiting on the final box score"
+
+
+def _settle_by_hand(log: pd.DataFrame, legs: pd.DataFrame, result: str) -> None:
+    """Fallback for legs the box score can't grade: set this entry's still-pending legs."""
+    pending = legs[legs["result"].astype(str).str.lower() == "pending"]
+    keys = set(pending["logged_at"].astype(str) + "|" + pending["player"].astype(str)
+               + "|" + pending["stat"].astype(str))
+    upd = log.copy()
+    hit = (upd["logged_at"].astype(str) + "|" + upd["player"].astype(str)
+           + "|" + upd["stat"].astype(str)).isin(keys)
+    upd.loc[hit, "result"] = result
+    try:
+        save_bet_results(upd)
+        st.rerun()
+    except Exception as ex:  # noqa: BLE001
+        st.error(f"Couldn't save: {ex}")
 
 
 def page_my_bets():
@@ -440,6 +493,7 @@ def page_my_bets():
         st.info("No bets saved yet. Build a parlay and tap **I placed this bet**.")
         st.caption(bet_log_location())
         return
+    log, live = _auto_grade(log)
     e = _entries(log)
     settled = e[e["status"].isin(["won", "lost"])]
     won = int((settled["status"] == "won").sum())
@@ -460,33 +514,38 @@ def page_my_bets():
     st.subheader(f"Waiting on results ({len(pending)})")
     if pending.empty:
         st.caption("Nothing pending.")
+    else:
+        st.caption("Each pick settles on its own once its game is final, from the official box "
+                   "score. A pick whose player doesn't play is voided and the entry pays at the "
+                   "smaller multiplier, like on Underdog.")
     for _, row in pending.iterrows():
         with st.container(border=True):
             to_win = f"\\${row['stake'] * row['payout']:,.2f}" if row["payout"] else "—"
             st.markdown(f"**{len(row['legs'])}-pick entry** · {row['date']} · "
                         f"\\${row['stake']:,.2f} to win {to_win}")
             for _, l in row["legs"].iterrows():
-                st.markdown(f"- {l['player']}: {_pick_label(l['choice'], float(l['line']), l['stat'])}")
-            b1, b2, _ = st.columns([1, 1, 3])
-            for btn, result in ((b1, "won"), (b2, "lost")):
-                if btn.button("Won" if result == "won" else "Lost", key=f"ph_{result}_{row['entry_id']}",
-                              width="stretch"):
-                    keys = set(row["legs"]["logged_at"].astype(str) + "|" + row["legs"]["player"].astype(str))
-                    upd = log.copy()
-                    hit = (upd["logged_at"].astype(str) + "|" + upd["player"].astype(str)).isin(keys)
-                    upd.loc[hit, "result"] = result
-                    try:
-                        save_bet_results(upd)
-                        st.rerun()
-                    except Exception as ex:  # noqa: BLE001
-                        st.error(f"Couldn't save: {ex}")
+                t = live.get((str(l["logged_at"]), str(l["player"]), str(l["stat"])))
+                st.markdown("- " + _leg_line(l, t))
+            with st.expander("Settle by hand"):
+                st.caption("Only needed for a pick the box score can't grade (quarter props, "
+                           "first TD scorer…). Sets this entry's unsettled picks.")
+                b1, b2, b3 = st.columns(3)
+                for btn, result, label in ((b1, "won", "They hit"), (b2, "lost", "One missed"),
+                                           (b3, "push", "Voided")):
+                    if btn.button(label, key=f"ph_{result}_{row['entry_id']}", width="stretch"):
+                        _settle_by_hand(log, row["legs"], result)
 
     done = e[e["status"] != "pending"]
     if not done.empty:
         st.subheader("History")
         st.dataframe(pd.DataFrame({
-            "Date": done["date"], "Picks": done["legs"].map(len),
-            "Result": done["status"].str.title(), "Stake": done["stake"].map(lambda v: f"${v:,.2f}"),
+            "Date": done["date"],
+            "Picks": done["legs"].map(lambda legs: "  ".join(
+                f"{_LEG_ICON.get(str(r).lower(), '⏳')} {p}" for p, r in zip(legs["player"], legs["result"]))),
+            "Result": done["status"].map({"won": "Won", "lost": "Lost", "push": "Refunded"}),
+            "Paid": done.apply(lambda r: f"{r['payout']:g}x" if r["status"] == "won" and r["payout"] else "—",
+                               axis=1),
+            "Stake": done["stake"].map(lambda v: f"${v:,.2f}"),
             "Profit": done["profit"].map(lambda v: f"{'+' if v >= 0 else '-'}${abs(v):,.2f}"),
         }), hide_index=True, width="stretch")
-    st.caption(bet_log_location() + " Full editing lives under More → Bet Log.")
+    st.caption(bet_log_location() + " To correct a settled result, use More → Bet Log.")

@@ -30,7 +30,7 @@ FILE_PATH = "bets.csv"
 BRANCH = "main"
 API = "https://api.github.com"
 COLUMNS = ["date", "sport", "player", "stat", "choice", "line", "multiplier_or_odds",
-           "stake", "result", "notes", "logged_at", "entry_id", "entry_payout"]
+           "stake", "result", "notes", "logged_at", "entry_id", "entry_payout", "actual"]
 
 
 class BetStoreError(RuntimeError):
@@ -124,7 +124,7 @@ def append(rows: list[dict], attempts: int = 3) -> None:
 KEY = ["logged_at", "player", "stat", "line"]
 
 
-def update_results(edited: pd.DataFrame, attempts: int = 3) -> None:
+def update_results(edited: pd.DataFrame, attempts: int = 3, message: str = "Update bet results") -> None:
     """Apply the Bet Log page's result edits onto the LATEST stored log (re-read, not the
     copy the page rendered), matched on KEY -- so a bet logged meanwhile (another tab, the
     assistant) is never overwritten."""
@@ -132,12 +132,18 @@ def update_results(edited: pd.DataFrame, attempts: int = 3) -> None:
         latest, sha = read()
         if latest.empty:
             return
-        keyed = edited.assign(_k=edited[KEY].astype(str).agg("|".join, axis=1)).set_index("_k")["result"]
         k = latest[KEY].astype(str).agg("|".join, axis=1)
-        new_results = k.map(keyed)
-        latest["result"] = new_results.where(new_results.notna(), latest["result"])
+        indexed = edited.assign(_k=edited[KEY].astype(str).agg("|".join, axis=1)).drop_duplicates("_k").set_index("_k")
+        # "actual" = the final stat value written by the auto-grader (bet_grading).
+        for col in ("result", "actual"):
+            if col not in indexed.columns:
+                continue
+            if col not in latest.columns:
+                latest[col] = pd.NA
+            new_vals = k.map(indexed[col])
+            latest[col] = new_vals.where(new_vals.notna(), latest[col])
         try:
-            write(latest, sha, "Update bet results")
+            write(latest, sha, message)
             return
         except BetStoreError as e:
             if str(e) != "stale" or i == attempts - 1:

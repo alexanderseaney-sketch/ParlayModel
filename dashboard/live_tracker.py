@@ -50,7 +50,8 @@ def _sum(*vals):
     return sum(present) if present else None
 
 
-# Underdog stat_name -> f(stats dict) using ESPN box-score categories/labels.
+# Underdog stat_name -> f(stats dict) using ESPN box-score categories/labels. Also what
+# My Bets auto-grades from (bet_grading): a stat added here settles automatically too.
 STAT_FUNCS = {
     "passing_yds": lambda s: s.get("passing.YDS"),
     "passing_tds": lambda s: s.get("passing.TD"),
