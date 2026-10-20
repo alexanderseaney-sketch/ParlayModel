@@ -30,7 +30,8 @@ def _board(df: pd.DataFrame) -> pd.DataFrame:
     d = df[df["choice"].astype(str).str.lower().isin(["over", "higher"])]
     if "match_type" in d.columns:
         d = d[d["match_type"].fillna("Game") == "Game"]
-    d = d[~d["stat_name"].astype(str).str.startswith(("period_", "season_"))]
+    # 1st quarter / 1st half lines included since 2026-10-20 so they can be graded.
+    d = d[~d["stat_name"].astype(str).str.startswith("season_")]
     d = d.dropna(subset=["full_name", "stat_name", "stat_value"])
     return d.drop_duplicates(["full_name", "stat_name"])[["full_name", "stat_name", "stat_value"]] \
         .rename(columns={"stat_value": "line"})

@@ -39,9 +39,10 @@ TRUST_MARGIN = 0.03
 MIN_N = 30
 
 
-def closing_lines_from_history(weeks_played: list[int]) -> pd.DataFrame:
+def closing_lines_from_history(weeks_played: list[int], stats=None) -> pd.DataFrame:
     h = pd.read_csv(os.path.join(B.RAW, "underdog_line_history.csv"))
-    h = h[h["stat_name"].isin(B.ACTUALS.keys())].copy()
+    # A "pulled" row is the line coming OFF the board, not a line you could bet.
+    h = h[h["stat_name"].isin(list(stats or B.ACTUALS.keys())) & (h["event"] != "pulled")].copy()
     h["snapshot_et"] = (pd.to_datetime(h["seen_at"], utc=True)
                         .dt.tz_convert("US/Eastern").dt.tz_localize(None))
     weeks = B._target_weeks(B.SCHEDULES)
@@ -75,6 +76,55 @@ def closing_lines_from_history(weeks_played: list[int]) -> pd.DataFrame:
     return lines
 
 
+def grade_extra(weeks_played: list[int]) -> pd.DataFrame:
+    """Grade models/extra_prop_models.py (every prop type the trained models don't
+    cover) against the same closing lines. Point-in-time: each week's expected values
+    use only earlier games, and the spreads were fitted on 2025, so nothing here was
+    tuned on these lines. Same output columns as B.grade (gated is always True: the
+    real line is used directly, no proxy to drift from)."""
+    import extra_prop_models as X
+    from utils import normalize_name
+
+    dists = X.load_dists()
+    stats = [s for s in X.STATS if s in dists]
+    lines = closing_lines_from_history(weeks_played, stats)
+    lines = lines[lines["choice"] == "over"]
+    if lines.empty:
+        return pd.DataFrame()
+    logs = X.load_logs()
+    logs["_k"] = logs["player_display_name"].apply(normalize_name)
+    lines["_k"] = lines["full_name"].apply(normalize_name)
+    ko = B._kickoffs(B.SCHEDULES)
+    out = []
+    for (season, week), wk in lines.groupby(["season", "week"]):
+        f = X.form_as_of(season, week, logs)
+        f["_k"] = f["player_display_name"].apply(normalize_name)
+        act = logs[(logs["season"] == season) & (logs["week"] == week)].drop_duplicates("_k")
+        act_long = act.melt(id_vars=["_k", "team"], value_vars=stats, var_name="stat_name", value_name="actual")
+        b = wk.merge(f[["_k", "stat_name", "mu", "position"]], on=["_k", "stat_name"], how="inner")
+        b = b.merge(act_long.rename(columns={"team": "_team"}), on=["_k", "stat_name"], how="inner")
+        k = ko[(ko["season"] == season) & (ko["week"] == week)][["team", "kickoff"]]
+        b = b.merge(k.rename(columns={"team": "_team"}), on="_team", how="left")
+        b = b[b["snapshot_et"] < b["kickoff"]].sort_values("snapshot_et") \
+            .drop_duplicates(["_k", "stat_name"], keep="last")
+        if b.empty:
+            continue
+        b["model_prob_over"] = np.nan
+        for s, x in b.groupby("stat_name"):
+            b.loc[x.index, "model_prob_over"] = X.prob_over(s, x["mu"].to_numpy(), x["stat_value"].to_numpy(), dists)
+        out.append(b)
+    if not out:
+        return pd.DataFrame()
+    g = pd.concat(out, ignore_index=True)
+    g = g[g["actual"].notna() & (g["actual"] != g["stat_value"])].copy()
+    g["went_over"] = (g["actual"] > g["stat_value"]).astype(int)
+    g["gated"] = True
+    g["real_line_used"] = True
+    g["proxy_line"] = g["stat_value"]
+    g["prop_type"] = "form_" + g["stat_name"]
+    return g
+
+
 def track_record(g: pd.DataFrame) -> dict:
     d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()].copy()
     d["hit"] = (d["model_prob_over"] > 0.5) == (d["went_over"] == 1)
@@ -92,14 +142,77 @@ def track_record(g: pd.DataFrame) -> dict:
             verdict = "trusted"
         else:
             verdict = "unproven"
+        picks_over = x["model_prob_over"] > 0.5
         out["by_stat"][stat] = {"n": n, "accuracy": acc, "baseline": baseline,
-                                "over_rate": over_rate, "verdict": verdict}
-    out["overall"] = {"n": int(len(d)), "accuracy": float(d["hit"].mean()) if len(d) else None}
+                                "over_rate": over_rate, "verdict": verdict,
+                                "model": "form" if str(x["prop_type"].iloc[0]).startswith("form_") else "trained",
+                                "picked_over": int(picks_over.sum()), "picked_under": int((~picks_over).sum()),
+                                "over_pick_accuracy": float(x.loc[picks_over, "hit"].mean()) if picks_over.any() else None,
+                                "under_pick_accuracy": float(x.loc[~picks_over, "hit"].mean()) if (~picks_over).any() else None}
+    po = d["model_prob_over"] > 0.5
+    out["overall"] = {"n": int(len(d)), "accuracy": float(d["hit"].mean()) if len(d) else None,
+                      "picked_over": int(po.sum()), "picked_under": int((~po).sum()),
+                      "over_pick_accuracy": float(d.loc[po, "hit"].mean()) if po.any() else None,
+                      "under_pick_accuracy": float(d.loc[~po, "hit"].mean()) if (~po).any() else None}
     return out
 
 
+def refit_real_line_shift(g: pd.DataFrame) -> None:
+    """Refit calibration.adjust_over_prob's logit shift for the trained models on every
+    graded week (2026-10-20). It used to be fitted only by backtest_underdog_lines.py,
+    on the two weeks of full snapshots it has, and at a time when receptions were still
+    scored against the proxy line (the receiving_rec bug fixed in PR #1). That stale
+    +0.19 shift pushed every pick toward the Over and cost the trusted stats 2-7
+    points of accuracy on real lines. Fitted on the raw (unshifted) probabilities;
+    each week's fit on the OTHER weeks is reported as the held-out check."""
+    from calibration import REAL_LINE_ADJ_PATH, REAL_LINE_MAX_SHIFT, log_loss
+    if not os.path.exists(os.path.join(B.RAW, "pbp.csv")):
+        print("[real-line shift] no pbp.csv, so the TD models didn't grade -- not refitted.")
+        return
+    d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()]
+    if len(d) < 100:
+        print("[real-line shift] fewer than 100 graded props -- not refitted.")
+        return
+    cs = np.linspace(-REAL_LINE_MAX_SHIFT, REAL_LINE_MAX_SHIFT, 101)
+
+    def best(x):
+        m = np.clip(x["model_prob_over"].to_numpy(float), 1e-4, 1 - 1e-4)
+        z, y = np.log(m / (1 - m)), x["went_over"].to_numpy()
+        return float(cs[int(np.argmin([log_loss(1 / (1 + np.exp(-(z + c))), y) for c in cs]))])
+
+    wk = d["season"].astype(str) + "-wk" + d["week"].astype(str)
+    held_out = {w: best(d[wk != w]) for w in sorted(wk.unique())}
+    out = {"logit_shift": best(d), "n_props": int(len(d)), "fit_without_week": held_out,
+           "raw_mean_p_over": float(d["model_prob_over"].mean()),
+           "actual_over_rate": float(d["went_over"].mean()),
+           "source": "backtesting/backtest_line_history.py",
+           "fitted_at": pd.Timestamp.now(tz="UTC").isoformat()}
+    with open(REAL_LINE_ADJ_PATH, "w") as f:
+        json.dump(out, f, indent=2)
+    print(f"[real-line shift] {out['logit_shift']:+.3f} on {len(d)} props "
+          f"(raw mean P(over) {out['raw_mean_p_over']:.3f} vs actual {out['actual_over_rate']:.3f})")
+
+
+# 1st quarter / 1st half props the trained models price. Their lines are archived from
+# 2026-10-20 on (data/archive_underdog_lines.py), so they grade as soon as weeks land.
+PERIOD_ACTUALS = ["period_1_receiving_yds", "period_1_2_receiving_yds", "period_1_rushing_yds",
+                  "period_1_2_rushing_yds", "period_1_passing_yds", "period_1_2_passing_yds"]
+
+
+def _add_period_actuals(weekly: pd.DataFrame) -> pd.DataFrame:
+    import extra_prop_models as X
+    if not os.path.exists(X.LOGS_PATH):
+        return weekly
+    logs = pd.read_csv(X.LOGS_PATH, usecols=["player_id", "season", "week"] + PERIOD_ACTUALS)
+    weekly = weekly.merge(logs.drop_duplicates(["player_id", "season", "week"]),
+                          on=["player_id", "season", "week"], how="left")
+    for c in PERIOD_ACTUALS:
+        B.ACTUALS.setdefault(c, lambda w, c=c: w[c])
+    return weekly
+
+
 def main():
-    weekly = pd.read_csv(os.path.join(B.RAW, "weekly_stats.csv"), low_memory=False)
+    weekly = _add_period_actuals(pd.read_csv(os.path.join(B.RAW, "weekly_stats.csv"), low_memory=False))
     season = int(weekly["season"].max())
     played = sorted(weekly.loc[weekly["season"] == season, "week"].unique().tolist())
     lines = closing_lines_from_history(played)
@@ -110,6 +223,15 @@ def main():
     if g.empty:
         print("Nothing gradable.")
         return
+    refit_real_line_shift(g)
+    # Grade what the app shows: the trained models' probabilities with that shift.
+    from calibration import adjust_over_prob
+    has = g["model_prob_over"].notna()
+    g.loc[has, "model_prob_over"] = adjust_over_prob(g.loc[has, "model_prob_over"].astype(float))
+    extra = grade_extra(played)
+    if not extra.empty:
+        extra["choice"] = "over"
+        g = pd.concat([g, extra], ignore_index=True)
     keep = ["gated", "season", "week", "_team", "full_name", "stat_name", "stat_value", "choice",
             "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over"]
     g[[c for c in keep if c in g.columns]].to_csv(OUT_CSV, index=False)
@@ -119,8 +241,8 @@ def main():
     print(f"Weeks: {rec['weeks']}  |  graded props: {rec['overall']['n']}  "
           f"overall accuracy {rec['overall']['accuracy']*100:.1f}%")
     for stat, r in rec["by_stat"].items():
-        print(f"  {stat:16} n={r['n']:>4}  model {r['accuracy']*100:5.1f}%  "
-              f"baseline {r['baseline']*100:5.1f}%  -> {r['verdict']}")
+        print(f"  {stat:26} n={r['n']:>4}  model {r['accuracy']*100:5.1f}%  "
+              f"baseline {r['baseline']*100:5.1f}%  overs hit {r['over_rate']*100:5.1f}%  -> {r['verdict']}")
     print(f"Saved -> {OUT_JSON}")
 
 

@@ -82,6 +82,60 @@ def _sportsbook_consensus(mtime: float) -> pd.DataFrame | None:
     return c
 
 
+# Volume stats whose trained-model proxy_line IS the player's rolling average, so it can
+# be checked against his actual recent games. (TD / yes-no props use a constant 0.5.)
+_BASELINE_CHECK_STATS = {"receiving_rec", "receiving_yds", "rushing_yds", "passing_yds"}
+# A baseline outside [0.65x, 1.5x] of the player's last 4 games is treated as broken.
+_BASELINE_LOW, _BASELINE_HIGH = 0.65, 1.5
+_FORM_KIND = {s: k for s, (k, _) in __import__("extra_prop_models").STATS.items()}
+
+
+@st.cache_data(show_spinner=False)
+def _last5_by_player(mtime: float) -> dict:
+    """normalized name -> his last 5 games from data/raw/prop_game_logs.csv (columns are
+    Underdog stat names), newest last."""
+    df = load_csv_if_exists("prop_game_logs.csv")
+    if df is None:
+        return {}
+    df = df.sort_values(["season", "week"]).assign(_k=lambda d: d["player_display_name"].apply(normalize_name))
+    return {k: g.tail(5) for k, g in df.groupby("_k")}
+
+
+def recent_form_check(c: pd.DataFrame) -> pd.DataFrame:
+    """Two sanity checks against each player's real recent games (added 2026-10-20,
+    after Isaiah Likely: the model's receptions baseline was 4.1 while he'd caught 6.5
+    a game for his new team).
+
+    last5_over / last5_n: how many of his last 5 games went over this line. Shown on
+    the card when the pick goes against 4+ of them. Not a filter: on real lines,
+    picks against recent form still hit about as often as the rest.
+
+    baseline_off: the model's own expected value (its rolling-average proxy line, or
+    the form model's mean) is outside 0.65x-1.5x of his last 4 games. That means the
+    inputs are wrong (stale team, missed role change, bad join), not that the model
+    is being clever, so the pick is held back."""
+    path = os.path.join(ROOT_DIR, "data", "raw", "prop_game_logs.csv")
+    recent = _last5_by_player(os.path.getmtime(path) if os.path.exists(path) else 0.0)
+    c = c.copy()
+    over, n, off, avg4 = [], [], [], []
+    for k, stat, line, base, is_form in zip(c["_k"], c["stat_name"], c["line"], c["baseline"], c["is_form"]):
+        g = recent.get(k)
+        if g is None or stat not in g.columns:
+            over.append(np.nan); n.append(0); off.append(False); avg4.append(np.nan)
+            continue
+        vals = g[stat].astype(float)
+        over.append(int((vals > float(line)).sum())); n.append(len(vals))
+        a = float(vals.tail(4).mean())
+        avg4.append(a)
+        # Volume stats only: for TDs, fumbles or 1st-quarter catches, 4 games can't
+        # tell a broken baseline from a normal quiet stretch.
+        checkable = ((is_form and _FORM_KIND.get(stat) in ("count", "cont")) or stat in _BASELINE_CHECK_STATS) \
+            and len(vals) >= 4 and a >= 3 and pd.notna(base)
+        off.append(bool(checkable and not (_BASELINE_LOW * a <= float(base) <= _BASELINE_HIGH * a)))
+    c["last5_over"], c["last5_n"], c["recent_avg"], c["baseline_off"] = over, n, avg4, off
+    return c
+
+
 def build_candidates(min_edge_floor: float = -1.0) -> tuple[pd.DataFrame, dict]:
     """Every model-backed, comparable single-game Underdog option with model, market
     and blended probabilities. Returns (candidates, info)."""
@@ -96,7 +150,8 @@ def build_candidates(min_edge_floor: float = -1.0) -> tuple[pd.DataFrame, dict]:
 
     board = score_underdog_board(props, preds, weekly)
     board = add_underdog_market_probs(board)
-    board = board[board["has_model"] & (board["scope"] == "game")].copy()
+    # Single-game props, quarter / half splits included (season-long props excluded).
+    board = board[board["has_model"] & (board["scope"] != "season")].copy()
     board = board[~board.apply(lambda r: is_low_noise_line(r["stat_name"], r["stat_value"]), axis=1)]
     # Same comparability gate the Parlay Builder / Weekly Bet Slip use: a prediction
     # made against a proxy far from the real line isn't trustworthy there.
@@ -143,6 +198,14 @@ def build_candidates(min_edge_floor: float = -1.0) -> tuple[pd.DataFrame, dict]:
     })
     c["position_prop"] = c["position"].astype(str) + " " + c["prop_type"].astype(str)
     c["leg_key"] = [leg_key(p, s) for p, s in zip(c["position"], c["stat_name"])]
+    c["_k"] = board["_k"].to_numpy()
+    c["is_form"] = c["prop_type"].astype(str).str.startswith("form_")
+    form_mu = board["form_mu"] if "form_mu" in board.columns else pd.Series(np.nan, index=board.index)
+    c["baseline"] = form_mu.fillna(board["proxy_line"]).to_numpy()
+    c = recent_form_check(c)
+    held = c[c["baseline_off"]]
+    info["held_back"] = sorted({f"{p} ({pretty_stat_name(s)})" for p, s in zip(held["player"], held["stat_name"])})
+    c = c[~c["baseline_off"]]
     return c.reset_index(drop=True), info
 
 
