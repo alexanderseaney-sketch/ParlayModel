@@ -583,6 +583,7 @@ _STAT_WEEKLY_COL = {
     "rushing_yds": "rushing_yards",
     "passing_yds": "passing_yards",
     "receptions": "receptions",
+    "receiving_rec": "receptions",  # Underdog's name for receptions
     "passing_tds": "passing_tds",
     "passing_ints": "interceptions",
 }

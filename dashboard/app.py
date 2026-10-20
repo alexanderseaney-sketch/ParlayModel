@@ -89,6 +89,7 @@ from usage import page_usage  # noqa: E402
 from matchups import page_matchups  # noqa: E402
 from bankroll import page_bankroll  # noqa: E402
 from home import page_home  # noqa: E402
+from simple_pages import page_picks, page_build, page_my_bets  # noqa: E402
 import nav_registry  # noqa: E402
 from bet_entries import (  # noqa: E402
     _with_entries, _entry_payout, _payout_multiple, _RESULT_TO_STATUS, _STATUS_TO_RESULT,
@@ -2190,7 +2191,12 @@ def page_run_pulls():
 # run before nav.run() executes any page body, so the reference is always valid by
 # the time a page function actually uses it.
 
-PAGE_HOME = st.Page(page_home, title="Home", icon=":material/home:", default=True)
+# The three main screens (2026-10-20 simplification, dashboard/simple_pages.py). Every
+# older page is still here, grouped under "More".
+PAGE_PICKS = st.Page(page_picks, title="Picks", icon=":material/star:", default=True)
+PAGE_BUILD = st.Page(page_build, title="My parlay", icon=":material/playlist_add_check:", url_path="build")
+PAGE_MY_BETS = st.Page(page_my_bets, title="My bets", icon=":material/receipt_long:", url_path="my_bets")
+PAGE_HOME = st.Page(page_home, title="Home", icon=":material/home:")
 PAGE_WEEKLY_BET_SLIP = st.Page(page_weekly_bet_slip, title="Weekly Bet Slip", icon="🎯")
 PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon="🧩")
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
@@ -2218,17 +2224,16 @@ nav_registry.PAGES.update({
     "game_center": PAGE_GAME_CENTER, "player": PAGE_PLAYER, "injuries": PAGE_INJURIES, "usage": PAGE_USAGE,
     "ev_finder": PAGE_EV_FINDER, "bet_log": PAGE_BET_LOG, "parlay_builder": PAGE_PARLAY_BUILDER,
     "bankroll": PAGE_BANKROLL, "matchups": PAGE_MATCHUPS,
+    "picks": PAGE_PICKS, "build": PAGE_BUILD, "my_bets": PAGE_MY_BETS,
 })
 
+# Top bar: the three main screens, then one "More" menu holding every other page.
 nav = st.navigation({
-    "Overview": [PAGE_HOME],
-    "Betting": [PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG, PAGE_BANKROLL],
-    "Research": [PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE, PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
-                 PAGE_SBNATION_NEWS, PAGE_NBC_NEWS],
-    "Admin": [PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
-})
-
-st.sidebar.divider()
-st.sidebar.caption("ParlayModel")
+    "": [PAGE_PICKS, PAGE_BUILD, PAGE_MY_BETS],
+    "More": [PAGE_HOME, PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG,
+             PAGE_BANKROLL, PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE,
+             PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
+             PAGE_SBNATION_NEWS, PAGE_NBC_NEWS, PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
+}, position="top")
 
 nav.run()

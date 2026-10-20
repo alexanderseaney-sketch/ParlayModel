@@ -101,13 +101,27 @@ jobs:
         continue-on-error: true
         run: python models/current_predictions.py
 
+      # Re-grades every played week against real Underdog closing lines and rewrites
+      # the per-stat track record the Picks screen uses to hide unproven stat types.
+      # ~7 min cold, so once a week: the Tuesday 12:00 UTC run (after Monday night)
+      # or any manual run.
+      - name: Refresh real-line track record (weekly)
+        continue-on-error: true
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%u%H)" = "212" ]; then
+            python backtesting/backtest_line_history.py
+          else
+            echo "Not the weekly slot -- skipping."
+          fi
+
       - name: Commit and push if anything changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # Directory-level add, not data/raw/*.csv: naming a .gitignore'd file
           # explicitly (pbp.csv) makes `git add` exit 1 and fail the job.
-          git add -A -- data/raw models/current_player_predictions.csv models/feature_importance.csv
+          git add -A -- data/raw models/current_player_predictions.csv models/feature_importance.csv \
+            backtesting/line_history_track_record.json backtesting/line_history_graded.csv
           if git diff --cached --quiet; then
             echo "No data changes -- nothing to commit."
           else
