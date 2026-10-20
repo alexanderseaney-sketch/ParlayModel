@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import recent_form
 from utils import (
     ROOT_DIR, append_bets, load_bet_log, save_bet_results, bet_log_location, pretty_stat_name,
 )
@@ -69,6 +70,9 @@ CSS = """
 .ph-yes {background: #1f3d2c; color: #7ee2a8;}
 .ph-no {background: #3d1f24; color: #f08a96;}
 .ph-meh {background: #292b31; color: #cfd3e5;}
+/* Slip rows: keep the remove / player card buttons beside a long pick name on phones. */
+[class*="st-key-ph_leg_"] {flex-wrap: nowrap !important;}
+[class*="st-key-ph_leg_"] > div:first-child {min-width: 0; flex: 1 1 0;}
 </style>
 """
 
@@ -353,6 +357,7 @@ def _link_lines(links: list[dict]) -> list[str]:
 
 def page_build():
     _css()
+    recent_form.css()
     st.title("My parlay")
     picks, _ = get_picks()
     games = game_labels(picks)
@@ -372,15 +377,22 @@ def page_build():
     elif n_games > 1:
         st.markdown(f"**{len(legs)} picks across {n_games} games**")
     for i, l in enumerate(legs):
-        c1, c2, c3 = st.columns([5, 2, 1], vertical_alignment="center")
-        matchup = games.get(l.get("game"))
-        c1.markdown(f"**{l['player']}** · {_pick_label(l['choice'], l['line'], l['stat_name'])}"
-                    + (f"  \n<span style='font-size:12px;color:#9397ab'>{matchup}</span>" if matchup else ""),
-                    unsafe_allow_html=True)
-        c2.markdown(f"{_pct(l['prob'])} chance")
-        if c3.button("✕", key=f"ph_rm_{i}", help="Remove"):
-            legs.pop(i)
-            st.rerun()
+        sub = " · ".join(x for x in [games.get(l.get("game")), f"{_pct(l['prob'])} chance"] if x)
+        form = recent_form.chart_html(recent_form.recent_games(l["player"], l["stat_name"]),
+                                      l["line"], l["choice"])
+        # A horizontal container (not columns) so the buttons stay beside the pick on phones.
+        with st.container(horizontal=True, vertical_alignment="center", gap="small", key=f"ph_leg_{i}"):
+            st.markdown(f"**{l['player']}** · {_pick_label(l['choice'], l['line'], l['stat_name'])}"
+                        f"  \n<span style='font-size:12px;color:#9397ab'>{sub}</span>" + form,
+                        unsafe_allow_html=True, width="stretch")
+            with st.container(width="content", gap="small"):
+                if st.button("✕", key=f"ph_rm_{i}", help="Remove"):
+                    legs.pop(i)
+                    st.rerun()
+                if st.button("", key=f"ph_card_{i}", icon=":material/bar_chart:", help="Player card: every game"):
+                    import nav_registry
+                    st.session_state["player_sel"] = l["player"]
+                    nav_registry.go("player")
 
     ev = evaluate_entry(legs)
     payout = ev["payout"]
