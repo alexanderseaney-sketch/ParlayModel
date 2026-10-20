@@ -219,6 +219,12 @@ def page_picks():
     # Underdog allows one pick per player per entry.
     slip_players = {l["player"] for l in _slip()}
     st.caption(f"{len(view)} pick(s) · board pulled {str(info.get('pulled_at') or '')[:16].replace('T', ' ')} UTC")
+    if info.get("held_back"):
+        with st.expander(f"{len(info['held_back'])} pick(s) held back by the safety check"):
+            st.caption("The model's starting estimate for these is far from what the player did in "
+                       "his last 4 games, which usually means a team or role change the data hasn't "
+                       "caught up with. Hidden until it lines up again.")
+            st.write(", ".join(info["held_back"]))
     if view.empty:
         st.info("Nothing clears this bar right now. Try **All**, or turn off **Proven stat types only**.")
 
@@ -228,6 +234,12 @@ def page_picks():
         if r["verdict"] != "trusted":
             tags += ('<span class="ph-tag ph-warn">Unproven stat</span>' if pd.notna(r["record"])
                      else '<span class="ph-tag ph-warn">Not graded yet</span>')
+        is_over = str(r["choice"]).lower() in ("over", "higher")
+        if r.get("last5_n", 0) == 5 and pd.notna(r.get("last5_over")):
+            against = r["last5_over"] <= 1 if is_over else r["last5_over"] >= 4
+            if against:
+                hit5 = int(r["last5_over"]) if not is_over else 5 - int(r["last5_over"])
+                tags += f'<span class="ph-tag ph-lean">Against his last 5 ({hit5}/5 went the other way)</span>'
         price = f"pays {r['decimal']:.2f}x" if pd.notna(r["decimal"]) else ""
         record = (f" · this prop type: {r['record'] * 100:.0f}% right on real lines"
                   if pd.notna(r["record"]) else "")
