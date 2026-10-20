@@ -111,7 +111,7 @@ div[data-testid="stCaptionContainer"], .stCaption, small {
 
 /* ---------------------------------------------------------------- layout */
 .stApp { background: var(--pm-bg); }
-.block-container { padding-top: 2.2rem !important; max-width: 1180px; }
+.block-container { padding-top: 4.5rem !important; max-width: 1180px; }
 
 /* Cards: st.container(border=True). Streamlit only paints a border when the
    container actually asked for one, so this is a no-op on layout blocks. */

@@ -46,7 +46,7 @@ def _open_entries() -> list[dict]:
 
 
 def page_home():
-    st.title("🏈 Home")
+    st.title("🏈 This week")
     # ---- stat band
     bank, last_week = bankroll_now()
     opens = _open_entries()
@@ -75,7 +75,7 @@ def page_home():
                 f"<span style='font-size:11px;color:{ui.N3};font-family:{ui.MONO}'>{ui.esc(g.spread_txt)} · O/U {total}</span>"
                 f"<span style='font-size:10.5px;color:{ui.N4}'>{ui.esc(g.weather_txt)}</span></div>",
                 unsafe_allow_html=True)
-            if col.button("Open ›", key=f"home_game_{g.game_id}", use_container_width=True, help="Open in Game Center"):
+            if col.button("Open ›", key=f"home_game_{g.game_id}", use_container_width=True, help="Open in Research → Games"):
                 st.session_state["game_id"] = g.game_id
                 nav_registry.go("game_center")
 
@@ -89,7 +89,7 @@ def page_home():
             label, bg, fg, border = STATE_BADGE.get(e["state"], STATE_BADGE["pending"])
             st.markdown(ui.row_card(ui.esc(e["title"]), ui.esc(e["sub"]), ui.badge(label, bg, fg, border, "9.5px"),
                                     extra=ui.mono(e["stake"], ui.N4, "10.5px")), unsafe_allow_html=True)
-        if st.button("Bet Log →", key="home_go_log", type="tertiary"):
+        if st.button("Full log →", key="home_go_log", type="tertiary"):
             nav_registry.go("bet_log")
     # ---- best edges
     with c2:
@@ -105,7 +105,7 @@ def page_home():
                        unsafe_allow_html=True)
             in_slip = (p["player"], p["stat_name"], str(p["choice"]).lower(), p["line"]) in slip_keys
             if b.button("✓" if in_slip else "➕", key=f"home_add_{i}", disabled=in_slip,
-                        help="In your slip" if in_slip else "Add to Parlay Builder slip"):
+                        help="In your slip" if in_slip else "Add to the Advanced builder slip"):
                 from ev_finder import _send_to_builder
                 _send_to_builder([p])
                 st.toast(f"Added {p['player']} {pick}")
@@ -128,5 +128,5 @@ def page_home():
             st.markdown(ui.row_card(f"<span style='color:{icolor}'>{icon}</span> {ui.esc(r.full_name)} {ui.mono(r.team)}",
                                     ui.mono(line, ui.N3, "11px"), ui.badge(r.now, bg, fg, size="9.5px")),
                         unsafe_allow_html=True)
-        if st.button("Injury Tracker →", key="home_go_inj", type="tertiary"):
+        if st.button("Injuries →", key="home_go_inj", type="tertiary"):
             nav_registry.go("injuries")

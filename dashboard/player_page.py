@@ -74,7 +74,7 @@ def _spark(values, fmt, height=90):
 
 
 def page_player():
-    st.title("👤 Player Pages")
+    st.title("👤 Players")
     players = _players(_mtime("weekly_stats.csv"), "")
     names = list(players["name"])
     sel = st.session_state.get("player_sel")

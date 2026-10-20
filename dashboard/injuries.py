@@ -25,13 +25,13 @@ def _line_cell(r) -> str:
 
 
 def page_injuries():
-    st.title("🩹 Injury Tracker")
+    st.title("🩹 Injuries")
     cw = current_week()
     st.caption(f"Week {cw[1]} injury report for QB / RB / WR / TE — status change since last week, latest "
                "practice participation, and how each player's main Underdog line has moved." if cw else "")
     rows = injury_report()
     if rows.empty:
-        st.info("No injury report for this week yet — run the nflverse pull from **Run Data Pulls**.")
+        st.info("No injury report for this week yet — run the nflverse pull from **Research → Data**.")
         return
 
     view = st.segmented_control("Show", ["All", "Downgraded", "Upgraded", "Line moved"], default="All",

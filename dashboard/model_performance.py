@@ -63,7 +63,7 @@ def _reliability_chart(m: dict):
 
 
 def page_model_performance():
-    st.title("🔬 Model Performance")
+    st.title("🔬 Track record")
     st.caption("Calibration on leave-one-season-out holdouts, what drives each model, "
                "and a point-in-time backtest against real Underdog lines.")
 

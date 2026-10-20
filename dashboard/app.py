@@ -152,7 +152,7 @@ def show_freshness_banner():
                 results = run_all_pulls()
             failed = [label for label, success, _ in results if not success]
             if failed:
-                st.warning(f"Some pulls had issues: {', '.join(failed)}. See Run Data Pulls for details.")
+                st.warning(f"Some pulls had issues: {', '.join(failed)}. See Research → Data for details.")
             else:
                 st.success("All data pulled.")
             st.cache_data.clear()
@@ -361,13 +361,13 @@ def page_weekly_bet_slip():
             "Each pick's probability is the model's estimate for Underdog's **real** line, "
             "corrected for the model's measured under-lean and blended 35/65 with the "
             "de-vigged market price — the combination that has scored best against real "
-            "Underdog closing lines so far (see **Model Performance → Real-line backtest**; "
+            "Underdog closing lines so far (see **Picks → Track record**; "
             "still only a few graded weeks). Picks must also clear the model's own "
             "confidence bar and a line-divergence check, so a prediction is never used "
             "against a materially different number than it was computed for.\n\n"
             "Every suggestion is an entry Underdog will actually take: 2–3 picks, one per "
             "player, from at least 2 teams — the same rules and correlation-adjusted odds "
-            "as the Parlay Builder and +EV Finder. No suggested entries share a player. "
+            "as the Advanced builder and +EV Finder. No suggested entries share a player. "
             "Stakes are Kelly-fraction sized against the entry's real payout. Every pick "
             "in an entry has to hit, so each one multiplies the error — most entries lose "
             "even when the picks are good. Only wager what you can afford to lose."
@@ -398,7 +398,7 @@ def page_weekly_bet_slip():
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
         except FileNotFoundError as e:
-            st.error(f"Missing data: {e}. Run the data pulls first from **Run Data Pulls**.")
+            st.error(f"Missing data: {e}. Run the data pulls first from **Research → Data**.")
 
     result = st.session_state.get("bet_slip_result")
     if not result:
@@ -430,7 +430,7 @@ def page_weekly_bet_slip():
             with action:
                 if st.button("➕ Add to slip", key=f"wbs_add_{i}", width="stretch"):
                     _add_leg_details_to_slip(c["leg_details"])
-                    st.toast(f"Added to Parlay Builder ({len(c['leg_details'])} leg(s))", icon="✅")
+                    st.toast(f"Added to the Advanced builder ({len(c['leg_details'])} leg(s))", icon="✅")
 
     total = sum(c["suggested_stake"] for c in result["allocated"])
     # The one saturated field the design system allows per page -- these three
@@ -445,11 +445,11 @@ def page_weekly_bet_slip():
                    "+EV opportunities to use the full budget this week. That's fine; forcing it isn't.")
 
     if st.session_state.slip and st.button("Go build/review your parlay →", type="secondary"):
-        st.switch_page(PAGE_PARLAY_BUILDER)
+        nav_registry.go("parlay_builder")
 
 
 def page_parlay_builder():
-    st.title("🧩 Parlay Builder")
+    st.title("🧩 Advanced builder")
     st.caption(
         "Add legs, filter by real model confidence, and see combined parlay math "
         "before anything gets placed."
@@ -459,7 +459,7 @@ def page_parlay_builder():
     predictions = load_current_predictions()
 
     if df is None:
-        st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls** first.")
+        st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Research → Data** first.")
         st.stop()
     underdog_freshness_bar(df, key="builder")
 
@@ -536,7 +536,7 @@ def page_parlay_builder():
         st.caption(
             "Confidence is how far the model's probability for Underdog's real line sits from a "
             "coin flip (0 = 50/50, 1 = certain). Higher is the model's stronger opinion, not a "
-            "guaranteed hit rate — see Model Performance → Real-line backtest for how picks have "
+            "guaranteed hit rate — see Picks → Track record for how picks have "
             "actually done against real Underdog lines."
         )
         # A range, not just a floor -- a floor-only filter can't isolate a middle
@@ -982,7 +982,7 @@ def page_parlay_builder():
             "human-approved each time). For now this gives you a clean slip to place manually."
         )
         b1, b2 = st.columns(2)
-        if b1.button("📒 Send slip to Bet Log (as pending)", width="stretch"):
+        if b1.button("📒 Send slip to My bets (as pending)", width="stretch"):
             rows, entry_id, now = [], uuid.uuid4().hex[:10], datetime.now().isoformat()
             for leg in st.session_state.slip:
                 rows.append({
@@ -1195,7 +1195,7 @@ def _delete_toolbar(bets: pd.DataFrame) -> None:
 
 
 def page_bet_log():
-    st.title("📒 Bet Log")
+    st.title("📒 Full bet log")
     st.caption(bet_log_location())
 
     props_df = load_csv_if_exists("underdog_props.csv")
@@ -1340,7 +1340,7 @@ def page_overview():
 
     n_missing = sum(1 for r in rows if r["Status"].startswith("⬜"))
     if n_missing:
-        st.info(f"{n_missing} file(s) not pulled yet — head to **Run Data Pulls** to fetch them.")
+        st.info(f"{n_missing} file(s) not pulled yet — head to **Research → Data** to fetch them.")
     else:
         st.success("All expected data files are present.")
 
@@ -1355,7 +1355,7 @@ def page_nfl_stats():
     df = load_csv_if_exists(dataset)
 
     if df is None:
-        st.warning(f"**{DATASET_LABELS.get(dataset, dataset)}** hasn't been pulled yet. Run it from **Run Data Pulls**.")
+        st.warning(f"**{DATASET_LABELS.get(dataset, dataset)}** hasn't been pulled yet. Run it from **Research → Data**.")
     else:
         col1, col2, col3 = filters.columns(3)
         with col1:
@@ -1788,7 +1788,7 @@ def _render_team_identity(team_abbr: str):
     if ident is None or team_abbr not in set(ident["team_abbr"]):
         st.caption(
             "Scheme tendencies not built yet — run **Team scheme tendencies (from pbp)** "
-            "on the Run Data Pulls page (needs `pbp.csv`)."
+            "on the Research → Data view (needs `pbp.csv`)."
         )
         return
     row = ident[ident["team_abbr"] == team_abbr].iloc[0]
@@ -1839,7 +1839,7 @@ def _render_coaching_staff(team_abbr: str):
     if staff is None or team_abbr not in set(staff["team_abbr"]):
         st.caption(
             "Coaching staff not pulled yet — run **Coaching staff (Wikipedia)** on the "
-            "Run Data Pulls page."
+            "Research → Data view."
         )
         return
     team_staff = staff[staff["team_abbr"] == team_abbr]
@@ -1865,7 +1865,7 @@ def _render_contracts(team_abbr: str):
     sc = load_csv_if_exists("spotrac_contracts.csv")
     if sc is None or team_abbr not in set(sc["team_abbr"]):
         st.caption("Contracts not pulled yet — run **Spotrac contracts + IR** on the "
-                   "Run Data Pulls page.")
+                   "Research → Data view.")
         return
     t = sc[sc["team_abbr"] == team_abbr].copy()
 
@@ -1911,7 +1911,7 @@ def _render_reserve_lists(team_abbr: str):
     if ros is None or team_abbr not in set(ros["team_abbr"]):
         st.caption(
             "Team-site roster not pulled yet — run **Official team-site rosters** on the "
-            "Run Data Pulls page."
+            "Research → Data view."
         )
         return
     team_ros = ros[ros["team_abbr"] == team_abbr]
@@ -1950,7 +1950,7 @@ def page_depth_charts():
     df = load_csv_if_exists("footballguys_depth.csv")
 
     if df is None:
-        st.warning("`footballguys_depth.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+        st.warning("`footballguys_depth.csv` hasn't been pulled yet. Run it from **Research → Data**.")
         return
 
     photo_map = load_player_photos()
@@ -2001,12 +2001,12 @@ UNDERDOG_DISPLAY_COLUMNS = [
 
 
 def page_underdog_props():
-    st.title("💰 Underdog Pick'em Props")
+    st.title("💰 Underdog board")
     df = load_csv_if_exists("underdog_props.csv")
     underdog_freshness_bar(df, key="props")
 
     if df is None:
-        st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+        st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Research → Data**.")
     else:
         col1, col2 = st.columns(2)
         with col1:
@@ -2068,7 +2068,7 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
     df = load_csv_if_exists(filename)
 
     if df is None:
-        st.warning(f"`{filename}` hasn't been pulled yet. Run it from **Run Data Pulls**.")
+        st.warning(f"`{filename}` hasn't been pulled yet. Run it from **Research → Data**.")
         return
 
     col1, col2 = st.container(border=True).columns(2)
@@ -2092,7 +2092,10 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
         filtered = filtered.sort_values("published", ascending=False)
     yard_divider(f"{len(filtered):,} of {len(df):,} items")
     import ui
-    for _, row in filtered.iterrows():
+    # Thousands of cards at once froze the browser; show the newest first, more on tap.
+    n_key = f"news_shown_{filename}"
+    shown = st.session_state.get(n_key, 50)
+    for _, row in filtered.head(shown).iterrows():
         with st.container(border=True):
             st.markdown(f"**{row.get('headline', '(no headline)')}**")
             group = row.get(group_col) if group_col in row.index and pd.notna(row.get(group_col)) else None
@@ -2107,6 +2110,9 @@ def _news_page(title: str, icon: str, caption: str, filename: str, group_col: st
                 st.caption(f"Athletes: {row['athletes_tagged']}")
             if pd.notna(row.get("link")):
                 st.markdown(f"[Read more]({row['link']})")
+    if len(filtered) > shown and st.button(f"Show more ({len(filtered) - shown:,} left)", key=f"more_{filename}"):
+        st.session_state[n_key] = shown + 50
+        st.rerun()
 
 
 def page_sbnation_news():
@@ -2173,53 +2179,49 @@ def page_run_pulls():
 
 
 # ==================================================================== Navigation
-# Named individually (not inline in the dict below) so page functions can reference
-# a specific Page object for st.switch_page -- e.g. the Weekly Bet Slip page's
-# "go build your parlay" button needs PAGE_PARLAY_BUILDER by name. These assignments
-# run before nav.run() executes any page body, so the reference is always valid by
-# the time a page function actually uses it.
+# Five tabs (2026-10-20 cleanup). Each older page is now a view inside one of them,
+# picked from the pills at the top of the tab -- nothing was removed, only regrouped.
+# nav_registry.LINKS maps the old page keys to their new home for go() links.
 
-# The three main screens (2026-10-20 simplification, dashboard/simple_pages.py). Every
-# older page is still here, grouped under "More".
-PAGE_PICKS = st.Page(page_picks, title="Picks", icon=":material/star:", default=True)
-PAGE_BUILD = st.Page(page_build, title="My parlay", icon=":material/playlist_add_check:", url_path="build")
-PAGE_MY_BETS = st.Page(page_my_bets, title="My bets", icon=":material/receipt_long:", url_path="my_bets")
-PAGE_HOME = st.Page(page_home, title="Home", icon=":material/home:")
-PAGE_WEEKLY_BET_SLIP = st.Page(page_weekly_bet_slip, title="Weekly Bet Slip", icon="🎯")
-PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon="🧩")
-PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
-PAGE_BANKROLL = st.Page(page_bankroll, title="Bankroll", icon=":material/account_balance_wallet:")
-PAGE_EV_FINDER = st.Page(page_ev_finder, title="+EV Finder", icon="📈")
-PAGE_MODEL_PERFORMANCE = st.Page(page_model_performance, title="Model Performance", icon="🔬")
-PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon="💰")
-PAGE_GAME_CENTER = st.Page(page_game_center, title="Game Center", icon=":material/stadium:")
-PAGE_PLAYER = st.Page(page_player, title="Player Pages", icon=":material/person:")
-PAGE_INJURIES = st.Page(page_injuries, title="Injury Tracker", icon=":material/healing:")
-PAGE_MATCHUPS = st.Page(page_matchups, title="Matchup Heatmap", icon=":material/grid_view:")
-PAGE_USAGE = st.Page(page_usage, title="Usage Trends", icon=":material/trending_up:")
-PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈")
-PAGE_COMPARE = st.Page(page_compare, title="Compare", icon="⚖️")
-PAGE_NFL_STATS = st.Page(page_nfl_stats, title="NFL Stats", icon="📊")
-PAGE_SBNATION_NEWS = st.Page(page_sbnation_news, title="SB Nation News", icon="📰")
-PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
-PAGE_OVERVIEW = st.Page(page_overview, title="Data Status", icon="🗂️")
-PAGE_RUN_PULLS = st.Page(page_run_pulls, title="Run Data Pulls", icon="🔄")
+def _data_view():
+    page_overview()
+    yard_divider("RUN DATA PULLS")
+    page_run_pulls()
 
-# Lets page modules link to each other (st.switch_page) without importing app.py.
+
+TABS = {
+    "picks": {"Top picks": page_picks, "+EV Finder": page_ev_finder,
+              "Underdog board": page_underdog_props, "Track record": page_model_performance},
+    "build": {"My parlay": page_build, "Weekly slip": page_weekly_bet_slip,
+              "Advanced builder": page_parlay_builder},
+    "my_bets": {"My bets": page_my_bets, "Full log": page_bet_log, "Bankroll": page_bankroll},
+    "research": {"Players": page_player, "Compare": page_compare, "Games": page_game_center,
+                 "Depth charts": page_depth_charts, "Matchups": page_matchups, "Usage": page_usage,
+                 "NFL stats": page_nfl_stats, "Data": _data_view},
+    "news": {"This week": page_home, "Injuries": page_injuries,
+             "SB Nation": page_sbnation_news, "NBC/PFT": page_nbc_news},
+}
+nav_registry.HUBS.update({k: list(v) for k, v in TABS.items()})
+
+
+def _tab(key: str):
+    def run():
+        nav_registry.show_hub(key, TABS[key])
+    run.__name__ = f"tab_{key}"  # st.Page derives the default url path from this
+    return run
+
+
+PAGE_PICKS = st.Page(_tab("picks"), title="Picks", icon=":material/star:", default=True)
+PAGE_BUILD = st.Page(_tab("build"), title="My parlay", icon=":material/playlist_add_check:", url_path="build")
+PAGE_MY_BETS = st.Page(_tab("my_bets"), title="My bets", icon=":material/receipt_long:", url_path="my_bets")
+PAGE_RESEARCH = st.Page(_tab("research"), title="Research", icon=":material/query_stats:", url_path="research")
+PAGE_NEWS = st.Page(_tab("news"), title="News", icon=":material/newspaper:", url_path="news")
+
 nav_registry.PAGES.update({
-    "game_center": PAGE_GAME_CENTER, "player": PAGE_PLAYER, "injuries": PAGE_INJURIES, "usage": PAGE_USAGE,
-    "ev_finder": PAGE_EV_FINDER, "bet_log": PAGE_BET_LOG, "parlay_builder": PAGE_PARLAY_BUILDER,
-    "bankroll": PAGE_BANKROLL, "matchups": PAGE_MATCHUPS,
     "picks": PAGE_PICKS, "build": PAGE_BUILD, "my_bets": PAGE_MY_BETS,
+    "research": PAGE_RESEARCH, "news": PAGE_NEWS,
 })
 
-# Top bar: the three main screens, then one "More" menu holding every other page.
-nav = st.navigation({
-    "": [PAGE_PICKS, PAGE_BUILD, PAGE_MY_BETS],
-    "More": [PAGE_HOME, PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_PARLAY_BUILDER, PAGE_BET_LOG,
-             PAGE_BANKROLL, PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE,
-             PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_NFL_STATS,
-             PAGE_SBNATION_NEWS, PAGE_NBC_NEWS, PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
-}, position="top")
+nav = st.navigation([PAGE_PICKS, PAGE_BUILD, PAGE_MY_BETS, PAGE_RESEARCH, PAGE_NEWS], position="top")
 
 nav.run()

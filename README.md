@@ -270,6 +270,22 @@ before starting work to see what the other side left you.*
 
 ---
 
+**2026-10-20 — [cloud] (4)**
+- Did: **Fewer tabs.** The top bar is now five tabs -- **Picks**, **My parlay**,
+  **My bets**, **Research**, **News** -- and the old "More" menu (20 pages) is gone. Every
+  older page is a view inside one tab, picked from a row of pills at the top:
+  Picks = Top picks / +EV Finder / Underdog board / Track record (was Model Performance);
+  My parlay = My parlay / Weekly slip / Advanced builder (was Parlay Builder);
+  My bets = My bets / Full log (was Bet Log) / Bankroll;
+  Research = Players / Compare / Games (Game Center) / Depth charts / Matchups / Usage /
+  NFL stats / Data (Data Status + Run Data Pulls);
+  News = This week (was Home) / Injuries / SB Nation / NBC/PFT.
+  Tabs and views are declared in `TABS` at the bottom of `dashboard/app.py`;
+  `nav_registry.go()` still accepts the old page keys (`LINKS`) and opens the right view.
+- Next: add a new page as a view in `TABS`, not as a new top-level tab.
+
+---
+
 **2026-10-20 — [cloud] (3)**
 - Did: **Removed the paid AI Assistant page** (`dashboard/assistant.py`). It billed the
   Anthropic API per message on top of Alex's Claude plan. Alex builds parlays by asking

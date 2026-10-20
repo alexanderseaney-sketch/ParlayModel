@@ -1,6 +1,6 @@
 """
 The three main screens of the simplified app (2026-10-20 redesign): Picks, Build and
-My Bets. Everything else in app.py still exists, under "More".
+My Bets. Each is the first view of its tab; the older pages are the other views (nav_registry).
 
 Design rules for these pages: one decision per screen, plain-English labels instead of
 model jargon, every number shown is one the user acts on (chance it hits, payout, is
@@ -597,4 +597,4 @@ def page_my_bets():
             "Stake": done["stake"].map(lambda v: f"${v:,.2f}"),
             "Profit": done["profit"].map(lambda v: f"{'+' if v >= 0 else '-'}${abs(v):,.2f}"),
         }), hide_index=True, width="stretch")
-    st.caption(bet_log_location() + " To correct a settled result, use More → Bet Log.")
+    st.caption(bet_log_location() + " To correct a settled result, use My bets → Full log.")
