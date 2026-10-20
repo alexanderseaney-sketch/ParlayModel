@@ -58,7 +58,8 @@ def build_receiving_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # from being a training LABEL, without also erasing it from being part of
     # every later week's rolling INPUT.
     for col in ["receiving_yards", "targets", "target_share", "receiving_air_yards"]:
-        wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW)
+        wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW,
+                                    team_col="recent_team")
         # Recent form: trailing 3-game average, more responsive than season-to-date
         wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3)
 

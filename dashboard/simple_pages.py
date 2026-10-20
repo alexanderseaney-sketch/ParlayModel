@@ -153,6 +153,24 @@ STAT_LABELS = {
     "receiving_yds": "receiving yards", "rushing_yds": "rushing yards", "passing_yds": "passing yards",
     "receiving_rec": "receptions", "rush_rec_tds": "rush + rec TDs", "passing_tds": "passing TDs",
     "passing_ints": "interceptions thrown",
+    "passing_comps": "pass completions", "passing_att": "pass attempts", "passing_long": "longest completion",
+    "passing_and_rushing_yds": "pass + rush yards", "rushing_att": "rush attempts",
+    "rushing_long": "longest rush", "receiving_tgts": "targets", "receiving_long": "longest reception",
+    "rush_rec_yds": "rush + rec yards", "fantasy_points": "fantasy points", "fumbles_lost": "fumbles lost",
+    "last_touchdown_scored": "last TD scorer", "period_first_touchdown_scored": "first TD scorer",
+    "tackles": "solo tackles", "assists": "tackle assists", "tackles_and_assists": "tackles + assists",
+    "sacks": "sacks", "defensive_ints": "interceptions (defense)", "field_goals_made": "field goals made",
+    "extra_points_made": "extra points made", "kicking_points": "kicking points",
+    "period_1_receiving_rec": "1Q receptions", "period_1_2_receiving_rec": "1H receptions",
+    "period_1_receiving_yds": "1Q receiving yards", "period_1_2_receiving_yds": "1H receiving yards",
+    "period_1_rushing_yds": "1Q rushing yards", "period_1_2_rushing_yds": "1H rushing yards",
+    "period_1_passing_yds": "1Q passing yards", "period_1_2_passing_yds": "1H passing yards",
+    "period_1_passing_tds": "1Q passing TDs", "period_1_2_passing_tds": "1H passing TDs",
+    "period_1_rush_rec_tds": "1Q rush + rec TDs", "period_1_2_rush_rec_tds": "1H rush + rec TDs",
+    "25_rec_yds_each_half": "25+ rec yards each half", "50_rec_yds_each_half": "50+ rec yards each half",
+    "25_rush_yds_each_half": "25+ rush yards each half", "50_rush_yds_each_half": "50+ rush yards each half",
+    "100_pass_yds_each_half": "100+ pass yards each half", "150_pass_yds_each_half": "150+ pass yards each half",
+    "25_pass_yds_each_quarter": "25+ pass yards each quarter", "50_pass_yds_each_quarter": "50+ pass yards each quarter",
 }
 
 
@@ -201,6 +219,12 @@ def page_picks():
     # Underdog allows one pick per player per entry.
     slip_players = {l["player"] for l in _slip()}
     st.caption(f"{len(view)} pick(s) · board pulled {str(info.get('pulled_at') or '')[:16].replace('T', ' ')} UTC")
+    if info.get("held_back"):
+        with st.expander(f"{len(info['held_back'])} pick(s) held back by the safety check"):
+            st.caption("The model's starting estimate for these is far from what the player did in "
+                       "his last 4 games, which usually means a team or role change the data hasn't "
+                       "caught up with. Hidden until it lines up again.")
+            st.write(", ".join(info["held_back"]))
     if view.empty:
         st.info("Nothing clears this bar right now. Try **All**, or turn off **Proven stat types only**.")
 
@@ -208,7 +232,14 @@ def page_picks():
         label, cls = _strength(r["edge"])
         tags = f'<span class="ph-tag {cls}">{label}</span>'
         if r["verdict"] != "trusted":
-            tags += '<span class="ph-tag ph-warn">Unproven stat</span>'
+            tags += ('<span class="ph-tag ph-warn">Unproven stat</span>' if pd.notna(r["record"])
+                     else '<span class="ph-tag ph-warn">Not graded yet</span>')
+        is_over = str(r["choice"]).lower() in ("over", "higher")
+        if r.get("last5_n", 0) == 5 and pd.notna(r.get("last5_over")):
+            against = r["last5_over"] <= 1 if is_over else r["last5_over"] >= 4
+            if against:
+                hit5 = int(r["last5_over"]) if not is_over else 5 - int(r["last5_over"])
+                tags += f'<span class="ph-tag ph-lean">Against his last 5 ({hit5}/5 went the other way)</span>'
         price = f"pays {r['decimal']:.2f}x" if pd.notna(r["decimal"]) else ""
         record = (f" · this prop type: {r['record'] * 100:.0f}% right on real lines"
                   if pd.notna(r["record"]) else "")
@@ -243,14 +274,20 @@ def page_picks():
 
     with st.expander("How we rate stat types"):
         rec = load_track_record()
+        order = {"trusted": 0, "unproven": 1, "avoid": 2}
         rows = [{"Stat": _stat_label(s).capitalize(), "Graded props": v["n"],
                  "Model right": _pct(v["accuracy"], 1), "Baseline": _pct(v["baseline"], 1),
+                 "Overs hit": _pct(v.get("over_rate"), 0),
                  "Rating": VERDICT_COPY[v["verdict"]][0]}
-                for s, v in rec.get("by_stat", {}).items()]
+                for s, v in sorted(rec.get("by_stat", {}).items(),
+                                   key=lambda kv: (order[kv[1]["verdict"]], -kv[1]["accuracy"]))]
         if rows:
             st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
             st.caption(f"Graded against real Underdog closing lines, weeks {', '.join(rec.get('weeks', []))}. "
-                       "Baseline = always taking whichever side hit more often. Updated by "
+                       "Baseline = always taking whichever side hit more often. Overs hit = how often "
+                       "the real result went over Underdog's line (under 50% means Unders won more). "
+                       "1st quarter / 1st half props aren't graded yet: their lines are logged from now on. "
+                       "Updated by "
                        "`backtesting/backtest_line_history.py`.")
         else:
             st.caption("No track record file yet: run `python backtesting/backtest_line_history.py`.")

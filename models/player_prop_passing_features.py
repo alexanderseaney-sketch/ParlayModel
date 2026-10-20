@@ -38,7 +38,8 @@ def build_passing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # baseline silently excluded their mop-up/emergency games, not just this week's
     # label. Applied below instead, after the rolling features are computed.
     for col in ["passing_yards", "attempts", "passing_tds", "interceptions"]:
-        qb[f"{col}_rolling"] = cross_season_rolling(qb, "player_id", col, window=_ROLLING_WINDOW)
+        qb[f"{col}_rolling"] = cross_season_rolling(qb, "player_id", col, window=_ROLLING_WINDOW,
+                                 team_col="recent_team")
         qb[f"{col}_last3"] = cross_season_rolling(qb, "player_id", col, window=3)
 
     # NGS passing: CPOE and avg intended air yards — skill + aggression signals

@@ -59,11 +59,13 @@ def build_rush_rec_tds_dataset(min_week: int = 1) -> pd.DataFrame:
     # player's own baseline silently excluded their cold/inactive games, not just this
     # week's label. Applied below instead, after the rolling features are computed.
     for col in ["rush_rec_tds", "carries", "targets"]:
-        skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW)
+        skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW,
+                                    team_col="recent_team")
         skill[f"{col}_last3"] = cross_season_rolling(skill, "player_id", col, window=3)
 
     for col in ["rushing_yards", "receiving_yards"]:
-        skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW)
+        skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW,
+                                    team_col="recent_team")
 
     # Opponent defense strength -- how many EPA/play they typically allow
     from feature_engineering import build_team_week_offense, build_team_week_defense

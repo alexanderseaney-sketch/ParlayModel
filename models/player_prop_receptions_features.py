@@ -35,7 +35,8 @@ def build_receptions_dataset(min_week: int = 1) -> pd.DataFrame:
     # baseline silently excluded their cold games, not just this week's label. Applied
     # below instead, after the rolling features are computed.
     for col in ["receptions", "targets", "target_share", "receiving_air_yards"]:
-        wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW)
+        wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW,
+                                    team_col="recent_team")
         wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3)
     # Catch rate — completions per target, a real skill/role signal separate from volume.
     # replace(0, nan), not (0, pd.NA): dividing by a pd.NA-bearing Series yields an

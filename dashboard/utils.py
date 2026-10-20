@@ -561,7 +561,6 @@ MIN_MEANINGFUL_LINE = {
     "receiving_yds": 19.5,
     "receiving_rec": 2.5,
     "passing_yds": 149.5,
-    "sacks": 1.5,
 }
 
 
@@ -586,6 +585,59 @@ _STAT_WEEKLY_COL = {
     "passing_tds": "passing_tds",
     "passing_ints": "interceptions",
 }
+
+
+@st.cache_data(show_spinner=False)
+def _read_extra_form(mtime: float) -> pd.DataFrame:
+    import extra_prop_models
+    f = pd.read_csv(extra_prop_models.FORM_PATH)
+    f["_k"] = f["player_display_name"].apply(normalize_name)
+    return f.drop_duplicates(["_k", "stat_name"])
+
+
+def load_extra_form() -> pd.DataFrame | None:
+    """models/extra_prop_form.csv: every player's expected value for the prop types the
+    trained models don't cover (models/extra_prop_models.py)."""
+    import extra_prop_models
+    if not os.path.exists(extra_prop_models.FORM_PATH):
+        return None
+    return _read_extra_form(os.path.getmtime(extra_prop_models.FORM_PATH))
+
+
+def score_extra_props(board: pd.DataFrame, form: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Fill model_prob_over for board rows whose stat models/extra_prop_models.py covers
+    (tackles, kicking, longest plays, attempts, fantasy points, ...), straight against
+    the real line. Sacks too: its trained model scores a proxy line Underdog's 0.5-sack
+    lines never match, so it never showed. Rows the form model can't price keep
+    whatever they had."""
+    import extra_prop_models as X
+    dists = X.load_dists()
+    form = load_extra_form() if form is None else form
+    if form is None or not dists:
+        return board
+    rows = board["stat_name"].isin([s for s in X.STATS if s in dists])
+    if not rows.any():
+        return board
+    m = board.loc[rows, ["_k", "stat_name"]].reset_index().merge(
+        form[["_k", "stat_name", "mu", "position", "team", "player_id"]], on=["_k", "stat_name"], how="inner"
+    ).set_index("index")
+    if m.empty:
+        return board
+    line = board.loc[m.index, "stat_value"].astype(float).to_numpy()
+    p = np.full(len(m), np.nan)
+    for s in m["stat_name"].unique():
+        k = (m["stat_name"] == s).to_numpy()
+        p[k] = X.prob_over(s, m.loc[k, "mu"].to_numpy(float), line[k], dists)
+    board.loc[m.index, "model_prob_over"] = p
+    board.loc[m.index, "predicted_prob_over"] = p
+    board.loc[m.index, "proxy_line"] = line
+    board.loc[m.index, "form_mu"] = m["mu"]
+    board.loc[m.index, "prop_type"] = "form_" + m["stat_name"]
+    board.loc[m.index, "real_line_used"] = True
+    board.loc[m.index, "has_model"] = True
+    for c, src in (("position", "position"), ("recent_team", "team"), ("nflverse_player_id", "player_id")):
+        board.loc[m.index, c] = board.loc[m.index, c].where(board.loc[m.index, c].notna(), m[src])
+    return board
 
 
 def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
@@ -645,10 +697,14 @@ def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
     scored = board.apply(_row_prob_over, axis=1, result_type="expand")
     board["model_prob_over"] = scored[0]
     board["real_line_used"] = scored[1].fillna(False)
+    board = score_extra_props(board)
+    is_form = board["prop_type"].astype(str).str.startswith("form_")
     if real_line_adjust:
-        # Corrects the model's measured under-lean vs real lines (calibration.py).
+        # Trained models only: the logit shift refitted weekly on real lines
+        # (calibration.py, backtest_line_history.py). The form model is already
+        # priced straight against the real line.
         from calibration import adjust_over_prob
-        has = board["model_prob_over"].notna()
+        has = board["model_prob_over"].notna() & ~is_form
         board.loc[has, "model_prob_over"] = adjust_over_prob(board.loc[has, "model_prob_over"].astype(float))
 
     choice = board["choice"].astype(str).str.lower()

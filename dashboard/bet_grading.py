@@ -11,8 +11,9 @@ by the 6-hourly refresh). A leg is written back only once its game is final:
 Legs still to be played, still live, or on a stat type the box score can't grade stay
 "pending". Which stat types can be graded is live_tracker.STAT_FUNCS (Underdog stat_name
 -> ESPN box-score value): add a stat there and it is tracked live AND auto-graded. The
-nflverse backup has its own map, WEEKLY_FUNCS below (it can't void: a player missing from
-nflverse may just be a name mismatch, so that leg waits for ESPN or a manual settle).
+nflverse backup has its own map, WEEKLY_FUNCS below, and falls back to
+data/raw/prop_game_logs.csv for every other Underdog stat (it can't void: a player missing
+from nflverse may just be a name mismatch, so that leg waits for ESPN or a manual settle).
 
 The final stat value is stored next to the result in an "actual" column.
 """
@@ -51,8 +52,28 @@ WEEKLY_FUNCS = {
 }
 
 
+LOGS_PATH = os.path.join(RAW_DIR, "prop_game_logs.csv")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _logs(mtime: float) -> pd.DataFrame:
+    """data/raw/prop_game_logs.csv: one column per Underdog stat_name, including the ones
+    ESPN's box score can't give (1Q / 1H splits, longest pass, first / last TD,
+    "X+ yards each half", Underdog fantasy points)."""
+    w = pd.read_csv(LOGS_PATH, low_memory=False)
+    w = w[w["season_type"] == "REG"]
+    return w.assign(_k=w["player_display_name"].map(normalize_name))
+
+
+def _log_stats() -> set:
+    if not os.path.exists(LOGS_PATH):
+        return set()
+    return set(_logs(os.path.getmtime(LOGS_PATH)).columns)
+
+
 def can_grade(stat) -> bool:
-    return str(stat or "") in STAT_FUNCS or str(stat or "") in WEEKLY_FUNCS
+    s = str(stat or "")
+    return s in STAT_FUNCS or s in WEEKLY_FUNCS or (s in _log_stats() and s not in ("season", "week"))
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -65,14 +86,17 @@ def _weekly(mtime: float) -> pd.DataFrame:
 def _weekly_value(row: pd.Series) -> float | None:
     """The leg's final stat from nflverse, or None when nflverse can't settle it (stat
     not mapped, week not posted yet, player not found or ambiguous)."""
-    f = WEEKLY_FUNCS.get(str(row.get("stat") or ""))
+    stat = str(row.get("stat") or "")
+    f = WEEKLY_FUNCS.get(stat)
     path = os.path.join(RAW_DIR, "weekly_stats.csv")
+    if f is None and stat in _log_stats():
+        f, path = (lambda w: w[stat]), LOGS_PATH
     if f is None or not os.path.exists(path):
         return None
     wk = bet_week(bet_date_for_week(row))
     if wk is None:
         return None
-    w = _weekly(os.path.getmtime(path))
+    w = _weekly(os.path.getmtime(path)) if path != LOGS_PATH else _logs(os.path.getmtime(path))
     hit = w[(w["season"] == wk[0]) & (w["week"] == wk[1]) & (w["_k"] == normalize_name(row["player"]))]
     if len(hit) != 1:
         return None

@@ -49,7 +49,8 @@ def build_rushing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # label, inflating the proxy for anyone with an irregular rushing role. Applied
     # below instead, after the rolling features are computed.
     for col in ["rushing_yards", "carries", "targets", "receiving_yards"]:
-        rb[f"{col}_rolling"] = cross_season_rolling(rb, "player_id", col, window=_ROLLING_WINDOW)
+        rb[f"{col}_rolling"] = cross_season_rolling(rb, "player_id", col, window=_ROLLING_WINDOW,
+                                 team_col="recent_team")
         rb[f"{col}_last3"] = cross_season_rolling(rb, "player_id", col, window=3)
 
     # NGS rushing: rush yards over expected is the cleanest efficiency signal here —

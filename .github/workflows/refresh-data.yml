@@ -22,7 +22,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -97,6 +97,15 @@ jobs:
         continue-on-error: true
         run: python models/current_predictions.py
 
+      # Every other Underdog prop type (tackles, kicking, longest plays, attempts,
+      # fantasy points, 1Q/1H receptions, ...): slim box scores + play-by-play splits
+      # from nflverse (~10 s), then each player's expected value per stat.
+      - name: Pull prop game logs and refresh the other prop types
+        continue-on-error: true
+        run: |
+          python data/pull_prop_game_logs.py
+          python models/extra_prop_models.py
+
       # Re-grades every played week against real Underdog closing lines and rewrites
       # the per-stat track record the Picks screen uses to hide unproven stat types.
       # ~7 min cold, so once a week: the Tuesday 12:00 UTC run (after Monday night)
@@ -105,6 +114,10 @@ jobs:
         continue-on-error: true
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%u%H)" = "212" ]; then
+            # The trained TD / quarter / half models build features from play-by-play;
+            # without pbp.csv their point-in-time predictions fail and drop out of the
+            # grading. Last two seasons only (gitignored, never committed).
+            python -c "import sys; sys.path.insert(0, 'data'); import pull_nflverse as p; p.pull_pbp([int(y) for y in '${{ steps.years.outputs.years }}'.split()][-2:])"
             python backtesting/backtest_line_history.py
             # Same-game pick links (teammates and opponents) for same game parlays, ~10 s.
             python models/build_leg_correlations.py
@@ -120,7 +133,8 @@ jobs:
           # explicitly (pbp.csv) makes `git add` exit 1 and fail the job.
           git add -A -- data/raw models/current_player_predictions.csv models/feature_importance.csv \
             backtesting/line_history_track_record.json backtesting/line_history_graded.csv \
-            models/leg_correlations.csv
+            models/leg_correlations.csv models/real_line_adjustment.json \
+            models/extra_prop_form.csv models/extra_prop_dists.json
           if git diff --cached --quiet; then
             echo "No data changes -- nothing to commit."
           else
