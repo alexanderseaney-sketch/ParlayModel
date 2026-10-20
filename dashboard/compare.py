@@ -93,7 +93,7 @@ def _player_header(latest: pd.Series):
 def _render_players_tab():
     weekly = load_csv_if_exists("weekly_stats.csv")
     if weekly is None:
-        st.warning("`weekly_stats.csv` hasn't been pulled yet — run **Run Data Pulls**.")
+        st.warning("`weekly_stats.csv` hasn't been pulled yet — run **Research → Data**.")
         return
 
     latest_rows = (weekly.sort_values(["season", "week"])
@@ -228,7 +228,7 @@ def _record_line(sub: pd.DataFrame) -> str:
 def _render_teams_tab():
     schedules = load_csv_if_exists("schedules.csv")
     if schedules is None:
-        st.warning("`schedules.csv` hasn't been pulled yet — run **Run Data Pulls**.")
+        st.warning("`schedules.csv` hasn't been pulled yet — run **Research → Data**.")
         return
     ident = load_csv_if_exists("team_scheme_tendencies.csv")
     weekly = load_csv_if_exists("weekly_stats.csv")
@@ -330,7 +330,7 @@ def _render_coaches_tab():
     hist = load_csv_if_exists("coach_history.csv")
     if hist is None:
         st.warning("`coach_history.csv` hasn't been built yet — run **Coach history "
-                   "(from pbp)** on the Run Data Pulls page (needs `pbp.csv`).")
+                   "(from pbp)** on the Research → Data view (needs `pbp.csv`).")
         return
     staff = load_csv_if_exists("coaching_staff.csv")
 

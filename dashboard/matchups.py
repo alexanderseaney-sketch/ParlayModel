@@ -37,7 +37,7 @@ def page_matchups():
     from utils import load_csv_if_exists
     m = load_csv_if_exists("fantasy_matchups.csv")
     if m is None or m.empty:
-        st.info("No matchup table yet — run **Fantasy matchups** from Run Data Pulls.")
+        st.info("No matchup table yet — run **Fantasy matchups** from Research → Data.")
         return
     c1, c2 = st.columns([3, 2])
     sort_pos = c1.segmented_control("Sort by", POSITIONS, default="WR", key="heat_sort") or "WR"

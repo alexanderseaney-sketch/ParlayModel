@@ -304,7 +304,7 @@ def _entry_panel(legs: list[dict], payout_mode: str, key: str):
 
     b1, b2, b3 = st.columns([1.2, 1.2, 2])
     with b1:
-        if st.button("➕ Send to Parlay Builder", key=f"send_{key}"):
+        if st.button("➕ Send to Advanced builder", key=f"send_{key}"):
             _send_to_builder(legs)
             st.toast(f"Added {len(legs)} legs to the slip.")
     with b2:
@@ -357,7 +357,7 @@ def page_ev_finder():
     cands, info = build_candidates()
     if cands.empty:
         st.warning("No comparable model-backed props right now. Pull Underdog props and run "
-                   "`python models/current_predictions.py` (Run Data Pulls page).")
+                   "`python models/current_predictions.py` (Research → Data).")
         return
     cands = _apply_prob_source(cands, prob_source)
     underdog_freshness_bar(load_csv_if_exists("underdog_props.csv"), key="ev")
@@ -389,7 +389,7 @@ def page_ev_finder():
                    "ranked by correlation-adjusted EV.")
         st.warning("Entry EV multiplies every leg's edge, so any overstatement compounds: a 4-pick "
                    "entry at +90% EV is four ~+17% legs. On real Underdog lines so far the model's "
-                   "edges have been only partly real (Model Performance → Real-line backtest) — "
+                   "edges have been only partly real (Picks → Track record) — "
                    "treat big entry EVs as a ranking, not a forecast, and size stakes small.", icon="⚠️")
         with st.spinner("Searching combinations…"):
             best = find_best_entries(cands, n_legs_range=legs_range, top_k=8, pool_size=18,

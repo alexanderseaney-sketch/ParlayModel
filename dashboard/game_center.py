@@ -108,7 +108,7 @@ def page_game_center():
                         unsafe_allow_html=True)
             in_slip = (p["player"], p["stat_name"], str(p["choice"]).lower(), p["line"]) in slip_keys
             if c2.button("✓" if in_slip else "➕", key=f"gc_add_{g['game_id']}_{i}", disabled=in_slip,
-                         help="In your slip" if in_slip else "Add to Parlay Builder slip"):
+                         help="In your slip" if in_slip else "Add to the Advanced builder slip"):
                 from ev_finder import _send_to_builder
                 _send_to_builder([p])
                 st.toast(f"Added {p['player']} {pick}")

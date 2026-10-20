@@ -109,8 +109,8 @@ def page_bankroll():
     if s.empty:
         stat_band([("BANKROLL", f"${start:,.0f}"), ("PROFIT/LOSS", "$0"), ("ROI", "—"), ("WIN RATE", "—"),
                    ("MAX DRAWDOWN", "—")])
-        st.info("No settled entries yet. Results appear here as entries are graded on the Bet Log "
-                "(✔ Save final results).")
+        st.info("No settled entries yet. Results appear here as entries are graded on My bets (automatically, or "
+                "by hand in Full log).")
         return
 
     weekly = s.groupby("week").agg(pnl=("pnl", "sum"), staked=("stake", "sum")).reset_index()
