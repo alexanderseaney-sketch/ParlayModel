@@ -16,7 +16,7 @@ import streamlit as st
 
 def _purge_stale_project_modules() -> None:
     """Streamlit re-executes this file on every rerun, but modules it imports
-    (utils, fantasy, models/*) stay cached in sys.modules. After a code deploy (git
+    (utils, models/*) stay cached in sys.modules. After a code deploy (git
     pull on Streamlit Cloud, or a local edit) the new app.py then runs against OLD
     copies of them -- 2026-10-04 the hosted app died with an ImportError because the
     new app.py imported load_underdog_props from a utils.py loaded before it existed.
@@ -78,10 +78,8 @@ st.set_page_config(page_title="ParlayModel", page_icon="🏈", layout="wide")
 # defined there, so no page markup changes.
 from theme import inject_theme, stat_band  # noqa: E402
 from compare import page_compare  # noqa: E402
-from fantasy import page_fantasy  # noqa: E402
 from ev_finder import page_ev_finder  # noqa: E402
 from model_performance import page_model_performance  # noqa: E402
-from assistant import page_assistant  # noqa: E402
 from injuries import page_injuries  # noqa: E402
 from game_center import page_game_center  # noqa: E402
 from player_page import page_player  # noqa: E402
@@ -130,15 +128,6 @@ def check_password() -> bool:
             st.error("Wrong password.")
     return False
 
-
-# Capture a Yahoo OAuth bounce-back (?code=) BEFORE the password gate -- otherwise
-# check_password()'s st.stop() runs first and the code is never read, so the round
-# trip silently does nothing. No-op unless a code/error is actually on the URL.
-try:
-    from yahoo_fantasy import handle_oauth_redirect as _yahoo_oauth_redirect
-    _yahoo_oauth_redirect()
-except Exception:  # noqa: BLE001
-    pass
 
 if not check_password():
     st.stop()
@@ -2202,7 +2191,6 @@ PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon=
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
 PAGE_BANKROLL = st.Page(page_bankroll, title="Bankroll", icon=":material/account_balance_wallet:")
 PAGE_EV_FINDER = st.Page(page_ev_finder, title="+EV Finder", icon="📈")
-PAGE_ASSISTANT = st.Page(page_assistant, title="AI Assistant", icon="💬")
 PAGE_MODEL_PERFORMANCE = st.Page(page_model_performance, title="Model Performance", icon="🔬")
 PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon="💰")
 PAGE_GAME_CENTER = st.Page(page_game_center, title="Game Center", icon=":material/stadium:")
@@ -2212,7 +2200,6 @@ PAGE_MATCHUPS = st.Page(page_matchups, title="Matchup Heatmap", icon=":material/
 PAGE_USAGE = st.Page(page_usage, title="Usage Trends", icon=":material/trending_up:")
 PAGE_DEPTH_CHARTS = st.Page(page_depth_charts, title="Depth Charts", icon="🏈")
 PAGE_COMPARE = st.Page(page_compare, title="Compare", icon="⚖️")
-PAGE_FANTASY = st.Page(page_fantasy, title="Fantasy", icon="🏆")
 PAGE_NFL_STATS = st.Page(page_nfl_stats, title="NFL Stats", icon="📊")
 PAGE_SBNATION_NEWS = st.Page(page_sbnation_news, title="SB Nation News", icon="📰")
 PAGE_NBC_NEWS = st.Page(page_nbc_news, title="NBC/PFT Rumor Mill", icon="📰")
@@ -2230,9 +2217,9 @@ nav_registry.PAGES.update({
 # Top bar: the three main screens, then one "More" menu holding every other page.
 nav = st.navigation({
     "": [PAGE_PICKS, PAGE_BUILD, PAGE_MY_BETS],
-    "More": [PAGE_HOME, PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG,
+    "More": [PAGE_HOME, PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_PARLAY_BUILDER, PAGE_BET_LOG,
              PAGE_BANKROLL, PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE,
-             PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_FANTASY, PAGE_NFL_STATS,
+             PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_NFL_STATS,
              PAGE_SBNATION_NEWS, PAGE_NBC_NEWS, PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],
 }, position="top")
 

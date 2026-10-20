@@ -51,10 +51,6 @@ jobs:
         continue-on-error: true
         run: python data/pull_nfl_rosters.py
 
-      - name: Pull player id bridge (Yahoo / Sleeper / ESPN <-> nflverse)
-        continue-on-error: true
-        run: python data/pull_player_ids.py
-
       - name: Pull coaching staff (Wikipedia)
         continue-on-error: true
         run: python data/pull_coaching_staff.py
