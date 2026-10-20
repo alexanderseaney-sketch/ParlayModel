@@ -106,6 +106,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%u%H)" = "212" ]; then
             python backtesting/backtest_line_history.py
+            # Same-game pick links (teammates and opponents) for same game parlays, ~10 s.
+            python models/build_leg_correlations.py
           else
             echo "Not the weekly slot -- skipping."
           fi
@@ -117,7 +119,8 @@ jobs:
           # Directory-level add, not data/raw/*.csv: naming a .gitignore'd file
           # explicitly (pbp.csv) makes `git add` exit 1 and fail the job.
           git add -A -- data/raw models/current_player_predictions.csv models/feature_importance.csv \
-            backtesting/line_history_track_record.json backtesting/line_history_graded.csv
+            backtesting/line_history_track_record.json backtesting/line_history_graded.csv \
+            models/leg_correlations.csv
           if git diff --cached --quiet; then
             echo "No data changes -- nothing to commit."
           else
