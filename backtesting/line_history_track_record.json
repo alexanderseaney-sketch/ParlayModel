@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-10-20T15:19:14.596840+00:00",
+  "weeks": [
+    "2026-wk1",
+    "2026-wk4",
+    "2026-wk5",
+    "2026-wk6"
+  ],
+  "by_stat": {
+    "passing_ints": {
+      "n": 30,
+      "accuracy": 0.7,
+      "baseline": 0.5666666666666667,
+      "over_rate": 0.43333333333333335,
+      "verdict": "trusted"
+    },
+    "passing_tds": {
+      "n": 34,
+      "accuracy": 0.6176470588235294,
+      "baseline": 0.5294117647058824,
+      "over_rate": 0.47058823529411764,
+      "verdict": "trusted"
+    },
+    "passing_yds": {
+      "n": 95,
+      "accuracy": 0.49473684210526314,
+      "baseline": 0.5473684210526316,
+      "over_rate": 0.5473684210526316,
+      "verdict": "avoid"
+    },
+    "receiving_rec": {
+      "n": 168,
+      "accuracy": 0.5892857142857143,
+      "baseline": 0.5416666666666667,
+      "over_rate": 0.4583333333333333,
+      "verdict": "trusted"
+    },
+    "rush_rec_tds": {
+      "n": 190,
+      "accuracy": 0.8315789473684211,
+      "baseline": 0.8368421052631578,
+      "over_rate": 0.1631578947368421,
+      "verdict": "unproven"
+    },
+    "rushing_yds": {
+      "n": 151,
+      "accuracy": 0.5231788079470199,
+      "baseline": 0.5629139072847682,
+      "over_rate": 0.4370860927152318,
+      "verdict": "unproven"
+    }
+  },
+  "overall": {
+    "n": 668,
+    "accuracy": 0.6362275449101796
+  }
+}

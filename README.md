@@ -270,6 +270,33 @@ before starting work to see what the other side left you.*
 
 ---
 
+**2026-10-20 — [cloud]**
+- Did: (1) **Simplified app**: top navigation with three main screens -- **Picks**
+  (best-value props in plain English, one tap to add), **My parlay** (chance all hit,
+  payout, expected return, a plain "worth it / not worth it" verdict, save to bets) and
+  **My bets** (record, profit, one-tap Won/Lost). Every older page is under **More**.
+  Code in `dashboard/simple_pages.py`. (2) **Receptions bug**: `_STAT_WEEKLY_COL` had no
+  entry for Underdog's `receiving_rec`, so receptions props never got the proxy->real
+  line conversion (the proxy-line probability was used against the real line as-is).
+  Fixed: receptions accuracy on real closing lines 53.6% -> 58.9% (168 props).
+  (3) **New `backtesting/backtest_line_history.py`**: grades every played week against
+  real closing lines from the committed `underdog_line_history.csv` (no prices, but
+  covers wk1/4/5/6 = 668 props vs the old backtest's 2 weeks). Writes a per-stat
+  verdict (`line_history_track_record.json`: trusted / unproven / avoid vs the
+  always-take-the-commoner-side baseline). Picks shows only trusted stat types by
+  default. Current: passing INTs 70.0% (baseline 56.7%), passing TDs 61.8% (52.9%),
+  receptions 58.9% (54.2%) trusted; rushing yds 52.3% (56.3%) and rush+rec TDs 83.2%
+  (83.7%, all base rate) unproven; passing yds 49.5% avoid. Refreshed weekly by the
+  data workflow (Tuesday 12:00 UTC run).
+- Tested and rejected: learned logit stacking of model + market (global and per stat)
+  and per-stat Platt recalibration, leave-one-week-out -- all tied or lost to the
+  fixed 35/65 blend / raw model. Not enough graded weeks to fit more than the blend.
+- Blocked: receiving yards / RB receiving models fail locally without pbp
+  participation columns (`defenders_in_box`), so they aren't in the track record yet.
+- Next: once wk7+ are graded, re-check whether rushing yds earns "trusted".
+
+---
+
 **2026-10-02 — [home]**
 - Did: (1) **Live features were one game stale** -- rolling features are shift(1), and
   current_predictions.py scores each player's latest PLAYED row, so that game was never
