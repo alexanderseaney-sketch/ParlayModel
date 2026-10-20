@@ -80,7 +80,6 @@ from theme import inject_theme, stat_band  # noqa: E402
 from compare import page_compare  # noqa: E402
 from ev_finder import page_ev_finder  # noqa: E402
 from model_performance import page_model_performance  # noqa: E402
-from assistant import page_assistant  # noqa: E402
 from injuries import page_injuries  # noqa: E402
 from game_center import page_game_center  # noqa: E402
 from player_page import page_player  # noqa: E402
@@ -2192,7 +2191,6 @@ PAGE_PARLAY_BUILDER = st.Page(page_parlay_builder, title="Parlay Builder", icon=
 PAGE_BET_LOG = st.Page(page_bet_log, title="Bet Log", icon="📒")
 PAGE_BANKROLL = st.Page(page_bankroll, title="Bankroll", icon=":material/account_balance_wallet:")
 PAGE_EV_FINDER = st.Page(page_ev_finder, title="+EV Finder", icon="📈")
-PAGE_ASSISTANT = st.Page(page_assistant, title="AI Assistant", icon="💬")
 PAGE_MODEL_PERFORMANCE = st.Page(page_model_performance, title="Model Performance", icon="🔬")
 PAGE_UNDERDOG_PROPS = st.Page(page_underdog_props, title="Underdog Props", icon="💰")
 PAGE_GAME_CENTER = st.Page(page_game_center, title="Game Center", icon=":material/stadium:")
@@ -2219,7 +2217,7 @@ nav_registry.PAGES.update({
 # Top bar: the three main screens, then one "More" menu holding every other page.
 nav = st.navigation({
     "": [PAGE_PICKS, PAGE_BUILD, PAGE_MY_BETS],
-    "More": [PAGE_HOME, PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_ASSISTANT, PAGE_PARLAY_BUILDER, PAGE_BET_LOG,
+    "More": [PAGE_HOME, PAGE_WEEKLY_BET_SLIP, PAGE_EV_FINDER, PAGE_PARLAY_BUILDER, PAGE_BET_LOG,
              PAGE_BANKROLL, PAGE_GAME_CENTER, PAGE_PLAYER, PAGE_MATCHUPS, PAGE_INJURIES, PAGE_USAGE,
              PAGE_UNDERDOG_PROPS, PAGE_DEPTH_CHARTS, PAGE_COMPARE, PAGE_NFL_STATS,
              PAGE_SBNATION_NEWS, PAGE_NBC_NEWS, PAGE_MODEL_PERFORMANCE, PAGE_OVERVIEW, PAGE_RUN_PULLS],

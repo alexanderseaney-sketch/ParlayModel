@@ -270,6 +270,14 @@ before starting work to see what the other side left you.*
 
 ---
 
+**2026-10-20 — [cloud] (3)**
+- Did: **Removed the paid AI Assistant page** (`dashboard/assistant.py`). It billed the
+  Anthropic API per message on top of Alex's Claude plan. Alex builds parlays by asking
+  Claude in the claude.ai project instead. The +EV Finder's "AI read" stays: with no
+  `ANTHROPIC_API_KEY` set it uses the free template summary (models/interpreter.py).
+
+---
+
 **2026-10-20 — [cloud] (2)**
 - Did: **Removed the fantasy football features** (Alex uses FantasyPros for that; this
   app is for parlays, news and stats research): Fantasy page (`dashboard/fantasy.py`),
