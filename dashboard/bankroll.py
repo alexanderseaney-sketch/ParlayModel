@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import ui
-from bet_entries import _with_entries, _entry_payout, _RESULT_TO_STATUS
+from bet_entries import _with_entries, settle_entry
 from model_performance import _layout
 from theme import stat_band
 from utils import load_bet_log
@@ -34,7 +34,6 @@ def starting_bankroll() -> float:
 
 def settled_entries() -> pd.DataFrame:
     """One row per settled entry: date, week label, legs, stats, stake, payout, state, pnl."""
-    from live_tracker import entry_status
     try:
         bets = load_bet_log()
     except Exception:  # noqa: BLE001
@@ -44,11 +43,11 @@ def settled_entries() -> pd.DataFrame:
     b = _with_entries(bets)
     rows = []
     for eid, legs in b.groupby("entry_id"):
-        state = entry_status([_RESULT_TO_STATUS.get(x, "pending") for x in legs["result"]])
+        # settle_entry re-prices an entry with a voided pick at the reduced multiplier.
+        state, payout = settle_entry(legs)
         if state not in ("won", "lost", "push"):
             continue
         stake = pd.to_numeric(legs["stake"], errors="coerce").max()
-        payout = _entry_payout(legs)
         if pd.isna(stake) or (state == "won" and not payout):
             continue
         pnl = stake * (payout - 1) if state == "won" else (-stake if state == "lost" else 0.0)

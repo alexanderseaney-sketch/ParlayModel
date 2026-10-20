@@ -1254,12 +1254,11 @@ def page_bet_log():
     bets = _with_entries(bets)
 
     # Entry-level summary: an entry is won only when every non-push pick won.
-    from live_tracker import entry_status
+    from bet_entries import settle_entry
     per_entry = pd.DataFrame([{
         "stake": pd.to_numeric(g["stake"], errors="coerce").max(),
-        "payout": _entry_payout(g),
-        "state": entry_status([_RESULT_TO_STATUS.get(x, "pending") for x in g["result"]]),
-    } for _, g in bets.groupby("entry_id")])
+        "payout": settle[1], "state": settle[0],
+    } for _, g in bets.groupby("entry_id") for settle in [settle_entry(g)]])
     settled = per_entry[per_entry["state"].isin(["won", "lost", "push"])]
     profit = sum(
         (r.stake * (r.payout - 1) if r.state == "won" else -r.stake if r.state == "lost" else 0.0)

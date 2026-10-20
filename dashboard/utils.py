@@ -455,6 +455,7 @@ def load_bet_log() -> pd.DataFrame:
         return pd.DataFrame(columns=[
             "date", "sport", "player", "stat", "choice", "line",
             "multiplier_or_odds", "stake", "result", "notes", "logged_at", "entry_id", "entry_payout",
+            "actual",
         ])
     return pd.read_csv(BET_LOG_PATH)
 
@@ -507,11 +508,11 @@ def clear_bet_log() -> str | None:
         return f"Couldn't clear the bet log: {e}"
 
 
-def save_bet_results(edited: pd.DataFrame) -> None:
+def save_bet_results(edited: pd.DataFrame, message: str = "Update bet results") -> None:
     """Persist result edits from the Bet Log page (GitHub store merges onto the latest log)."""
     import bet_store
     if bet_store.enabled():
-        bet_store.update_results(edited)
+        bet_store.update_results(edited, message=message)
         return
     edited.to_csv(BET_LOG_PATH, index=False)  # local mode
 

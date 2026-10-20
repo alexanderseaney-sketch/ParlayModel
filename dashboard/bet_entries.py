@@ -50,3 +50,43 @@ def _payout_multiple(val) -> float | None:
 
 _RESULT_TO_STATUS = {"won": "hit", "lost": "miss", "push": "push", "pending": "pending"}
 _STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "push"}
+
+
+# Underdog's legacy fixed table (models/parlay_calculator.STANDARD_PAYOUTS), used only to
+# shrink an entry's payout after a void when the legs' own multipliers weren't logged.
+_STANDARD_PAYOUTS = {2: 3.0, 3: 6.0, 4: 10.0, 5: 20.0, 6: 37.5, 7: 65.0, 8: 120.0}
+
+
+def settle_entry(legs: pd.DataFrame) -> tuple[str, float | None]:
+    """(status, payout multiple actually paid) for one entry, under Underdog's rules:
+    any lost leg loses the entry; a pushed or voided leg (stored as "push": DNP, inactive,
+    landed exactly on the line) is removed and the entry pays at the reduced multiplier
+    for the legs left; an entry left with fewer than two live legs is refunded (1.0x).
+    status is won | lost | push (refunded) | pending."""
+    res = legs["result"].fillna("pending").astype(str).str.lower().str.strip()
+    full = _entry_payout(legs)
+    if (res == "lost").any():
+        return "lost", 0.0
+    if not (res.isin(["won", "push"])).all():
+        return "pending", full
+    live = res == "won"
+    if live.sum() == 0 or (len(legs) > 1 and live.sum() < 2):
+        return "push", 1.0
+    if live.all():
+        return "won", full
+    return "won", _reduced_payout(legs, live, full)
+
+
+def _reduced_payout(legs: pd.DataFrame, live: pd.Series, full: float | None) -> float | None:
+    """Full payout with the voided legs taken out. Each leg's own multiplier (logged
+    since the My parlay screen) divides out exactly; otherwise scale by the fixed table."""
+    if full is None:
+        return None
+    voided = (pd.to_numeric(legs["multiplier_or_odds"], errors="coerce")[~live.values]
+              if "multiplier_or_odds" in legs.columns else pd.Series(dtype=float))
+    if len(voided) and voided.notna().all() and (voided > 1).all():
+        return round(full / float(voided.prod()), 2)
+    n, k = len(legs), int(live.sum())
+    if n in _STANDARD_PAYOUTS and k in _STANDARD_PAYOUTS:
+        return round(full * _STANDARD_PAYOUTS[k] / _STANDARD_PAYOUTS[n], 2)
+    return None
