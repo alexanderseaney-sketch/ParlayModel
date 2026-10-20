@@ -18,19 +18,42 @@ from utils import RAW_DIR, normalize_name
 N_GAMES = 5
 
 
+@st.cache_resource(show_spinner=False)
+def _last5(mtime: float) -> dict:
+    """ev_finder._last5_by_player, held as a resource: st.cache_data copies its dict of
+    per-player frames on every call (about a second each), too slow for a table with a
+    row per prop. mtime only busts the cache when the file changes."""
+    from ev_finder import _last5_by_player
+    return _last5_by_player(mtime)
+
+
 def recent_games(player: str, stat_name: str) -> list[dict]:
     """The player's last 5 games for this stat, oldest first:
     [{"value", "opp", "season", "week"}]. Empty when there's no column for the stat or
     the player isn't in the logs."""
-    from ev_finder import _last5_by_player
     path = os.path.join(RAW_DIR, "prop_game_logs.csv")
-    g = _last5_by_player(os.path.getmtime(path) if os.path.exists(path) else 0.0).get(normalize_name(player))
+    g = _last5(os.path.getmtime(path) if os.path.exists(path) else 0.0).get(normalize_name(player))
     if g is None or stat_name not in g.columns:
         return []
     vals = pd.to_numeric(g[stat_name], errors="coerce")
     opps = g["opponent_team"] if "opponent_team" in g.columns else [""] * len(g)
     return [{"value": float(v), "opp": o if isinstance(o, str) else "", "season": int(s), "week": int(wk)}
             for v, o, s, wk in zip(vals, opps, g["season"], g["week"]) if pd.notna(v)]
+
+
+def table_columns(players, stats, lines, choices) -> tuple[list, list]:
+    """For st.dataframe views: each row's last-5 values (a BarChartColumn) and its hit
+    count for the row's side, like "4/5" ("" when there's no game log)."""
+    bars, counts = [], []
+    for p, s, line, c in zip(players, stats, lines, choices):
+        games = recent_games(p, s)
+        try:
+            line = float(line)
+        except (TypeError, ValueError):
+            games = []
+        bars.append([g["value"] for g in games] or None)
+        counts.append(f"{sum(hit(g['value'], line, c) is True for g in games)}/{len(games)}" if games else "")
+    return bars, counts
 
 
 def hit(value: float, line: float, choice: str) -> bool | None:
