@@ -139,5 +139,8 @@ jobs:
             echo "No data changes -- nothing to commit."
           else
             git commit -m "Automated data refresh"
+            # A PR merged while this ran (~15 min with the weekly grading) moves main;
+            # replay this data commit on top instead of failing the whole refresh.
+            git pull --rebase -X theirs origin main
             git push
           fi
