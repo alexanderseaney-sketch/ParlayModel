@@ -1,77 +1,36 @@
 """
 Last-5-games form for a pick, like the mini bar charts on Underdog and Sleeper prop
-cards: one bar per game the player actually played (a row in nflverse's
-weekly_stats.csv), the line drawn across, and how many of those games went the way
-the pick needs.
+cards: one bar per game the player actually played, the line drawn across, and how
+many of those games went the way the pick needs.
 
-New stat types plug in by adding one entry to STAT_FORMULAS: the Underdog stat_name
-mapped to the weekly_stats.csv column(s) that add up to it. Stats with no per-game
-column in nflverse (first-half / first-quarter splits, longest reception, fantasy
-points with Underdog's scoring) are left out and simply show no chart.
+The games come from data/raw/prop_game_logs.csv via ev_finder._last5_by_player, the
+same last-5 the Picks page's "Against his last 5" tag uses. That file has one column per
+Underdog stat_name, so a new prop type shows a chart as soon as its column is pulled.
 """
 import html
+import os
 
 import pandas as pd
 import streamlit as st
 
-from research_data import _mtime
-from utils import load_csv_if_exists, normalize_name
+from utils import RAW_DIR, normalize_name
 
 N_GAMES = 5
 
-# Underdog stat_name -> weekly_stats.csv columns summed per game.
-STAT_FORMULAS: dict[str, tuple[str, ...]] = {
-    "passing_yds": ("passing_yards",),
-    "passing_tds": ("passing_tds",),
-    "passing_ints": ("interceptions",),
-    "passing_comps": ("completions",),
-    "passing_att": ("attempts",),
-    "rushing_yds": ("rushing_yards",),
-    "rushing_att": ("carries",),
-    "receiving_yds": ("receiving_yards",),
-    "receiving_rec": ("receptions",),
-    "receptions": ("receptions",),
-    "receiving_tgts": ("targets",),
-    "rush_rec_tds": ("rushing_tds", "receiving_tds"),
-    "rush_rec_yds": ("rushing_yards", "receiving_yards"),
-    "passing_and_rushing_yds": ("passing_yards", "rushing_yards"),
-    "fumbles_lost": ("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"),
-}
 
-@st.cache_data(show_spinner=False)
-def _weekly(mtime: float) -> pd.DataFrame:
-    """The same weekly_stats.csv game logs the player card (player_page.py) shows: regular
-    season, last two seasons, with a normalized name key. mtime only busts the cache."""
-    w = load_csv_if_exists("weekly_stats.csv")
-    if w is None:
-        return pd.DataFrame()
-    w = w[(w["season"] >= w["season"].max() - 1) & (w["season_type"].fillna("REG") == "REG")]
-    w = w.assign(_k=w["player_display_name"].map(normalize_name))
-    return w.sort_values(["season", "week"])
-
-
-def recent_games(player: str, stat_name: str, team: str | None = None, n: int = N_GAMES) -> list[dict]:
-    """The player's last n games for this stat, oldest first: [{"value", "opp", "season", "week"}].
-    Empty when the stat has no per-game column or the player isn't in the data."""
-    cols = STAT_FORMULAS.get(stat_name)
-    if not cols:
+def recent_games(player: str, stat_name: str) -> list[dict]:
+    """The player's last 5 games for this stat, oldest first:
+    [{"value", "opp", "season", "week"}]. Empty when there's no column for the stat or
+    the player isn't in the logs."""
+    from ev_finder import _last5_by_player
+    path = os.path.join(RAW_DIR, "prop_game_logs.csv")
+    g = _last5_by_player(os.path.getmtime(path) if os.path.exists(path) else 0.0).get(normalize_name(player))
+    if g is None or stat_name not in g.columns:
         return []
-    w = _weekly(_mtime("weekly_stats.csv"))
-    if w.empty or any(c not in w.columns for c in cols):
-        return []
-    rows = w[w["_k"] == normalize_name(player)]
-    if rows.empty:
-        return []
-    if rows["player_id"].nunique() > 1:
-        # Two players with the same name: prefer the one on this team, else the most recent.
-        latest = rows.groupby("player_id").tail(1)
-        on_team = latest[latest["recent_team"] == team] if team else latest.iloc[0:0]
-        pid = (on_team if not on_team.empty else latest).iloc[-1]["player_id"]
-        rows = rows[rows["player_id"] == pid]
-    rows = rows.tail(n)
-    vals = rows[list(cols)].fillna(0).sum(axis=1)
+    vals = pd.to_numeric(g[stat_name], errors="coerce")
+    opps = g["opponent_team"] if "opponent_team" in g.columns else [""] * len(g)
     return [{"value": float(v), "opp": o if isinstance(o, str) else "", "season": int(s), "week": int(wk)}
-            for v, o, s, wk in zip(vals, rows["opponent_team"], rows["season"], rows["week"])]
+            for v, o, s, wk in zip(vals, opps, g["season"], g["week"]) if pd.notna(v)]
 
 
 def hit(value: float, line: float, choice: str) -> bool | None:

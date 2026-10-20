@@ -378,7 +378,7 @@ def page_build():
         st.markdown(f"**{len(legs)} picks across {n_games} games**")
     for i, l in enumerate(legs):
         sub = " · ".join(x for x in [games.get(l.get("game")), f"{_pct(l['prob'])} chance"] if x)
-        form = recent_form.chart_html(recent_form.recent_games(l["player"], l["stat_name"], l.get("team")),
+        form = recent_form.chart_html(recent_form.recent_games(l["player"], l["stat_name"]),
                                       l["line"], l["choice"])
         # A horizontal container (not columns) so the buttons stay beside the pick on phones.
         with st.container(horizontal=True, vertical_alignment="center", gap="small", key=f"ph_leg_{i}"):
