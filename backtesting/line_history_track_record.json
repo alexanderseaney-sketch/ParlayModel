@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-20T20:10:48.036934+00:00",
+  "generated_at": "2026-10-20T20:44:31.914702+00:00",
   "weeks": [
     "2026-wk1",
     "2026-wk4",
@@ -237,15 +237,15 @@
     },
     "passing_ints": {
       "n": 30,
-      "accuracy": 0.6333333333333333,
+      "accuracy": 0.5666666666666667,
       "baseline": 0.5666666666666667,
       "over_rate": 0.43333333333333335,
-      "verdict": "trusted",
+      "verdict": "unproven",
       "model": "trained",
-      "picked_over": 10,
-      "picked_under": 20,
-      "over_pick_accuracy": 0.6,
-      "under_pick_accuracy": 0.65
+      "picked_over": 14,
+      "picked_under": 16,
+      "over_pick_accuracy": 0.5,
+      "under_pick_accuracy": 0.625
     },
     "passing_long": {
       "n": 108,
@@ -261,27 +261,27 @@
     },
     "passing_tds": {
       "n": 35,
-      "accuracy": 0.6285714285714286,
+      "accuracy": 0.6,
       "baseline": 0.5428571428571429,
       "over_rate": 0.45714285714285713,
       "verdict": "trusted",
       "model": "trained",
-      "picked_over": 9,
-      "picked_under": 26,
-      "over_pick_accuracy": 0.6666666666666666,
-      "under_pick_accuracy": 0.6153846153846154
+      "picked_over": 10,
+      "picked_under": 25,
+      "over_pick_accuracy": 0.6,
+      "under_pick_accuracy": 0.6
     },
     "passing_yds": {
       "n": 104,
-      "accuracy": 0.4807692307692308,
+      "accuracy": 0.5,
       "baseline": 0.5288461538461539,
       "over_rate": 0.5288461538461539,
-      "verdict": "avoid",
+      "verdict": "unproven",
       "model": "trained",
-      "picked_over": 43,
-      "picked_under": 61,
-      "over_pick_accuracy": 0.5116279069767442,
-      "under_pick_accuracy": 0.45901639344262296
+      "picked_over": 53,
+      "picked_under": 51,
+      "over_pick_accuracy": 0.5283018867924528,
+      "under_pick_accuracy": 0.47058823529411764
     },
     "receiving_long": {
       "n": 723,
@@ -302,10 +302,10 @@
       "over_rate": 0.4682080924855491,
       "verdict": "trusted",
       "model": "trained",
-      "picked_over": 43,
-      "picked_under": 130,
-      "over_pick_accuracy": 0.627906976744186,
-      "under_pick_accuracy": 0.5846153846153846
+      "picked_over": 51,
+      "picked_under": 122,
+      "over_pick_accuracy": 0.6078431372549019,
+      "under_pick_accuracy": 0.5901639344262295
     },
     "receiving_tgts": {
       "n": 574,
@@ -319,17 +319,29 @@
       "over_pick_accuracy": 0.532051282051282,
       "under_pick_accuracy": 0.5526315789473685
     },
+    "receiving_yds": {
+      "n": 232,
+      "accuracy": 0.521551724137931,
+      "baseline": 0.5086206896551724,
+      "over_rate": 0.5086206896551724,
+      "verdict": "unproven",
+      "model": "trained",
+      "picked_over": 69,
+      "picked_under": 163,
+      "over_pick_accuracy": 0.5507246376811594,
+      "under_pick_accuracy": 0.50920245398773
+    },
     "rush_rec_tds": {
       "n": 182,
-      "accuracy": 0.8406593406593407,
+      "accuracy": 0.8461538461538461,
       "baseline": 0.8461538461538461,
       "over_rate": 0.15384615384615385,
       "verdict": "unproven",
       "model": "trained",
-      "picked_over": 5,
-      "picked_under": 177,
-      "over_pick_accuracy": 0.4,
-      "under_pick_accuracy": 0.8531073446327684
+      "picked_over": 6,
+      "picked_under": 176,
+      "over_pick_accuracy": 0.5,
+      "under_pick_accuracy": 0.8579545454545454
     },
     "rush_rec_yds": {
       "n": 235,
@@ -369,15 +381,15 @@
     },
     "rushing_yds": {
       "n": 152,
-      "accuracy": 0.5394736842105263,
+      "accuracy": 0.5526315789473685,
       "baseline": 0.5592105263157895,
       "over_rate": 0.4407894736842105,
       "verdict": "unproven",
       "model": "trained",
-      "picked_over": 59,
-      "picked_under": 93,
-      "over_pick_accuracy": 0.4745762711864407,
-      "under_pick_accuracy": 0.5806451612903226
+      "picked_over": 63,
+      "picked_under": 89,
+      "over_pick_accuracy": 0.49206349206349204,
+      "under_pick_accuracy": 0.5955056179775281
     },
     "sacks": {
       "n": 684,
@@ -417,11 +429,11 @@
     }
   },
   "overall": {
-    "n": 7771,
-    "accuracy": 0.6309355295328787,
-    "picked_over": 1683,
-    "picked_under": 6088,
-    "over_pick_accuracy": 0.5145573380867499,
-    "under_pick_accuracy": 0.663107752956636
+    "n": 8003,
+    "accuracy": 0.6280144945645383,
+    "picked_over": 1780,
+    "picked_under": 6223,
+    "over_pick_accuracy": 0.5162921348314606,
+    "under_pick_accuracy": 0.659971075044191
   }
 }
