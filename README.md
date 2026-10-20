@@ -270,6 +270,17 @@ before starting work to see what the other side left you.*
 
 ---
 
+**2026-10-20 — [cloud] (2)**
+- Did: **Removed the fantasy football features** (Alex uses FantasyPros for that; this
+  app is for parlays, news and stats research): Fantasy page (`dashboard/fantasy.py`),
+  Yahoo league connection (`dashboard/yahoo_fantasy.py` + its OAuth hook and secrets),
+  the Yahoo/Sleeper/ESPN id bridge (`data/pull_player_ids.py`, `player_ids.csv`, its
+  workflow step) and the AI Assistant's `fantasy_projections` tool. `fantasy_scoring.py`
+  is trimmed to the weekly scoring the Matchup Heatmap (defense vs position, still
+  useful for props) needs.
+
+---
+
 **2026-10-20 — [cloud]**
 - Did: (1) **Simplified app**: top navigation with three main screens -- **Picks**
   (best-value props in plain English, one tap to add), **My parlay** (chance all hit,

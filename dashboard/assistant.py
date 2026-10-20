@@ -3,7 +3,7 @@ AI Assistant page (added 2026-10-04, from IDEAS.md): a chat with Claude that ans
 questions about tonight's board by calling the project's own functions as tools --
 live Underdog lines, model predictions, the +EV Finder's pricing, the entry search and
 entry checker, game logs, usage trends, injuries, line movement, depth charts, news,
-this week's games, defense-vs-position ranks, fantasy projections, the real-line
+this week's games, defense-vs-position ranks, the real-line
 backtest, data freshness, and the user's bet log (live tracking + bankroll) -- instead
 of guessing.
 
@@ -510,36 +510,6 @@ def build_tools(prob_source: str) -> list:
         })
 
     @beta_tool
-    def fantasy_projections(player: str = "", position: str = "", team: str = "", scoring: str = "half",
-                            limit: int = 15) -> str:
-        """This week's fantasy projections (the Fantasy page's numbers): projected points,
-        position rank, tier, opponent and the projected stat line, plus the prop model's lean
-        (0-100, 50 = neutral). Use for start/sit and other fantasy questions.
-
-        Args:
-            player: Optional player name.
-            position: Optional QB, RB, WR or TE.
-            team: Optional team abbreviation.
-            scoring: "half" (Half-PPR) or "ppr".
-            limit: Max rows (<= 25).
-        """
-        from fantasy import _projections, _pred_mtime
-        p = _projections(_pred_mtime(), "ppr" if scoring.lower() == "ppr" else "half")
-        if p.empty:
-            return json.dumps({"rows": [], "note": "no current predictions"})
-        if player:
-            p = p[_match_player(p["player"], player)]
-        if position:
-            p = p[p["position"] == position.upper()]
-        if team:
-            p = p[p["team"].astype(str).str.upper() == team.upper()]
-        cols = ["player", "position", "team", "opp", "week", "proj", "pos_rank", "tier", "overall_rank", "lean",
-                "pass_yds", "passing_tds", "rush_yds", "rec", "rec_yds", "td"]
-        view = p[[c for c in cols if c in p.columns]].rename(columns={"proj": "projected_points", "opp": "opponent"})
-        view["lean"] = (pd.to_numeric(view["lean"], errors="coerce") * 100).round()
-        return _records(view, min(limit, MAX_ROWS))
-
-    @beta_tool
     def track_open_entries() -> str:
         """Status of the user's OPEN (not fully graded) logged entries from ESPN box scores:
         each pick's stat vs its line, pace, hit / miss / alive / pending, the game score and
@@ -637,7 +607,7 @@ def build_tools(prob_source: str) -> list:
 
     return [get_best_picks, find_best_entries, check_entry, player_props, model_prediction, player_game_log,
             usage_trends, injury_report, line_movement, depth_chart, player_news, this_weeks_games,
-            defense_vs_position, fantasy_projections, model_track_record, data_freshness, my_bet_log,
+            defense_vs_position, model_track_record, data_freshness, my_bet_log,
             track_open_entries, bankroll_summary, stage_bet_log, stage_data_pull]
 
 
