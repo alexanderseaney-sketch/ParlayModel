@@ -31,7 +31,7 @@ from odds_utils import add_underdog_market_probs, decimal_to_american, blend_wit
 _DATA_DIR = os.path.join(ROOT_DIR, "data")
 if _DATA_DIR not in sys.path:
     sys.path.insert(0, _DATA_DIR)
-from parlay_calculator import evaluate_entry, find_best_entries, riskiest_leg
+from parlay_calculator import evaluate_entry, find_best_entries, leg_key, riskiest_leg
 
 UNDERDOG_PICKEM_URL = "https://underdogfantasy.com/pick-em/higher-lower/all/nfl"
 BOOK_URLS = {
@@ -137,8 +137,12 @@ def build_candidates(min_edge_floor: float = -1.0) -> tuple[pd.DataFrame, dict]:
         "n_books": board["n_books"], "blend_prob": board["blend_prob"],
         "proxy_line": board["proxy_line"], "prop_type": board["prop_type"],
         "real_line_used": board["real_line_used"],
+        # Underdog's match_id: which game the pick is in (same game parlays, and
+        # pricing two legs from one game together).
+        "game": board["match_id"] if "match_id" in board.columns else np.nan,
     })
     c["position_prop"] = c["position"].astype(str) + " " + c["prop_type"].astype(str)
+    c["leg_key"] = [leg_key(p, s) for p, s in zip(c["position"], c["stat_name"])]
     return c.reset_index(drop=True), info
 
 

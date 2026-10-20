@@ -27,7 +27,9 @@ from utils import (
 _MODELS_DIR = os.path.join(ROOT_DIR, "models")
 if _MODELS_DIR not in sys.path:
     sys.path.insert(0, _MODELS_DIR)
-from parlay_calculator import evaluate_entry, MAX_LEGS  # noqa: E402
+from parlay_calculator import (  # noqa: E402
+    evaluate_entry, find_best_entries, games_in, leg_count_note, MAX_LEGS, RECOMMENDED_LEGS,
+)
 
 TRACK_RECORD_PATH = os.path.join(ROOT_DIR, "backtesting", "line_history_track_record.json")
 
@@ -127,9 +129,18 @@ def get_picks() -> tuple[pd.DataFrame, dict]:
     return c.reset_index(drop=True), info
 
 
+def game_labels(picks: pd.DataFrame) -> dict:
+    """Underdog match_id -> "BUF vs KC", from the teams on the board in that game."""
+    if picks.empty or "game" not in picks.columns:
+        return {}
+    g = picks.dropna(subset=["game", "team"]).groupby("game")["team"]
+    return {k: " vs ".join(sorted(set(v))) for k, v in g}
+
+
 def _leg_from_pick(r: pd.Series) -> dict:
     return {
         "player": r["player"], "team": r.get("team"), "stat_name": r["stat_name"],
+        "position": r.get("position"), "game": r.get("game"), "leg_key": r.get("leg_key"),
         "line": float(r["line"]), "choice": str(r["choice"]).lower(),
         "prob": float(r["chance"]), "market_prob": float(r["market"]),
         "decimal": float(r["decimal"]) if pd.notna(r["decimal"]) else None,
@@ -186,6 +197,7 @@ def page_picks():
     if search:
         view = view[view["player"].str.contains(search, case=False, na=False)]
 
+    games = game_labels(picks)
     # Underdog allows one pick per player per entry.
     slip_players = {l["player"] for l in _slip()}
     st.caption(f"{len(view)} pick(s) · board pulled {str(info.get('pulled_at') or '')[:16].replace('T', ' ')} UTC")
@@ -205,7 +217,7 @@ def page_picks():
 <div class="ph-card"><div class="ph-row">
   <div>
     <div class="ph-player">{r['player']}</div>
-    <div class="ph-sub">{r.get('team') or ''} {r.get('position') or ''}{record}</div>
+    <div class="ph-sub">{r.get('team') or ''} {r.get('position') or ''}{' · ' + games[r['game']] if r.get('game') in games else ''}{record}</div>
     <div class="ph-pick">{_pick_label(r['choice'], r['line'], r['stat_name'])}</div>
     <div style="margin-top:6px">{tags}</div>
   </div>
@@ -246,20 +258,88 @@ def page_picks():
 
 # ---------------------------------------------------------------------------- Build
 
+def _auto_build(picks: pd.DataFrame, games: dict):
+    """The "Build it for me" panel: pick a parlay type and size, and fill the slip with the
+    highest expected-return entry the model can find."""
+    with st.container(border=True):
+        st.markdown("**Build it for me**")
+        kind = st.segmented_control("Parlay type", ["Across games", "Same game"], default="Across games",
+                                    key="ph_kind", label_visibility="collapsed")
+        kind = kind or "Across games"
+        game = None
+        if kind == "Same game":
+            counts = picks[picks["game"].isin(games)].groupby("game").size().sort_values(ascending=False)
+            if counts.empty:
+                st.caption("No game on the board has picks yet.")
+                return
+            game = st.selectbox("Game", counts.index.tolist(), key="ph_game",
+                                format_func=lambda g: f"{games[g]} ({counts[g]} picks)")
+            st.caption("Picks from both teams in one game. Underdog pays less when picks tend to "
+                       "hit together, and we price that in.")
+        else:
+            st.caption("One pick per game, so one bad game can only sink one pick.")
+        n = st.segmented_control("Picks", [2, 3, 4, 5, 6], default=RECOMMENDED_LEGS, key="ph_n_legs")
+        n = int(n or RECOMMENDED_LEGS)
+        note = leg_count_note(n)
+        if note:
+            st.caption(note)
+        if st.button("Build my parlay", type="primary", width="stretch", key="ph_auto"):
+            pool = picks[picks["verdict"] == "trusted"].assign(prob=picks["chance"], market_prob=picks["market"])
+            mode = "same_game" if kind == "Same game" else "multi_game"
+            with st.spinner("Trying every combination..."):
+                best = find_best_entries(pool, n_legs_range=(n, n), top_k=1, pool_size=18 if n <= 4 else 13,
+                                         mode=mode, game=game)
+            best = best[best["valid"] & (best["ev"] > 0)] if not best.empty else best
+            if best.empty:
+                where = f"in {games.get(game, 'this game')}" if game is not None else "on the board"
+                st.warning(f"No {n}-pick parlay {where} is worth it right now with proven stat types. "
+                           "Try fewer picks or another game.")
+                return
+            _slip().clear()
+            _slip().extend(_leg_from_pick(pd.Series(l)) for l in best.iloc[0]["legs"])
+            st.rerun()
+
+
+def _link_lines(links: list[dict]) -> list[str]:
+    out = []
+    for k in links:
+        if abs(k["phi"]) < 0.05:
+            continue
+        who = f"{k['a']} and {k['b']}"
+        where = "teammates" if k["relation"] == "same_team" else "opponents"
+        if k["phi"] > 0:
+            out.append(f"{who} ({where}) tend to hit together.")
+        else:
+            out.append(f"{who} ({where}) tend to pull against each other.")
+    return out
+
+
 def page_build():
     _css()
     st.title("My parlay")
+    picks, _ = get_picks()
+    games = game_labels(picks)
     legs = _slip()
+    if not picks.empty:
+        _auto_build(picks, games)
     if not legs:
-        st.info("Your parlay is empty. Add picks from **Picks**.")
-        if st.button("Find picks →", type="primary"):
+        st.info("Your parlay is empty. Build one above, or add picks from **Picks**.")
+        if st.button("Find picks →"):
             import nav_registry
             nav_registry.go("picks")
         return
 
+    n_games = games_in(legs)
+    if n_games == 1:
+        st.markdown(f"**Same game parlay** · {games.get(legs[0].get('game'), '')}")
+    elif n_games > 1:
+        st.markdown(f"**{len(legs)} picks across {n_games} games**")
     for i, l in enumerate(legs):
         c1, c2, c3 = st.columns([5, 2, 1], vertical_alignment="center")
-        c1.markdown(f"**{l['player']}** · {_pick_label(l['choice'], l['line'], l['stat_name'])}")
+        matchup = games.get(l.get("game"))
+        c1.markdown(f"**{l['player']}** · {_pick_label(l['choice'], l['line'], l['stat_name'])}"
+                    + (f"  \n<span style='font-size:12px;color:#9397ab'>{matchup}</span>" if matchup else ""),
+                    unsafe_allow_html=True)
         c2.markdown(f"{_pct(l['prob'])} chance")
         if c3.button("✕", key=f"ph_rm_{i}", help="Remove"):
             legs.pop(i)
@@ -292,8 +372,17 @@ def page_build():
     else:
         st.markdown('<div class="ph-verdict ph-no">Not worth it: the payout is too small for '
                     'the risk. Drop the weakest pick.</div>', unsafe_allow_html=True)
-    if ev["adjustments"]:
-        st.caption("Adjusted for picks on the same team that tend to hit (or miss) together.")
+    note = leg_count_note(len(legs))
+    if note:
+        st.caption(note)
+    for line in _link_lines(ev.get("links") or []):
+        st.caption(line)
+    base = ev.get("base_payout")
+    if payout and base and abs(payout - base) / base > 0.01:
+        direction = "lowers" if payout < base else "raises"
+        st.caption(f"Underdog {direction} the payout on linked picks in the same game: about "
+                   f"{payout:.1f}x instead of {base:.1f}x. Underdog shows the exact number when you "
+                   "build the entry.")
     if any(l.get("verdict") != "trusted" for l in legs):
         st.caption("⚠️ Includes a stat type the model hasn't proven on real lines yet.")
 
