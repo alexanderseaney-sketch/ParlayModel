@@ -2008,6 +2008,14 @@ def page_underdog_props():
     if df is None:
         st.warning("`underdog_props.csv` hasn't been pulled yet. Run it from **Research → Data**.")
     else:
+        import game_filter
+        df = df.copy()
+        df["_team"] = game_filter.teams_for_names(df["full_name"]) if "full_name" in df.columns else None
+        if "match_id" in df.columns:
+            # Fill players missing from the rosters file from a teammate/opponent in the same game.
+            known = df.dropna(subset=["_team", "match_id"]).drop_duplicates("match_id").set_index("match_id")["_team"]
+            df["_team"] = df["_team"].fillna(df["match_id"].map(known))
+        sel_game = game_filter.game_filter(df["_team"], key="board")
         col1, col2 = st.columns(2)
         with col1:
             stat_col = "stat_name" if "stat_name" in df.columns else None
@@ -2017,6 +2025,8 @@ def page_underdog_props():
             search = st.text_input("Search player name")
 
         filtered = df.copy()
+        if sel_game:
+            filtered = filtered[filtered["_team"].map(game_filter.game_key) == sel_game]
         if stat_filter and stat_col:
             filtered = filtered[filtered[stat_col].isin(stat_filter)]
         if search and "full_name" in filtered.columns:
@@ -2043,6 +2053,7 @@ def page_underdog_props():
         # are something a bettor would ever want to see.
         present = [(raw, label) for raw, label in UNDERDOG_DISPLAY_COLUMNS if raw in filtered.columns]
         display_df = filtered[[raw for raw, _ in present] + ["line_movement"]].copy()
+        display_df.insert(min(1, len(present)), "Game", filtered["_team"].map(game_filter.game_label))
         if "stat_name" in [raw for raw, _ in present]:
             display_df["stat_name"] = display_df["stat_name"].map(_pretty_stat)
         if "choice" in display_df.columns:

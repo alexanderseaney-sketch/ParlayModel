@@ -360,6 +360,10 @@ def page_ev_finder():
                    "`python models/current_predictions.py` (Research → Data).")
         return
     cands = _apply_prob_source(cands, prob_source)
+    import game_filter
+    sel_game = game_filter.game_filter(cands["team"], key="ev")
+    if sel_game:
+        cands = cands[cands["team"].map(game_filter.game_key) == sel_game]
     underdog_freshness_bar(load_csv_if_exists("underdog_props.csv"), key="ev")
     st.caption(f"{len(cands)} comparable model-backed options"
                f" · {int((cands['n_books'] > 0).sum())} with sportsbook consensus")
@@ -372,7 +376,7 @@ def page_ev_finder():
         import recent_form
         last5, hits5 = recent_form.table_columns(view["player"], view["stat_name"], view["line"], view["choice"])
         show = pd.DataFrame({
-            "Player": view["player"], "Team": view["team"],
+            "Player": view["player"], "Team": view["team"], "Game": view["team"].map(game_filter.game_label),
             "Pick": view["choice"].str.upper() + " " + view["line"].astype(str) + " " + view["stat_name"].map(pretty_stat_name),
             "Last 5": last5, "Hit L5": hits5,
             prob_source: view["prob"], "Market": view["market_prob"], "Edge": view["edge"],

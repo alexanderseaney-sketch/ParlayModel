@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import game_filter
 import recent_form
 from utils import (
     ROOT_DIR, append_bets, load_bet_log, save_bet_results, bet_log_location, pretty_stat_name,
@@ -134,11 +135,17 @@ def get_picks() -> tuple[pd.DataFrame, dict]:
 
 
 def game_labels(picks: pd.DataFrame) -> dict:
-    """Underdog match_id -> "BUF vs KC", from the teams on the board in that game."""
+    """Underdog match_id -> "KC @ BUF · 11/01 10:00 AM" (kickoff in Pacific time), from the
+    teams on the board in that game; "BUF vs KC" if the schedule doesn't have it."""
     if picks.empty or "game" not in picks.columns:
         return {}
     g = picks.dropna(subset=["game", "team"]).groupby("game")["team"]
-    return {k: " vs ".join(sorted(set(v))) for k, v in g}
+    out = {}
+    for k, v in g:
+        teams = sorted(set(v))
+        out[k] = next((game_filter.game_label(t) for t in teams if game_filter.game_label(t)),
+                      " vs ".join(teams))
+    return out
 
 
 def _leg_from_pick(r: pd.Series) -> dict:
@@ -202,6 +209,7 @@ def page_picks():
                 "They refresh automatically every 6 hours.")
         return
 
+    sel_game = game_filter.game_filter(picks["team"], key="picks")
     f1, f2, f3 = st.columns([2, 2, 3])
     min_label = f1.segmented_control("Show", ["Strong", "Good+", "All"], default="Good+",
                                      key="ph_strength")
@@ -219,6 +227,8 @@ def page_picks():
         view = view[view["verdict"] != "avoid"]
     if search:
         view = view[view["player"].str.contains(search, case=False, na=False)]
+    if sel_game:
+        view = view[view["team"].map(game_filter.game_key) == sel_game]
 
     games = game_labels(picks)
     # Underdog allows one pick per player per entry.
@@ -231,7 +241,8 @@ def page_picks():
                        "caught up with. Hidden until it lines up again.")
             st.write(", ".join(info["held_back"]))
     if view.empty:
-        st.info("Nothing clears this bar right now. Try **All**, or turn off **Proven stat types only**.")
+        st.info("Nothing clears this bar right now. Try **All**, turn off **Proven stat types only**"
+                + (", or pick **All games**." if sel_game else "."))
 
     for i, r in view.head(40).iterrows():
         label, cls = _strength(r["edge"])
@@ -315,7 +326,16 @@ def _auto_build(picks: pd.DataFrame, games: dict):
             if counts.empty:
                 st.caption("No game on the board has picks yet.")
                 return
-            game = st.selectbox("Game", counts.index.tolist(), key="ph_game",
+            options = counts.index.tolist()
+            # Start on the game chosen in the Picks tab's game filter, if it's on the board.
+            chosen = game_filter.selected()
+            match = next((g for g in options if chosen and any(
+                game_filter.game_key(t) == chosen for t in picks.loc[picks["game"] == g, "team"])), None)
+            if match is not None and (st.session_state.get("_ph_game_from") != chosen
+                                      or st.session_state.get("ph_game") not in options):
+                st.session_state["ph_game"] = match
+            st.session_state["_ph_game_from"] = chosen
+            game = st.selectbox("Game", options, key="ph_game",
                                 format_func=lambda g: f"{games[g]} ({counts[g]} picks)")
             st.caption("Picks from both teams in one game. Underdog pays less when picks tend to "
                        "hit together, and we price that in.")
