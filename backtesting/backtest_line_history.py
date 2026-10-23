@@ -218,8 +218,26 @@ def _add_period_actuals(weekly: pd.DataFrame) -> pd.DataFrame:
     return weekly
 
 
+def gate_line_moves(g: pd.DataFrame) -> pd.DataFrame:
+    """Ungate the Under picks the app holds back because the line was already cut since
+    it opened that week (models/line_moves.py), so the track record grades what Picks
+    shows."""
+    import line_moves
+    from utils import normalize_name
+    hist = pd.read_csv(os.path.join(B.RAW, "underdog_line_history.csv"))
+    g = g.copy()
+    g["_k"] = g["full_name"].apply(normalize_name)
+    for (season, week), x in g.groupby(["season", "week"]):
+        opens = line_moves.week_open_lines(hist, B.SCHEDULES, int(season), int(week), normalize_name)
+        m = x[["_k", "stat_name"]].merge(opens, on=["_k", "stat_name"], how="left")
+        under = (x["model_prob_over"] < 0.5).to_numpy()
+        held = line_moves.moved_to_under(x["stat_name"], x["stat_value"], m["open_line"], under)
+        g.loc[x.index[held], "gated"] = False
+    return g
+
+
 def main():
-    weekly = _add_period_actuals(pd.read_csv(os.path.join(B.RAW, "weekly_stats.csv"), low_memory=False))
+    weekly =_add_period_actuals(pd.read_csv(os.path.join(B.RAW, "weekly_stats.csv"), low_memory=False))
     season = int(weekly["season"].max())
     played = sorted(weekly.loc[weekly["season"] == season, "week"].unique().tolist())
     lines = closing_lines_from_history(played)
@@ -253,7 +271,8 @@ def main():
                         index=extra.index)
         extra = extra[~(fb & (key(extra).isin(taken) | low))]
         g = pd.concat([g, extra], ignore_index=True)
-    keep = ["gated", "season", "week", "_team", "full_name", "stat_name", "stat_value", "choice",
+    g = gate_line_moves(g)
+    keep =["gated", "season", "week", "_team", "full_name", "stat_name", "stat_value", "choice",
             "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over"]
     g[[c for c in keep if c in g.columns]].to_csv(OUT_CSV, index=False)
     rec = track_record(g)
