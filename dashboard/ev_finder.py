@@ -206,7 +206,31 @@ def build_candidates(min_edge_floor: float = -1.0) -> tuple[pd.DataFrame, dict]:
     held = c[c["baseline_off"]]
     info["held_back"] = sorted({f"{p} ({pretty_stat_name(s)})" for p, s in zip(held["player"], held["stat_name"])})
     c = c[~c["baseline_off"]]
+    c = line_move_check(c, info["pulled_at"])
+    moved = c[c["moved_to_under"] & (c["blend_prob"] > 0.5)]
+    info["moved_to_under"] = sorted({f"{p} ({pretty_stat_name(s)})" for p, s in zip(moved["player"], moved["stat_name"])})
+    c = c[~c["moved_to_under"]]
     return c.reset_index(drop=True), info
+
+
+def line_move_check(c: pd.DataFrame, pulled_at) -> pd.DataFrame:
+    """open_line: where this week's line opened. moved_to_under: an Under whose line
+    Underdog has already cut since then (models/line_moves.py), held back from Picks."""
+    import line_moves
+    c = c.copy()
+    c["open_line"], c["moved_to_under"] = np.nan, False
+    history, schedules = load_csv_if_exists("underdog_line_history.csv"), load_csv_if_exists("schedules.csv")
+    if history is None or schedules is None or c.empty:
+        return c
+    now = pd.to_datetime(pulled_at, utc=True, errors="coerce")
+    now = pd.Timestamp.now(tz="UTC") if pd.isna(now) else now
+    opens = line_moves.current_open_lines(history, schedules, now.tz_convert("US/Eastern").tz_localize(None),
+                                          normalize_name)
+    m = c[["_k", "stat_name"]].merge(opens, on=["_k", "stat_name"], how="left")
+    c["open_line"] = m["open_line"].to_numpy()
+    under = ~c["choice"].astype(str).str.lower().isin(["over", "higher"])
+    c["moved_to_under"] = line_moves.moved_to_under(c["stat_name"], c["line"], c["open_line"], under)
+    return c
 
 
 def _apply_prob_source(c: pd.DataFrame, source: str) -> pd.DataFrame:

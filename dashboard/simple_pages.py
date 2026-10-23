@@ -240,6 +240,12 @@ def page_picks():
                        "his last 4 games, which usually means a team or role change the data hasn't "
                        "caught up with. Hidden until it lines up again.")
             st.write(", ".join(info["held_back"]))
+    if info.get("moved_to_under"):
+        with st.expander(f"{len(info['moved_to_under'])} Under pick(s) held back: the line already dropped"):
+            st.caption("Underdog has cut these lines since they opened this week, so the market got to "
+                       "the Under first. On real lines, Unders like these hit 48% against 56% for the "
+                       "rest.")
+            st.write(", ".join(info["moved_to_under"]))
     if view.empty:
         st.info("Nothing clears this bar right now. Try **All**, turn off **Proven stat types only**"
                 + (", or pick **All games**." if sel_game else "."))
