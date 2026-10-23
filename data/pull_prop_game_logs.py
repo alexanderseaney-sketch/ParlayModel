@@ -101,6 +101,13 @@ def _pbp_splits(year: int) -> pd.DataFrame:
         if tag == "rec":
             frames += [q1.size().rename("period_1_receiving_rec"), h1.size().rename("period_1_2_receiving_rec")]
 
+    # 1st quarter / 1st half rushing + receiving TDs (Underdog's period_1(_2)_rush_rec_tds).
+    rr = p[(p["touchdown"] == 1) & p["play_type"].isin(["pass", "run"]) & p["td_player_id"].notna()
+           & ((p["td_player_id"] == p["rusher_player_id"]) | (p["td_player_id"] == p["receiver_player_id"]))] \
+        .rename(columns={"td_player_id": "player_id"})
+    frames += [rr[rr["qtr"] == 1].groupby(keys).size().rename("period_1_rush_rec_tds"),
+               rr[rr["qtr"] <= 2].groupby(keys).size().rename("period_1_2_rush_rec_tds")]
+
     # First / last touchdown of the game (two-point tries already dropped).
     td = p[(p["touchdown"] == 1) & p["td_player_id"].notna()].sort_values(["game_id", "game_seconds_remaining"],
                                                                            ascending=[True, False])

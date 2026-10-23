@@ -11,13 +11,17 @@ One simple, honest method for all of them, so every type is graded the same way:
      last season's games down-weighted. (Shrinking toward the position average was
      tried and dropped: the players Underdog posts lines for are the starters, so it
      dragged every expected value ~10% low and turned the model into an Under machine.)
-  2. A spread around that average, fitted per stat on the 2025 season only (so every
-     2026 game the app is graded on is held out):
+  2. A spread around that average, fitted per stat on every game from 2025 up to the
+     week being predicted (so a graded week is never in its own fit):
        count stats      negative binomial (dispersion fitted by likelihood)
        yardage / points the stat's own spread of actual / expected, binned by expected
        yes / no props   the form rate, recalibrated with a 2-number logistic fit
   3. P(over the real Underdog line) straight from that distribution -- no proxy line,
      so the real line is always used.
+
+Stats a trained model already prices (receptions, yards, TDs, 1Q / 1H yards) are in
+FALLBACK_STATS: the form model only fills in for the players those models skip or price
+against a proxy line far from the real one.
 
 backtesting/backtest_line_history.py grades these against real Underdog closing lines
 and the Picks screen marks each type proven / unproven from that record.
@@ -77,16 +81,49 @@ STATS = {
     "kicking_points": (CONT, ("K",)),
 }
 
+# Stats a trained model already prices (2026-10-23). The form model only fills in for
+# the players those models skip -- running backs' catches (the receptions model is
+# WR / TE only), depth players' TDs, QBs' 1st quarter / 1st half rushing, rookies and
+# players with too few games -- so nearly every live Underdog prop gets a number.
+FALLBACK_STATS = {
+    "receiving_rec": (COUNT, ("RB", "FB", "WR", "TE")),
+    "receiving_yds": (CONT, ("RB", "FB", "WR", "TE")),
+    "rushing_yds": (CONT, ("QB", "RB", "FB", "WR")),
+    "passing_yds": (CONT, ("QB",)),
+    "passing_tds": (COUNT, ("QB",)),
+    "passing_ints": (COUNT, ("QB",)),
+    "rush_rec_tds": (COUNT, ("QB", "RB", "FB", "WR", "TE")),
+    "period_1_receiving_yds": (CONT, ("RB", "FB", "WR", "TE")),
+    "period_1_2_receiving_yds": (CONT, ("RB", "FB", "WR", "TE")),
+    "period_1_rushing_yds": (CONT, ("QB", "RB", "FB", "WR")),
+    "period_1_2_rushing_yds": (CONT, ("QB", "RB", "FB", "WR")),
+    "period_1_passing_yds": (CONT, ("QB",)),
+    "period_1_2_passing_yds": (CONT, ("QB",)),
+    "period_first_touchdown_scored": (BINARY, ("QB", "RB", "FB", "WR", "TE")),
+    "period_1_rush_rec_tds": (COUNT, ("QB", "RB", "FB", "WR", "TE")),
+    "period_1_2_rush_rec_tds": (COUNT, ("QB", "RB", "FB", "WR", "TE")),
+}
+STATS.update(FALLBACK_STATS)
+
 N_GAMES = 12        # games of form
 DECAY = 0.85        # weight per game further back
 LAST_SEASON = 0.6   # extra weight factor on last season's games
 MIN_GAMES = 2       # fewer real games than this -> no prediction
-FIT_SEASON = 2025   # spreads fitted on this season only (2026 lines stay held out)
+# Spreads are fitted on every game from FIT_FROM_SEASON up to (not including) the week
+# being predicted, so 2026 games count as soon as they are played (2026-10-23; before,
+# 2025 only, which missed 2026's higher passing volume -- QB attempts / completions /
+# yards ran ~8% above form) and every graded week stays out of its own fit.
+FIT_FROM_SEASON = 2025
+# A QB game with fewer attempts than this (injury exit, benching, kneel-down cameo)
+# isn't his form and is skipped, as the trained models do (PR #11). Without it the form
+# model took the Under on 60%+ of QB props and hit 43% on attempts / completions.
+QB_MIN_ATT = 10
 N_BINS = 8
 # Logit multiplier on the final probability. Form alone is overconfident against real
-# lines; 0.65 was fitted on 2026 week 1 lines only, and cut log loss on the held-out
-# weeks 4-6 from 0.633 to 0.612.
-TEMPERATURE = 0.65
+# lines. 0.65 was fitted on 2026 week 1 lines only; re-checked 2026-10-23 on weeks 1
+# and 4-6 (9,259 graded props), 0.5 has lower log loss on every week but week 4, where
+# it ties (0.6141 -> 0.6085 overall). It only changes how sure a pick is, never its side.
+TEMPERATURE = 0.5
 
 
 def _units(stat: str) -> float:
@@ -97,6 +134,11 @@ def _units(stat: str) -> float:
 def load_logs() -> pd.DataFrame:
     d = pd.read_csv(LOGS_PATH, low_memory=False)
     return d.sort_values(["player_id", "season", "week"]).reset_index(drop=True)
+
+
+def form_games(logs: pd.DataFrame) -> pd.DataFrame:
+    """The games form is built from: QB cameo games (< QB_MIN_ATT attempts) dropped."""
+    return logs[~((logs["position"] == "QB") & (logs["passing_att"].fillna(0) < QB_MIN_ATT))]
 
 
 def _with_targets(logs: pd.DataFrame, targets: pd.DataFrame | None) -> pd.DataFrame:
@@ -144,12 +186,18 @@ def _fit_nb(mu, y) -> float:
     return float(rs[int(np.argmax(ll))])
 
 
-def fit(logs: pd.DataFrame | None = None) -> dict:
-    """Fit every stat's spread on FIT_SEASON games, with form from the games before."""
+def fit(logs: pd.DataFrame | None = None, before: tuple[int, int] | None = None) -> dict:
+    """Fit every stat's spread on games from FIT_FROM_SEASON up to `before` (season,
+    week; exclusive -- default: every game), with form from the games before each.
+    QB cameo games are left out of the fit too: Underdog only posts lines for the
+    expected starter, and fitting on cameos widened the spread toward the Under (QB
+    completions 45% vs 53% on real lines)."""
     logs = load_logs() if logs is None else logs
     stats = list(STATS)
-    d = form(logs, stats)
-    d = d[(d["season"] == FIT_SEASON) & ~d["_target"] & (d["n_prior"] >= MIN_GAMES)]
+    d = form(form_games(logs), stats)
+    d = d[(d["season"] >= FIT_FROM_SEASON) & ~d["_target"] & (d["n_prior"] >= MIN_GAMES)]
+    if before is not None:
+        d = d[(d["season"] < before[0]) | ((d["season"] == before[0]) & (d["week"] < before[1]))]
     out = {}
     for s, (kind, pos) in STATS.items():
         x = d[d["position"].isin(pos)]
@@ -214,6 +262,7 @@ def form_as_of(season: int, week: int, logs: pd.DataFrame | None = None) -> pd.D
     logs = load_logs() if logs is None else logs
     prior = logs[(logs["season"] < season) | ((logs["season"] == season) & (logs["week"] < week))]
     last = prior.groupby("player_id").tail(1)
+    prior = form_games(prior)
     # Only players active within the last season.
     last = last[last["season"] >= season - 1]
     targets = last[["player_id", "player_display_name", "position", "team"]].assign(season=season, week=week)
@@ -241,7 +290,7 @@ def main():
     dists = fit(logs)
     with open(DISTS_PATH, "w") as f:
         json.dump(dists, f)
-    print(f"Fitted {len(dists)} stat types on {FIT_SEASON} -> {DISTS_PATH}")
+    print(f"Fitted {len(dists)} stat types on {FIT_FROM_SEASON}+ games -> {DISTS_PATH}")
     cur = logs[logs["season"] == logs["season"].max()]
     season, week = int(cur["season"].max()), int(cur["week"].max()) + 1
     f = form_as_of(season, week, logs)

@@ -149,7 +149,9 @@ def grade(lines: pd.DataFrame, weekly: pd.DataFrame) -> pd.DataFrame:
         preds = point_in_time_predictions(season, week)
         prior_stats = weekly[(weekly["season"] < season) | ((weekly["season"] == season) & (weekly["week"] < week))]
         # Raw (unadjusted) probabilities: the real-line adjustment is FITTED from these.
-        board = score_underdog_board(wk_lines, preds, prior_stats, real_line_adjust=False)
+        # extra_form=False: models/extra_prop_form.csv is today's form, not that week's.
+        # backtest_line_history.grade_extra grades the form model point-in-time.
+        board = score_underdog_board(wk_lines, preds, prior_stats, real_line_adjust=False, extra_form=False)
 
         actual_rows = weekly[(weekly["season"] == season) & (weekly["week"] == week)].copy()
         actual_rows["_k"] = actual_rows["player_display_name"].apply(normalize_name)
