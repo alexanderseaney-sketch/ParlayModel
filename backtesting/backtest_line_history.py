@@ -78,15 +78,15 @@ def closing_lines_from_history(weeks_played: list[int], stats=None) -> pd.DataFr
 
 def grade_extra(weeks_played: list[int]) -> pd.DataFrame:
     """Grade models/extra_prop_models.py (every prop type the trained models don't
-    cover) against the same closing lines. Point-in-time: each week's expected values
-    use only earlier games, and the spreads were fitted on 2025, so nothing here was
-    tuned on these lines. Same output columns as B.grade (gated is always True: the
-    real line is used directly, no proxy to drift from)."""
+    cover, plus its fallback for the ones they do) against the same closing lines.
+    Point-in-time: each week's expected values use only earlier games, and the spreads
+    are refitted on the games before that week, so nothing here was tuned on these
+    lines. Same output columns as B.grade (gated is always True: the real line is used
+    directly, no proxy to drift from)."""
     import extra_prop_models as X
     from utils import normalize_name
 
-    dists = X.load_dists()
-    stats = [s for s in X.STATS if s in dists]
+    stats = list(X.STATS)
     lines = closing_lines_from_history(weeks_played, stats)
     lines = lines[lines["choice"] == "over"]
     if lines.empty:
@@ -97,6 +97,7 @@ def grade_extra(weeks_played: list[int]) -> pd.DataFrame:
     ko = B._kickoffs(B.SCHEDULES)
     out = []
     for (season, week), wk in lines.groupby(["season", "week"]):
+        dists = X.fit(logs, before=(season, week))
         f = X.form_as_of(season, week, logs)
         f["_k"] = f["player_display_name"].apply(normalize_name)
         act = logs[(logs["season"] == season) & (logs["week"] == week)].drop_duplicates("_k")
@@ -110,7 +111,7 @@ def grade_extra(weeks_played: list[int]) -> pd.DataFrame:
         if b.empty:
             continue
         b["model_prob_over"] = np.nan
-        for s, x in b.groupby("stat_name"):
+        for s, x in b[b["stat_name"].isin(list(dists))].groupby("stat_name"):
             b.loc[x.index, "model_prob_over"] = X.prob_over(s, x["mu"].to_numpy(), x["stat_value"].to_numpy(), dists)
         out.append(b)
     if not out:
@@ -123,6 +124,11 @@ def grade_extra(weeks_played: list[int]) -> pd.DataFrame:
     g["proxy_line"] = g["stat_value"]
     g["prop_type"] = "form_" + g["stat_name"]
     return g
+
+
+def _model_label(prop_type: pd.Series) -> str:
+    form = prop_type.astype(str).str.startswith("form_")
+    return "form" if form.all() else "trained" if not form.any() else "trained+form"
 
 
 def track_record(g: pd.DataFrame) -> dict:
@@ -145,7 +151,7 @@ def track_record(g: pd.DataFrame) -> dict:
         picks_over = x["model_prob_over"] > 0.5
         out["by_stat"][stat] = {"n": n, "accuracy": acc, "baseline": baseline,
                                 "over_rate": over_rate, "verdict": verdict,
-                                "model": "form" if str(x["prop_type"].iloc[0]).startswith("form_") else "trained",
+                                "model": _model_label(x["prop_type"]),
                                 "picked_over": int(picks_over.sum()), "picked_under": int((~picks_over).sum()),
                                 "over_pick_accuracy": float(x.loc[picks_over, "hit"].mean()) if picks_over.any() else None,
                                 "under_pick_accuracy": float(x.loc[~picks_over, "hit"].mean()) if (~picks_over).any() else None}
@@ -196,17 +202,18 @@ def refit_real_line_shift(g: pd.DataFrame) -> None:
 # 1st quarter / 1st half props the trained models price. Their lines are archived from
 # 2026-10-20 on (data/archive_underdog_lines.py), so they grade as soon as weeks land.
 PERIOD_ACTUALS = ["period_1_receiving_yds", "period_1_2_receiving_yds", "period_1_rushing_yds",
-                  "period_1_2_rushing_yds", "period_1_passing_yds", "period_1_2_passing_yds"]
+                  "period_1_2_rushing_yds", "period_1_passing_yds", "period_1_2_passing_yds",
+                  "period_1_rush_rec_tds", "period_1_2_rush_rec_tds"]
 
 
 def _add_period_actuals(weekly: pd.DataFrame) -> pd.DataFrame:
     import extra_prop_models as X
     if not os.path.exists(X.LOGS_PATH):
         return weekly
-    logs = pd.read_csv(X.LOGS_PATH, usecols=["player_id", "season", "week"] + PERIOD_ACTUALS)
+    logs = pd.read_csv(X.LOGS_PATH, usecols=lambda c: c in ["player_id", "season", "week"] + PERIOD_ACTUALS)
     weekly = weekly.merge(logs.drop_duplicates(["player_id", "season", "week"]),
                           on=["player_id", "season", "week"], how="left")
-    for c in PERIOD_ACTUALS:
+    for c in [c for c in PERIOD_ACTUALS if c in logs.columns]:
         B.ACTUALS.setdefault(c, lambda w, c=c: w[c])
     return weekly
 
@@ -231,6 +238,20 @@ def main():
     extra = grade_extra(played)
     if not extra.empty:
         extra["choice"] = "over"
+        # Fallback stats: the form model's number only counts where the app shows it --
+        # props the trained model left empty or didn't pass the Picks gate on
+        # (utils.score_extra_props).
+        import extra_prop_models as X
+        from utils import normalize_name
+        key = lambda d: d["season"].astype(str) + "|" + d["week"].astype(str) + "|" \
+            + d["full_name"].apply(normalize_name) + "|" + d["stat_name"]  # noqa: E731
+        shown = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()]
+        taken = set(key(shown)) if not shown.empty else set()
+        from utils import is_low_noise_line
+        fb = extra["stat_name"].isin(list(X.FALLBACK_STATS))
+        low = pd.Series([is_low_noise_line(s, v) for s, v in zip(extra["stat_name"], extra["stat_value"])],
+                        index=extra.index)
+        extra = extra[~(fb & (key(extra).isin(taken) | low))]
         g = pd.concat([g, extra], ignore_index=True)
     keep = ["gated", "season", "week", "_team", "full_name", "stat_name", "stat_value", "choice",
             "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over"]

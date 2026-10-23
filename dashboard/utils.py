@@ -607,7 +607,7 @@ def load_extra_form() -> pd.DataFrame | None:
 def score_extra_props(board: pd.DataFrame, form: pd.DataFrame | None = None) -> pd.DataFrame:
     """Fill model_prob_over for board rows whose stat models/extra_prop_models.py covers
     (tackles, kicking, longest plays, attempts, fantasy points, ...), straight against
-    the real line. Sacks too: its trained model scores a proxy line Underdog's 0.5-sack
+    the real line, plus the players the trained models skip (X.FALLBACK_STATS). Sacks too: its trained model scores a proxy line Underdog's 0.5-sack
     lines never match, so it never showed. Rows the form model can't price keep
     whatever they had."""
     import extra_prop_models as X
@@ -616,6 +616,19 @@ def score_extra_props(board: pd.DataFrame, form: pd.DataFrame | None = None) -> 
     if form is None or not dists:
         return board
     rows = board["stat_name"].isin([s for s in X.STATS if s in dists])
+    # Stats a trained model prices: only the rows it left empty, or priced against a
+    # proxy line too far from the real one for the Picks gate (line_matches_proxy) --
+    # mostly 1st quarter / 1st half yards, where the trained proxy misses the real
+    # line on half the board.
+    fb = board["stat_name"].isin(list(X.FALLBACK_STATS))
+    if fb.any():
+        has = board["model_prob_over"].notna() if "model_prob_over" in board.columns \
+            else pd.Series(False, index=board.index)
+        model_stat = board["stat_name"].map(lambda s: _UNDERDOG_TO_MODEL_STAT.get(s, s))
+        ok = pd.Series([bool(h) and line_matches_proxy(v, pl, s) for h, v, pl, s in
+                        zip(has, board["stat_value"], board.get("proxy_line", pd.Series(np.nan, index=board.index)),
+                            model_stat)], index=board.index)
+        rows &= ~fb | ~ok
     if not rows.any():
         return board
     m = board.loc[rows, ["_k", "stat_name"]].reset_index().merge(
@@ -642,7 +655,7 @@ def score_extra_props(board: pd.DataFrame, form: pd.DataFrame | None = None) -> 
 
 def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
                          weekly_stats: pd.DataFrame | None,
-                         real_line_adjust: bool = True) -> pd.DataFrame:
+                         real_line_adjust: bool = True, extra_form: bool = True) -> pd.DataFrame:
     """The Underdog pick'em board, one row per prop option (over + under), with the
     model attached: `model_prob_over` recomputed against the REAL Underdog line
     where a continuous weekly stat exists (else the model's stored proxy-line
@@ -697,7 +710,8 @@ def score_underdog_board(props: pd.DataFrame, predictions: pd.DataFrame | None,
     scored = board.apply(_row_prob_over, axis=1, result_type="expand")
     board["model_prob_over"] = scored[0]
     board["real_line_used"] = scored[1].fillna(False)
-    board = score_extra_props(board)
+    if extra_form:
+        board = score_extra_props(board)
     is_form = board["prop_type"].astype(str).str.startswith("form_")
     if real_line_adjust:
         # Trained models only: the logit shift refitted weekly on real lines
