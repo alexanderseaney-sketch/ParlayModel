@@ -9326,7 +9326,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037321,Chase Lucas,CB,SF,tackles,0.5087,10
 00-0037323,Rodney Thomas,SAF,SEA,tackles,1.685,12
 00-0037332,D'Anthony Bell,SAF,SEA,tackles,0.6769,12
-00-0037364,Arron Mosby,DE,GB,tackles,0.393,12
+00-0037364,Arron Mosby,LB,GB,tackles,0.393,12
 00-0037384,Ja'Quan McMillian,CB,DEN,tackles,2.9239,12
 00-0037395,Dallis Flowers,CB,CHI,tackles,1.726,5
 00-0037431,Kingsley Jonathan,DE,NYJ,tackles,0.0,2
@@ -10470,7 +10470,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037321,Chase Lucas,CB,SF,assists,0.3766,10
 00-0037323,Rodney Thomas,SAF,SEA,assists,0.7776,12
 00-0037332,D'Anthony Bell,SAF,SEA,assists,1.0769,12
-00-0037364,Arron Mosby,DE,GB,assists,0.6185,12
+00-0037364,Arron Mosby,LB,GB,assists,0.6185,12
 00-0037384,Ja'Quan McMillian,CB,DEN,assists,0.7171,12
 00-0037395,Dallis Flowers,CB,CHI,assists,0.0,5
 00-0037431,Kingsley Jonathan,DE,NYJ,assists,0.5405,2
@@ -11614,7 +11614,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037321,Chase Lucas,CB,SF,tackles_and_assists,0.8853,10
 00-0037323,Rodney Thomas,SAF,SEA,tackles_and_assists,2.4626,12
 00-0037332,D'Anthony Bell,SAF,SEA,tackles_and_assists,1.7538,12
-00-0037364,Arron Mosby,DE,GB,tackles_and_assists,1.0115,12
+00-0037364,Arron Mosby,LB,GB,tackles_and_assists,1.0115,12
 00-0037384,Ja'Quan McMillian,CB,DEN,tackles_and_assists,3.641,12
 00-0037395,Dallis Flowers,CB,CHI,tackles_and_assists,1.726,5
 00-0037431,Kingsley Jonathan,DE,NYJ,tackles_and_assists,0.5405,2
@@ -12758,7 +12758,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037321,Chase Lucas,CB,SF,sacks,0.0,10
 00-0037323,Rodney Thomas,SAF,SEA,sacks,0.0,12
 00-0037332,D'Anthony Bell,SAF,SEA,sacks,0.0456,12
-00-0037364,Arron Mosby,DE,GB,sacks,0.0,12
+00-0037364,Arron Mosby,LB,GB,sacks,0.0,12
 00-0037384,Ja'Quan McMillian,CB,DEN,sacks,0.3088,12
 00-0037395,Dallis Flowers,CB,CHI,sacks,0.0,5
 00-0037431,Kingsley Jonathan,DE,NYJ,sacks,0.0,2
@@ -13902,7 +13902,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037321,Chase Lucas,CB,SF,defensive_ints,0.0,10
 00-0037323,Rodney Thomas,SAF,SEA,defensive_ints,0.0,12
 00-0037332,D'Anthony Bell,SAF,SEA,defensive_ints,0.0,12
-00-0037364,Arron Mosby,DE,GB,defensive_ints,0.0,12
+00-0037364,Arron Mosby,LB,GB,defensive_ints,0.0,12
 00-0037384,Ja'Quan McMillian,CB,DEN,defensive_ints,0.2368,12
 00-0037395,Dallis Flowers,CB,CHI,defensive_ints,0.0,5
 00-0037431,Kingsley Jonathan,DE,NYJ,defensive_ints,0.0,2
