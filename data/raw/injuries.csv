@@ -14465,6 +14465,22 @@ season,game_type,team,week,gsis_id,position,full_name,first_name,last_name,repor
 2026.0,REG,TEN,7.0,00-0039032,RB,Tyjae Spears,Tyjae,Spears,Not injury related - resting player,Knee,Questionable,Not injury related - resting player,Knee,Limited Participation in Practice,,REG
 2026.0,REG,TEN,7.0,00-0040141,S,Kevin Winston Jr.,Kevin,Winston,Quadricep,,Questionable,Quadricep,,Limited Participation in Practice,,REG
 2026.0,REG,TEN,7.0,00-0040503,LB,Dorian Mausi,Dorian,Mausi,Foot,,Questionable,Foot,,Full Participation in Practice,,REG
+2026.0,REG,CAR,8.0,00-0036417,G,Damien Lewis,Damien,Lewis,,,,Knee,,Did Not Participate In Practice,,REG
+2026.0,REG,CAR,8.0,00-0036903,DT,Bobby Brown III,Bobby,Brown,,,,Hand,,Full Participation in Practice,,REG
+2026.0,REG,CAR,8.0,00-0036934,LB,Jaelan Phillips,Jaelan,Phillips,,,,Hamstring,,Did Not Participate In Practice,,REG
+2026.0,REG,CAR,8.0,00-0038101,CB,Akayleb Evans,Akayleb,Evans,,,,Triceps,Knee,Did Not Participate In Practice,,REG
+2026.0,REG,CAR,8.0,00-0039150,QB,Bryce Young,Bryce,Young,,,,Knee,,Full Participation in Practice,,REG
+2026.0,REG,CAR,8.0,00-0039491,WR,Jalen Coker,Jalen,Coker,,,,Shoulder,,Full Participation in Practice,,REG
+2026.0,REG,CAR,8.0,00-0040541,G,Torricelli Simpkins III,Torricelli,Simpkins,,,,Ankle,,Did Not Participate In Practice,,REG
+2026.0,REG,GB,8.0,00-0034431,LB,Zaire Franklin,Zaire,Franklin,,,,Shin,,Did Not Participate In Practice,,REG
+2026.0,REG,GB,8.0,00-0036551,G,Aaron Banks,Aaron,Banks,,,,Knee,Toe,Limited Participation in Practice,,REG
+2026.0,REG,GB,8.0,00-0036625,CB,Benjamin St-Juste,Benjamin,St-Juste,,,,Hamstring,,Full Participation in Practice,,REG
+2026.0,REG,GB,8.0,00-0037075,DT,Devonte Wyatt,Devonte,Wyatt,,,,Ankle,,Limited Participation in Practice,,REG
+2026.0,REG,GB,8.0,00-0037076,C,Sean Rhyan,Sean,Rhyan,,,,Ankle,,Did Not Participate In Practice,,REG
+2026.0,REG,GB,8.0,00-0038463,LB,Brenton Cox Jr.,Brenton,Cox,,,,Quadricep,,Limited Participation in Practice,,REG
+2026.0,REG,GB,8.0,00-0039819,G,Travis Glover,Travis,Glover,,,,Knee,,Did Not Participate In Practice,,REG
+2026.0,REG,GB,8.0,00-0040667,WR,Matthew Golden,Matthew,Golden,,,,Shoulder,Foot,Did Not Participate In Practice,,REG
+2026.0,REG,GB,8.0,00-0040689,DT,Anthony Campbell,Anthony,Campbell,,,,Ankle,,Limited Participation in Practice,,REG
 2023.0,REG,ARI,1.0,00-0034473,LB,Dennis Gardeck,Dennis,Gardeck,,,,Knee,,Full Participation in Practice,2023-09-08 18:49:43+00:00,
 2023.0,REG,ARI,1.0,00-0029316,T,Kelvin Beachum,Kelvin,Beachum,Hand,,Out,Hand,,Did Not Participate In Practice,2023-09-08 18:50:25+00:00,
 2023.0,REG,ARI,1.0,00-0035662,WR,Marquise Brown,Marquise,Brown,Hamstring,,Questionable,Hamstring,,Limited Participation in Practice,2023-09-08 18:50:02+00:00,

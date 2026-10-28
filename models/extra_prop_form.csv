@@ -9318,7 +9318,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037262,Thomas Booker,DT,LV,tackles,1.3669,12
 00-0037268,Zyon McCollum,CB,TB,tackles,2.8682,12
 00-0037269,Eric Johnson,DT,IND,tackles,0.5292,12
-00-0037270,Otito Ogbonnia,DT,DAL,tackles,1.9245,12
+00-0037270,Otito Ogbonnia,DT,DAL,tackles,1.7623,12
 00-0037271,D'Marco Jackson,LB,CHI,tackles,1.3732,12
 00-0037274,Esezi Otomewo,DT,PIT,tackles,0.5741,10
 00-0037275,DaRon Bland,CB,DAL,tackles,2.8377,12
@@ -10165,7 +10165,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034856,Denzel Ward,CB,CLE,assists,1.3965,12
 00-0034874,Roquan Smith,ILB,BAL,assists,3.8712,12
 00-0034966,D'Angelo Ross,CB,CLE,assists,0.9249,12
-00-0034967,Rashan Gary,LB,DAL,assists,0.6541,12
+00-0034967,Rashan Gary,LB,DAL,assists,0.8162,12
 00-0034968,Darnell Savage,SAF,BUF,assists,0.9924,12
 00-0034973,Maxx Crosby,DE,LV,assists,1.8479,12
 00-0034974,Julian Love,SAF,SEA,assists,1.2854,12
@@ -10463,7 +10463,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037262,Thomas Booker,DT,LV,assists,0.6535,12
 00-0037268,Zyon McCollum,CB,TB,assists,1.0754,12
 00-0037269,Eric Johnson,DT,IND,assists,1.0465,12
-00-0037270,Otito Ogbonnia,DT,DAL,assists,1.2767,12
+00-0037270,Otito Ogbonnia,DT,DAL,assists,1.4389,12
 00-0037271,D'Marco Jackson,LB,CHI,assists,1.8635,12
 00-0037274,Esezi Otomewo,DT,PIT,assists,1.0348,10
 00-0037275,DaRon Bland,CB,DAL,assists,1.0346,12
@@ -11310,7 +11310,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034856,Denzel Ward,CB,CLE,tackles_and_assists,3.3871,12
 00-0034874,Roquan Smith,ILB,BAL,tackles_and_assists,7.4627,12
 00-0034966,D'Angelo Ross,CB,CLE,tackles_and_assists,2.2352,12
-00-0034967,Rashan Gary,LB,DAL,tackles_and_assists,1.923,12
+00-0034967,Rashan Gary,LB,DAL,tackles_and_assists,2.0851,12
 00-0034968,Darnell Savage,SAF,BUF,tackles_and_assists,2.2934,12
 00-0034973,Maxx Crosby,DE,LV,tackles_and_assists,3.2748,12
 00-0034974,Julian Love,SAF,SEA,tackles_and_assists,3.6996,12
