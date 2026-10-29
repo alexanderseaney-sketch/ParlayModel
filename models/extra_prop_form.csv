@@ -9154,7 +9154,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0036323,Patrick Queen,LB,PIT,tackles,2.9943,12
 00-0036329,Ashtyn Davis,SAF,SF,tackles,1.2895,12
 00-0036333,Alex Highsmith,LB,PIT,tackles,1.2081,12
-00-0036335,D.J. Wonnum,DE,DET,tackles,1.2524,12
+00-0036335,DJ Wonnum,DE,DET,tackles,1.2524,12
 00-0036337,James Lynch,DT,CHI,tackles,0.6318,12
 00-0036338,Troy Dye,LB,LAC,tackles,2.4938,12
 00-0036341,Khalid Kareem,DE,SF,tackles,0.6976,12
@@ -10299,7 +10299,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0036323,Patrick Queen,LB,PIT,assists,3.8233,12
 00-0036329,Ashtyn Davis,SAF,SF,assists,1.0066,12
 00-0036333,Alex Highsmith,LB,PIT,assists,0.9358,12
-00-0036335,D.J. Wonnum,DE,DET,assists,0.9614,12
+00-0036335,DJ Wonnum,DE,DET,assists,0.9614,12
 00-0036337,James Lynch,DT,CHI,assists,1.484,12
 00-0036338,Troy Dye,LB,LAC,assists,1.2927,12
 00-0036341,Khalid Kareem,DE,SF,assists,0.7768,12
@@ -11444,7 +11444,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0036323,Patrick Queen,LB,PIT,tackles_and_assists,6.8176,12
 00-0036329,Ashtyn Davis,SAF,SF,tackles_and_assists,2.2961,12
 00-0036333,Alex Highsmith,LB,PIT,tackles_and_assists,2.1439,12
-00-0036335,D.J. Wonnum,DE,DET,tackles_and_assists,2.2138,12
+00-0036335,DJ Wonnum,DE,DET,tackles_and_assists,2.2138,12
 00-0036337,James Lynch,DT,CHI,tackles_and_assists,2.1157,12
 00-0036338,Troy Dye,LB,LAC,tackles_and_assists,3.7865,12
 00-0036341,Khalid Kareem,DE,SF,tackles_and_assists,1.4744,12
@@ -12589,7 +12589,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0036323,Patrick Queen,LB,PIT,sacks,0.1907,12
 00-0036329,Ashtyn Davis,SAF,SF,sacks,0.0,12
 00-0036333,Alex Highsmith,LB,PIT,sacks,0.3985,12
-00-0036335,D.J. Wonnum,DE,DET,sacks,0.7955,12
+00-0036335,DJ Wonnum,DE,DET,sacks,0.7955,12
 00-0036337,James Lynch,DT,CHI,sacks,0.0189,12
 00-0036338,Troy Dye,LB,LAC,sacks,0.2261,12
 00-0036341,Khalid Kareem,DE,SF,sacks,0.0,12
@@ -13734,7 +13734,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0036323,Patrick Queen,LB,PIT,defensive_ints,0.0846,12
 00-0036329,Ashtyn Davis,SAF,SF,defensive_ints,0.0378,12
 00-0036333,Alex Highsmith,LB,PIT,defensive_ints,0.0,12
-00-0036335,D.J. Wonnum,DE,DET,defensive_ints,0.0,12
+00-0036335,DJ Wonnum,DE,DET,defensive_ints,0.0,12
 00-0036337,James Lynch,DT,CHI,defensive_ints,0.0,12
 00-0036338,Troy Dye,LB,LAC,defensive_ints,0.0,12
 00-0036341,Khalid Kareem,DE,SF,defensive_ints,0.0,12
