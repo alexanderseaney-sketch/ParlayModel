@@ -129,8 +129,19 @@ def get_picks() -> tuple[pd.DataFrame, dict]:
     c = (c.sort_values("edge", ascending=False)
          .drop_duplicates(["player", "stat_name"], keep="first"))
     rec = load_track_record().get("by_stat", {})
-    c["verdict"] = c["stat_name"].map(lambda s: rec.get(s, {}).get("verdict", "unproven"))
-    c["record"] = c["stat_name"].map(lambda s: rec.get(s, {}).get("accuracy"))
+    # The side's own verdict where the record has one: a trusted stat can still have a
+    # losing side (assists Unders, receptions Overs), and those stay out of parlays.
+    def verdict(stat, choice):
+        r = rec.get(stat, {})
+        side = "over" if str(choice).lower() in ("over", "higher") else "under"
+        return r.get(f"{side}_verdict", r.get("verdict", "unproven"))
+    c["verdict"] = [verdict(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
+    def record(stat, choice):
+        r = rec.get(stat, {})
+        side = "over" if str(choice).lower() in ("over", "higher") else "under"
+        acc = r.get(f"{side}_pick_accuracy")
+        return acc if acc is not None and r.get(f"picked_{side}", 0) >= 30 else r.get("accuracy")
+    c["record"] = [record(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
     return c.reset_index(drop=True), info
 
 
