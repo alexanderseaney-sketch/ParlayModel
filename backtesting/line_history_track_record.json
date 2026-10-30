@@ -18,7 +18,9 @@
       "picked_over": 0,
       "picked_under": 30,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.7666666666666667
+      "under_pick_accuracy": 0.7666666666666667,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "150_pass_yds_each_half": {
       "n": 25,
@@ -30,7 +32,9 @@
       "picked_over": 0,
       "picked_under": 25,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.88
+      "under_pick_accuracy": 0.88,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "25_pass_yds_each_quarter": {
       "n": 30,
@@ -42,7 +46,9 @@
       "picked_over": 0,
       "picked_under": 30,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.6333333333333333
+      "under_pick_accuracy": 0.6333333333333333,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "25_rec_yds_each_half": {
       "n": 104,
@@ -54,7 +60,9 @@
       "picked_over": 0,
       "picked_under": 104,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9038461538461539
+      "under_pick_accuracy": 0.9038461538461539,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "25_rush_yds_each_half": {
       "n": 51,
@@ -66,7 +74,9 @@
       "picked_over": 1,
       "picked_under": 50,
       "over_pick_accuracy": 1.0,
-      "under_pick_accuracy": 0.88
+      "under_pick_accuracy": 0.88,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "50_pass_yds_each_quarter": {
       "n": 30,
@@ -78,7 +88,9 @@
       "picked_over": 0,
       "picked_under": 30,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9666666666666667
+      "under_pick_accuracy": 0.9666666666666667,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "50_rec_yds_each_half": {
       "n": 49,
@@ -90,7 +102,9 @@
       "picked_over": 0,
       "picked_under": 49,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9795918367346939
+      "under_pick_accuracy": 0.9795918367346939,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "50_rush_yds_each_half": {
       "n": 22,
@@ -102,7 +116,9 @@
       "picked_over": 0,
       "picked_under": 22,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.8636363636363636
+      "under_pick_accuracy": 0.8636363636363636,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "assists": {
       "n": 727,
@@ -114,7 +130,9 @@
       "picked_over": 286,
       "picked_under": 441,
       "over_pick_accuracy": 0.583916083916084,
-      "under_pick_accuracy": 0.5351473922902494
+      "under_pick_accuracy": 0.5351473922902494,
+      "over_verdict": "trusted",
+      "under_verdict": "avoid"
     },
     "defensive_ints": {
       "n": 723,
@@ -126,7 +144,9 @@
       "picked_over": 0,
       "picked_under": 723,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9253112033195021
+      "under_pick_accuracy": 0.9253112033195021,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "extra_points_made": {
       "n": 89,
@@ -138,7 +158,9 @@
       "picked_over": 39,
       "picked_under": 50,
       "over_pick_accuracy": 0.46153846153846156,
-      "under_pick_accuracy": 0.56
+      "under_pick_accuracy": 0.56,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "fantasy_points": {
       "n": 646,
@@ -150,7 +172,9 @@
       "picked_over": 204,
       "picked_under": 442,
       "over_pick_accuracy": 0.47058823529411764,
-      "under_pick_accuracy": 0.5248868778280543
+      "under_pick_accuracy": 0.5248868778280543,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "field_goals_made": {
       "n": 72,
@@ -162,7 +186,9 @@
       "picked_over": 41,
       "picked_under": 31,
       "over_pick_accuracy": 0.5853658536585366,
-      "under_pick_accuracy": 0.45161290322580644
+      "under_pick_accuracy": 0.45161290322580644,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "fumbles_lost": {
       "n": 397,
@@ -174,7 +200,9 @@
       "picked_over": 0,
       "picked_under": 397,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9420654911838791
+      "under_pick_accuracy": 0.9420654911838791,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "kicking_points": {
       "n": 109,
@@ -186,7 +214,9 @@
       "picked_over": 60,
       "picked_under": 49,
       "over_pick_accuracy": 0.48333333333333334,
-      "under_pick_accuracy": 0.4897959183673469
+      "under_pick_accuracy": 0.4897959183673469,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "last_touchdown_scored": {
       "n": 158,
@@ -198,7 +228,9 @@
       "picked_over": 0,
       "picked_under": 158,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9556962025316456
+      "under_pick_accuracy": 0.9556962025316456,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "passing_and_rushing_yds": {
       "n": 127,
@@ -210,7 +242,9 @@
       "picked_over": 63,
       "picked_under": 64,
       "over_pick_accuracy": 0.4603174603174603,
-      "under_pick_accuracy": 0.421875
+      "under_pick_accuracy": 0.421875,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "passing_att": {
       "n": 108,
@@ -222,7 +256,9 @@
       "picked_over": 62,
       "picked_under": 46,
       "over_pick_accuracy": 0.4838709677419355,
-      "under_pick_accuracy": 0.43478260869565216
+      "under_pick_accuracy": 0.43478260869565216,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "passing_comps": {
       "n": 120,
@@ -234,7 +270,9 @@
       "picked_over": 53,
       "picked_under": 67,
       "over_pick_accuracy": 0.5471698113207547,
-      "under_pick_accuracy": 0.4925373134328358
+      "under_pick_accuracy": 0.4925373134328358,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "passing_ints": {
       "n": 44,
@@ -246,7 +284,9 @@
       "picked_over": 23,
       "picked_under": 21,
       "over_pick_accuracy": 0.43478260869565216,
-      "under_pick_accuracy": 0.5714285714285714
+      "under_pick_accuracy": 0.5714285714285714,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "passing_long": {
       "n": 108,
@@ -258,7 +298,9 @@
       "picked_over": 47,
       "picked_under": 61,
       "over_pick_accuracy": 0.44680851063829785,
-      "under_pick_accuracy": 0.5081967213114754
+      "under_pick_accuracy": 0.5081967213114754,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "passing_tds": {
       "n": 51,
@@ -270,7 +312,9 @@
       "picked_over": 17,
       "picked_under": 34,
       "over_pick_accuracy": 0.6470588235294118,
-      "under_pick_accuracy": 0.6176470588235294
+      "under_pick_accuracy": 0.6176470588235294,
+      "over_verdict": "trusted",
+      "under_verdict": "trusted"
     },
     "passing_yds": {
       "n": 111,
@@ -282,7 +326,9 @@
       "picked_over": 64,
       "picked_under": 47,
       "over_pick_accuracy": 0.5625,
-      "under_pick_accuracy": 0.425531914893617
+      "under_pick_accuracy": 0.425531914893617,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_2_passing_yds": {
       "n": 28,
@@ -294,7 +340,9 @@
       "picked_over": 19,
       "picked_under": 9,
       "over_pick_accuracy": 0.5789473684210527,
-      "under_pick_accuracy": 0.7777777777777778
+      "under_pick_accuracy": 0.7777777777777778,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_2_receiving_rec": {
       "n": 204,
@@ -306,7 +354,9 @@
       "picked_over": 76,
       "picked_under": 128,
       "over_pick_accuracy": 0.5526315789473685,
-      "under_pick_accuracy": 0.53125
+      "under_pick_accuracy": 0.53125,
+      "over_verdict": "trusted",
+      "under_verdict": "avoid"
     },
     "period_1_2_receiving_yds": {
       "n": 204,
@@ -318,7 +368,9 @@
       "picked_over": 43,
       "picked_under": 161,
       "over_pick_accuracy": 0.4418604651162791,
-      "under_pick_accuracy": 0.546583850931677
+      "under_pick_accuracy": 0.546583850931677,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_2_rush_rec_tds": {
       "n": 259,
@@ -330,7 +382,9 @@
       "picked_over": 2,
       "picked_under": 257,
       "over_pick_accuracy": 0.0,
-      "under_pick_accuracy": 0.8754863813229572
+      "under_pick_accuracy": 0.8754863813229572,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_2_rushing_yds": {
       "n": 87,
@@ -342,7 +396,9 @@
       "picked_over": 28,
       "picked_under": 59,
       "over_pick_accuracy": 0.39285714285714285,
-      "under_pick_accuracy": 0.4745762711864407
+      "under_pick_accuracy": 0.4745762711864407,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "period_1_passing_yds": {
       "n": 28,
@@ -354,7 +410,9 @@
       "picked_over": 15,
       "picked_under": 13,
       "over_pick_accuracy": 0.4,
-      "under_pick_accuracy": 0.38461538461538464
+      "under_pick_accuracy": 0.38461538461538464,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "period_1_receiving_rec": {
       "n": 203,
@@ -366,7 +424,9 @@
       "picked_over": 45,
       "picked_under": 158,
       "over_pick_accuracy": 0.4666666666666667,
-      "under_pick_accuracy": 0.5886075949367089
+      "under_pick_accuracy": 0.5886075949367089,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_receiving_yds": {
       "n": 203,
@@ -378,7 +438,9 @@
       "picked_over": 13,
       "picked_under": 190,
       "over_pick_accuracy": 0.6153846153846154,
-      "under_pick_accuracy": 0.6526315789473685
+      "under_pick_accuracy": 0.6526315789473685,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_rush_rec_tds": {
       "n": 206,
@@ -390,7 +452,9 @@
       "picked_over": 0,
       "picked_under": 206,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9223300970873787
+      "under_pick_accuracy": 0.9223300970873787,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_1_rushing_yds": {
       "n": 87,
@@ -402,7 +466,9 @@
       "picked_over": 18,
       "picked_under": 69,
       "over_pick_accuracy": 0.4444444444444444,
-      "under_pick_accuracy": 0.6086956521739131
+      "under_pick_accuracy": 0.6086956521739131,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "period_first_touchdown_scored": {
       "n": 202,
@@ -414,7 +480,9 @@
       "picked_over": 0,
       "picked_under": 202,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.9306930693069307
+      "under_pick_accuracy": 0.9306930693069307,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "receiving_long": {
       "n": 765,
@@ -426,7 +494,9 @@
       "picked_over": 311,
       "picked_under": 454,
       "over_pick_accuracy": 0.5594855305466238,
-      "under_pick_accuracy": 0.579295154185022
+      "under_pick_accuracy": 0.579295154185022,
+      "over_verdict": "trusted",
+      "under_verdict": "trusted"
     },
     "receiving_rec": {
       "n": 396,
@@ -438,7 +508,9 @@
       "picked_over": 132,
       "picked_under": 264,
       "over_pick_accuracy": 0.5454545454545454,
-      "under_pick_accuracy": 0.5909090909090909
+      "under_pick_accuracy": 0.5909090909090909,
+      "over_verdict": "avoid",
+      "under_verdict": "trusted"
     },
     "receiving_tgts": {
       "n": 690,
@@ -450,7 +522,9 @@
       "picked_over": 197,
       "picked_under": 493,
       "over_pick_accuracy": 0.49238578680203043,
-      "under_pick_accuracy": 0.565922920892495
+      "under_pick_accuracy": 0.565922920892495,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "receiving_yds": {
       "n": 413,
@@ -462,7 +536,9 @@
       "picked_over": 162,
       "picked_under": 251,
       "over_pick_accuracy": 0.5308641975308642,
-      "under_pick_accuracy": 0.545816733067729
+      "under_pick_accuracy": 0.545816733067729,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "rush_rec_tds": {
       "n": 633,
@@ -474,7 +550,9 @@
       "picked_over": 13,
       "picked_under": 620,
       "over_pick_accuracy": 0.6153846153846154,
-      "under_pick_accuracy": 0.9080645161290323
+      "under_pick_accuracy": 0.9080645161290323,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "rush_rec_yds": {
       "n": 245,
@@ -486,7 +564,9 @@
       "picked_over": 54,
       "picked_under": 191,
       "over_pick_accuracy": 0.46296296296296297,
-      "under_pick_accuracy": 0.5130890052356021
+      "under_pick_accuracy": 0.5130890052356021,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "rushing_att": {
       "n": 325,
@@ -498,7 +578,9 @@
       "picked_over": 116,
       "picked_under": 209,
       "over_pick_accuracy": 0.5172413793103449,
-      "under_pick_accuracy": 0.5358851674641149
+      "under_pick_accuracy": 0.5358851674641149,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "rushing_long": {
       "n": 345,
@@ -510,7 +592,9 @@
       "picked_over": 88,
       "picked_under": 257,
       "over_pick_accuracy": 0.5227272727272727,
-      "under_pick_accuracy": 0.5603112840466926
+      "under_pick_accuracy": 0.5603112840466926,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "rushing_yds": {
       "n": 182,
@@ -522,7 +606,9 @@
       "picked_over": 81,
       "picked_under": 101,
       "over_pick_accuracy": 0.4691358024691358,
-      "under_pick_accuracy": 0.5148514851485149
+      "under_pick_accuracy": 0.5148514851485149,
+      "over_verdict": "avoid",
+      "under_verdict": "avoid"
     },
     "sacks": {
       "n": 880,
@@ -534,7 +620,9 @@
       "picked_over": 0,
       "picked_under": 880,
       "over_pick_accuracy": null,
-      "under_pick_accuracy": 0.8522727272727273
+      "under_pick_accuracy": 0.8522727272727273,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "tackles": {
       "n": 709,
@@ -546,7 +634,9 @@
       "picked_over": 238,
       "picked_under": 471,
       "over_pick_accuracy": 0.47478991596638653,
-      "under_pick_accuracy": 0.5774946921443737
+      "under_pick_accuracy": 0.5774946921443737,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     },
     "tackles_and_assists": {
       "n": 705,
@@ -558,7 +648,9 @@
       "picked_over": 250,
       "picked_under": 455,
       "over_pick_accuracy": 0.52,
-      "under_pick_accuracy": 0.5824175824175825
+      "under_pick_accuracy": 0.5824175824175825,
+      "over_verdict": "unproven",
+      "under_verdict": "unproven"
     }
   },
   "overall": {

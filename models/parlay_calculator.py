@@ -85,10 +85,17 @@ def _same_game_links() -> dict:
     return _SAME_GAME_LINKS
 
 
+# Defensive links are measured per stat, not per position (build_leg_correlations.py).
+_DEFENSE_POSITIONS = {"LB", "ILB", "OLB", "MLB", "DE", "DT", "DL", "NT", "EDGE", "CB", "S", "SAF",
+                      "FS", "SS", "DB"}
+
+
 def leg_key(position, stat_name) -> str | None:
     if not position or not stat_name or str(position) == "nan":
         return None
     stat = _STAT_ALIASES.get(str(stat_name), str(stat_name))
+    if str(position).upper() in _DEFENSE_POSITIONS:
+        position = "DEF"
     return f"{position} {stat}"
 
 

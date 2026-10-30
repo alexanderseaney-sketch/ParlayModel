@@ -37,6 +37,19 @@ OUT_JSON = os.path.join(B.ROOT, "backtesting", "line_history_track_record.json")
 # coin flip. Anything else is "unproven".
 TRUST_MARGIN = 0.03
 MIN_N = 30
+# One side of a trusted stat can still lose money: assists Unders hit 53.5% and receptions
+# Overs 54.5% while the stats as a whole were trusted (2026 wks 1-7), and the 10/29 TNF
+# test lost on both. A side with at least SIDE_MIN_N graded picks that hits below a
+# 3-pick entry's break-even (6x standard payout -> 6 ** (-1/3) = 55.0% a pick) is
+# "avoid" on its own; a side with fewer picks follows the stat's verdict.
+SIDE_MIN_N = 50
+SIDE_BREAK_EVEN = 6 ** (-1 / 3)
+
+
+def side_verdict(stat_verdict: str, n: int, accuracy) -> str:
+    if stat_verdict == "trusted" and n >= SIDE_MIN_N and accuracy is not None and accuracy < SIDE_BREAK_EVEN:
+        return "avoid"
+    return stat_verdict
 
 
 def closing_lines_from_history(weeks_played: list[int], stats=None) -> pd.DataFrame:
@@ -149,12 +162,15 @@ def track_record(g: pd.DataFrame) -> dict:
         else:
             verdict = "unproven"
         picks_over = x["model_prob_over"] > 0.5
+        over_acc = float(x.loc[picks_over, "hit"].mean()) if picks_over.any() else None
+        under_acc = float(x.loc[~picks_over, "hit"].mean()) if (~picks_over).any() else None
         out["by_stat"][stat] = {"n": n, "accuracy": acc, "baseline": baseline,
                                 "over_rate": over_rate, "verdict": verdict,
                                 "model": _model_label(x["prop_type"]),
                                 "picked_over": int(picks_over.sum()), "picked_under": int((~picks_over).sum()),
-                                "over_pick_accuracy": float(x.loc[picks_over, "hit"].mean()) if picks_over.any() else None,
-                                "under_pick_accuracy": float(x.loc[~picks_over, "hit"].mean()) if (~picks_over).any() else None}
+                                "over_pick_accuracy": over_acc, "under_pick_accuracy": under_acc,
+                                "over_verdict": side_verdict(verdict, int(picks_over.sum()), over_acc),
+                                "under_verdict": side_verdict(verdict, int((~picks_over).sum()), under_acc)}
     po = d["model_prob_over"] > 0.5
     out["overall"] = {"n": int(len(d)), "accuracy": float(d["hit"].mean()) if len(d) else None,
                       "picked_over": int(po.sum()), "picked_under": int((~po).sum()),

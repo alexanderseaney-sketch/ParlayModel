@@ -20,6 +20,14 @@ pairs are treated as independent. Fit on 2019-2024, then checked on 2025 (held o
 the script prints how far the adjusted joint hit rate lands from the real one vs the
 independent product. The saved table is refit on every season through the latest.
 
+Defensive props (tackles, assists) aren't in weekly_stats.csv, so their links come from the
+real Underdog lines the app has graded (backtesting/line_history_graded.csv), keyed by
+"DEF <stat>" since Underdog's defensive positions (LB, ILB, SAF, CB, DT ...) are too thin
+to split. Every pair from one team-game shares that game, so a link is kept only when a
+bootstrap over team-games puts its 95% interval clear of zero. Teammates' assists go
+over together (+0.10): how freely a game's stat crew hands out assists moves every
+defender's number at once, and the 10/29 TNF test lost four assists Overs together.
+
 Output: models/leg_correlations.csv (leg_a, leg_b, relation, n, phi), read by
 models/parlay_calculator.py. Run: python models/build_leg_correlations.py
 """
@@ -30,6 +38,7 @@ import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEEKLY_PATH = os.path.join(ROOT, "data", "raw", "weekly_stats.csv")
+GRADED_PATH = os.path.join(ROOT, "backtesting", "line_history_graded.csv")
 OUT_PATH = os.path.join(ROOT, "models", "leg_correlations.csv")
 
 FIRST_SEASON = 2019
@@ -50,6 +59,8 @@ STATS = {
     "rush_rec_tds": (["RB", "WR", "TE"], lambda w: w["rushing_tds"] + w["receiving_tds"], 0.2),
 }
 COUNT_STATS = {"passing_tds", "passing_ints", "receiving_rec", "rush_rec_tds"}
+DEF_STATS = ["tackles", "assists", "tackles_and_assists"]
+BOOTSTRAPS = 500
 
 
 def leg_key(position: str, stat_name: str) -> str:
@@ -147,6 +158,43 @@ def holdout_check(pairs: pd.DataFrame, table: pd.DataFrame) -> None:
               f"{err_adj / total * 100:.2f} pts with the measured links.")
 
 
+def _phi(a: np.ndarray, b: np.ndarray) -> float:
+    pa, pb = a.mean(), b.mean()
+    denom = np.sqrt(pa * (1 - pa) * pb * (1 - pb))
+    return float(((a & b).mean() - pa * pb) / denom) if denom > 0 else 0.0
+
+
+def real_line_defense_links(path: str = GRADED_PATH) -> pd.DataFrame:
+    """Same-team links between defensive props, measured against the real lines."""
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    g = pd.read_csv(path, low_memory=False)
+    g = g[g["stat_name"].isin(DEF_STATS) & g["actual"].notna() & (g["actual"] != g["stat_value"])]
+    g = g.drop_duplicates(["season", "week", "full_name", "stat_name"])
+    rng = np.random.default_rng(0)
+    rows = []
+    for i, sa in enumerate(DEF_STATS):
+        for sb in DEF_STATS[i:]:
+            a = g[g["stat_name"] == sa][["season", "week", "_team", "full_name", "went_over"]]
+            b = g[g["stat_name"] == sb][["season", "week", "_team", "full_name", "went_over"]]
+            p = a.merge(b, on=["season", "week", "_team"])
+            p = p[p["full_name_x"] < p["full_name_y"]] if sa == sb else p[p["full_name_x"] != p["full_name_y"]]
+            if len(p) < MIN_PAIRS:
+                continue
+            x, y = p["went_over_x"].to_numpy().astype(int), p["went_over_y"].to_numpy().astype(int)
+            phi = _phi(x, y)
+            groups = list(p.groupby(["season", "week", "_team"]).indices.values())
+            boot = []
+            for _ in range(BOOTSTRAPS):
+                idx = np.concatenate([groups[j] for j in rng.integers(0, len(groups), len(groups))])
+                boot.append(_phi(x[idx], y[idx]))
+            lo, hi = np.percentile(boot, [2.5, 97.5])
+            if lo > 0 or hi < 0:
+                rows.append({"leg_a": f"DEF {sa}", "leg_b": f"DEF {sb}", "relation": "same_team",
+                             "n": len(p), "phi": round(phi, 4)})
+    return pd.DataFrame(rows)
+
+
 def main():
     weekly = pd.read_csv(WEEKLY_PATH, low_memory=False)
     outcomes = build_outcomes(weekly)
@@ -158,6 +206,9 @@ def main():
     holdout_check(pairs, train)
 
     table = phi_table(pairs)
+    defense = real_line_defense_links()
+    print(f"{len(defense)} defensive link(s) from real lines:\n{defense.to_string(index=False)}")
+    table = pd.concat([table, defense], ignore_index=True)
     table.to_csv(OUT_PATH, index=False)
     print(f"Saved {len(table)} linked pair types -> {OUT_PATH}")
     print(table.head(25).to_string(index=False))
