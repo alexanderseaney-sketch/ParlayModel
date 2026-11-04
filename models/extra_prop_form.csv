@@ -10272,7 +10272,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034856,Denzel Ward,CB,CLE,assists,1.329,12
 00-0034874,Roquan Smith,ILB,BAL,assists,4.0475,12
 00-0034966,D'Angelo Ross,CB,CLE,assists,0.9249,12
-00-0034967,Rashan Gary,LB,DAL,assists,1.0496,12
+00-0034967,Rashan Gary,LB,DAL,assists,1.2079,12
 00-0034968,Darnell Savage,SAF,BUF,assists,0.9924,12
 00-0034973,Maxx Crosby,DE,LV,assists,1.8579,12
 00-0034974,Julian Love,SAF,SEA,assists,1.4264,12
@@ -10607,7 +10607,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037527,Segun Olubi,LB,LV,assists,0.4141,12
 00-0037544,Nephi Sewell,LB,NO,assists,0.8824,5
 00-0037549,Darrell Baker Jr.,CB,TEN,assists,0.738,12
-00-0037561,Markquese Bell,SAF,DAL,assists,1.4582,12
+00-0037561,Markquese Bell,SAF,DAL,assists,1.2999,12
 00-0037578,Juanyeh Thomas,DB,DAL,assists,1.6136,12
 00-0037585,Timmy Horne,DT,TEN,assists,2.4383,3
 00-0037587,Nate Landman,LB,LA,assists,3.472,12
@@ -11424,7 +11424,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034856,Denzel Ward,CB,CLE,tackles_and_assists,3.1032,12
 00-0034874,Roquan Smith,ILB,BAL,tackles_and_assists,8.0969,12
 00-0034966,D'Angelo Ross,CB,CLE,tackles_and_assists,2.2352,12
-00-0034967,Rashan Gary,LB,DAL,tackles_and_assists,2.0706,12
+00-0034967,Rashan Gary,LB,DAL,tackles_and_assists,2.2288,12
 00-0034968,Darnell Savage,SAF,BUF,tackles_and_assists,2.2934,12
 00-0034973,Maxx Crosby,DE,LV,tackles_and_assists,3.3347,12
 00-0034974,Julian Love,SAF,SEA,tackles_and_assists,4.3731,12
@@ -11759,7 +11759,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037527,Segun Olubi,LB,LV,tackles_and_assists,1.169,12
 00-0037544,Nephi Sewell,LB,NO,tackles_and_assists,2.3639,5
 00-0037549,Darrell Baker Jr.,CB,TEN,tackles_and_assists,3.6768,12
-00-0037561,Markquese Bell,SAF,DAL,tackles_and_assists,3.6671,12
+00-0037561,Markquese Bell,SAF,DAL,tackles_and_assists,3.5089,12
 00-0037578,Juanyeh Thomas,DB,DAL,tackles_and_assists,2.7239,12
 00-0037585,Timmy Horne,DT,TEN,tackles_and_assists,2.7191,3
 00-0037587,Nate Landman,LB,LA,tackles_and_assists,8.3463,12
