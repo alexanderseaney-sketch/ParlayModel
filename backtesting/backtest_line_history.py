@@ -179,6 +179,38 @@ def track_record(g: pd.DataFrame) -> dict:
     return out
 
 
+def pick_rule_check(g: pd.DataFrame) -> dict:
+    """Walk-forward check of models/pick_rules.py: each week's picks judged only with the
+    track record of the weeks before it, for the proven-pick rule and the old stat-type
+    verdict it replaced (2026-11-05). Period and longest-reception props are left out:
+    Alex keeps them out of parlays unless near-certain."""
+    import pick_rules as R
+    d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()].copy()
+    d = d[~d["stat_name"].str.startswith("period_") & (d["stat_name"] != "receiving_long")]
+    d["side"] = np.where(d["model_prob_over"] > 0.5, "over", "under")
+    d["side_prob"] = np.where(d["side"] == "over", d["model_prob_over"], 1 - d["model_prob_over"])
+    d["hit"] = (d["side"] == "over") == (d["went_over"] == 1)
+    wk = d["season"] * 100 + d["week"]
+    out = {"weeks": [], "new_rule": {"n": 0, "hits": 0}, "old_rule": {"n": 0, "hits": 0}}
+    for w in sorted(wk.unique())[1:]:
+        rec = track_record(g[(g["season"] * 100 + g["week"]) < w])["by_stat"]
+        x = d[wk == w]
+        new = np.array([R.is_proven_pick(rec.get(s), sd, p)
+                        for s, sd, p in zip(x["stat_name"], x["side"], x["side_prob"])], bool)
+        old = np.array([rec.get(s, {}).get(f"{sd}_verdict") == "trusted"
+                        for s, sd in zip(x["stat_name"], x["side"])], bool)
+        row = {"week": f"{w // 100}-wk{w % 100}"}
+        for k, m in (("new_rule", new), ("old_rule", old)):
+            n, h = int(m.sum()), int(x.loc[m, "hit"].sum())
+            row[k] = {"n": n, "accuracy": h / n if n else None}
+            out[k]["n"] += n
+            out[k]["hits"] += h
+        out["weeks"].append(row)
+    for k in ("new_rule", "old_rule"):
+        out[k]["accuracy"] = out[k]["hits"] / out[k]["n"] if out[k]["n"] else None
+    return out
+
+
 def refit_real_line_shift(g: pd.DataFrame) -> None:
     """Refit calibration.adjust_over_prob's logit shift for the trained models on every
     graded week (2026-10-20). It used to be fitted only by backtest_underdog_lines.py,
@@ -292,6 +324,7 @@ def main():
             "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over"]
     g[[c for c in keep if c in g.columns]].to_csv(OUT_CSV, index=False)
     rec = track_record(g)
+    rec["pick_rule_check"] = pick_rule_check(g)
     with open(OUT_JSON, "w") as f:
         json.dump(rec, f, indent=2)
     print(f"Weeks: {rec['weeks']}  |  graded props: {rec['overall']['n']}  "
@@ -299,6 +332,10 @@ def main():
     for stat, r in rec["by_stat"].items():
         print(f"  {stat:26} n={r['n']:>4}  model {r['accuracy']*100:5.1f}%  "
               f"baseline {r['baseline']*100:5.1f}%  overs hit {r['over_rate']*100:5.1f}%  -> {r['verdict']}")
+    chk = rec["pick_rule_check"]
+    for k in ("new_rule", "old_rule"):
+        if chk[k]["n"]:
+            print(f"  walk-forward {k}: {chk[k]['accuracy'] * 100:.1f}% on {chk[k]['n']} picks")
     print(f"Saved -> {OUT_JSON}")
 
 

@@ -39,9 +39,19 @@ TRACK_RECORD_PATH = os.path.join(ROOT_DIR, "backtesting", "line_history_track_re
 # with an 8%+ edge were the only band with a clearly positive ROI.
 STRONG_EDGE = 0.08
 GOOD_EDGE = 0.03
+# Alex's rule (2026-11-05, and 2026-10-22 for longest reception): quarter and half lines
+# and longest-reception lines stay off Picks and out of "Build my parlay" unless the model
+# is near-certain. Week 9's trackers leaned on 1Q/1H legs and they hit ~50-54%.
+NEAR_CERTAIN = 0.80
+NEAR_CERTAIN_ONLY_STATS = ("receiving_long",)
+
+
+def near_certain_only(stat_name: str) -> bool:
+    s = str(stat_name)
+    return s.startswith("period_") or s in NEAR_CERTAIN_ONLY_STATS
 
 VERDICT_COPY = {
-    "trusted": ("Proven", "Beats the market baseline on real lines"),
+    "trusted": ("Proven", "Beats the market baseline on real lines; picks still need the model at 60%+"),
     "unproven": ("Unproven", "No better than always taking the commoner side yet"),
     "avoid": ("Avoid", "Worse than a coin flip on real lines"),
 }
@@ -136,12 +146,20 @@ def get_picks() -> tuple[pd.DataFrame, dict]:
         side = "over" if str(choice).lower() in ("over", "higher") else "under"
         return r.get(f"{side}_verdict", r.get("verdict", "unproven"))
     c["verdict"] = [verdict(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
+    # "trusted" now means a proven PICK (models/pick_rules.py): the model is 60%+ on its
+    # side of a coin-flip-ish stat whose side has held up on real lines. The old
+    # stat-type verdict alone hit 54.6% walk-forward, under a 3-pick's 55% break-even.
+    from pick_rules import is_proven_pick, side_of
+    proven = [is_proven_pick(rec.get(s), side_of(ch), p)
+              for s, ch, p in zip(c["stat_name"], c["choice"], c["model_prob"])]
+    c["verdict"] = np.where(proven, "trusted", np.where(c["verdict"] == "avoid", "avoid", "unproven"))
     def record(stat, choice):
         r = rec.get(stat, {})
         side = "over" if str(choice).lower() in ("over", "higher") else "under"
         acc = r.get(f"{side}_pick_accuracy")
         return acc if acc is not None and r.get(f"picked_{side}", 0) >= 30 else r.get("accuracy")
     c["record"] = [record(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
+    c["skip_unless_sure"] = c["stat_name"].map(near_certain_only) & (c["chance"] < NEAR_CERTAIN)
     return c.reset_index(drop=True), info
 
 
@@ -224,9 +242,10 @@ def page_picks():
     f1, f2, f3 = st.columns([2, 2, 3])
     min_label = f1.segmented_control("Show", ["Strong", "Good+", "All"], default="Good+",
                                      key="ph_strength")
-    proven_only = f2.toggle("Proven stat types only", value=True, key="ph_proven",
-                            help="Only stat types where the model has beaten the market "
-                                 "baseline on real Underdog lines.")
+    proven_only = f2.toggle("Proven picks only", value=True, key="ph_proven",
+                            help="Only picks the model gives 60%+ on a stat type whose lines are "
+                                 "close to a coin flip, where that side has held up on real "
+                                 "Underdog lines. Those hit about 61% on past weeks.")
     search = f3.text_input("Search player", key="ph_search", placeholder="e.g. Puka Nacua",
                            label_visibility="collapsed")
 
@@ -240,6 +259,8 @@ def page_picks():
         view = view[view["player"].str.contains(search, case=False, na=False)]
     if sel_game:
         view = view[view["team"].map(game_filter.game_key) == sel_game]
+    n_skip = int(view["skip_unless_sure"].sum())
+    view = view[~view["skip_unless_sure"]]
 
     games = game_labels(picks)
     # Underdog allows one pick per player per entry.
@@ -257,15 +278,18 @@ def page_picks():
                        "the Under first. On real lines, Unders like these hit 48% against 56% for the "
                        "rest.")
             st.write(", ".join(info["moved_to_under"]))
+    if n_skip:
+        st.caption(f"{n_skip} quarter, half and longest-catch pick(s) hidden: those only show "
+                   f"when the model gives them {NEAR_CERTAIN:.0%} or better.")
     if view.empty:
-        st.info("Nothing clears this bar right now. Try **All**, turn off **Proven stat types only**"
+        st.info("Nothing clears this bar right now. Try **All**, turn off **Proven picks only**"
                 + (", or pick **All games**." if sel_game else "."))
 
     for i, r in view.head(40).iterrows():
         label, cls = _strength(r["edge"])
         tags = f'<span class="ph-tag {cls}">{label}</span>'
         if r["verdict"] != "trusted":
-            tags += ('<span class="ph-tag ph-warn">Unproven stat</span>' if pd.notna(r["record"])
+            tags += ('<span class="ph-tag ph-warn">Unproven pick</span>' if pd.notna(r["record"])
                      else '<span class="ph-tag ph-warn">Not graded yet</span>')
         is_over = str(r["choice"]).lower() in ("over", "higher")
         if r.get("last5_n", 0) == 5 and pd.notna(r.get("last5_over")):
@@ -320,8 +344,7 @@ def page_picks():
             st.caption(f"Graded against real Underdog closing lines, weeks {', '.join(rec.get('weeks', []))}. "
                        "Baseline = always taking whichever side hit more often. Overs hit = how often "
                        "the real result went over Underdog's line (under 50% means Unders won more). "
-                       "1st quarter / 1st half props aren't graded yet: their lines are logged from now on. "
-                       "Updated by "
+                       "Each pick also needs the model at 60%+ on its side to count as proven. Updated by "
                        "`backtesting/backtest_line_history.py`.")
         else:
             st.caption("No track record file yet: run `python backtesting/backtest_line_history.py`.")
@@ -364,7 +387,7 @@ def _auto_build(picks: pd.DataFrame, games: dict):
         if note:
             st.caption(note)
         if st.button("Build my parlay", type="primary", width="stretch", key="ph_auto"):
-            pool = picks[picks["verdict"] == "trusted"].assign(prob=picks["chance"], market_prob=picks["market"])
+            pool = picks[(picks["verdict"] == "trusted") & ~picks["skip_unless_sure"]].assign(prob=picks["chance"], market_prob=picks["market"])
             mode = "same_game" if kind == "Same game" else "multi_game"
             with st.spinner("Trying every combination..."):
                 best = find_best_entries(pool, n_legs_range=(n, n), top_k=1, pool_size=18 if n <= 4 else 13,
@@ -372,7 +395,7 @@ def _auto_build(picks: pd.DataFrame, games: dict):
             best = best[best["valid"] & (best["ev"] > 0)] if not best.empty else best
             if best.empty:
                 where = f"in {games.get(game, 'this game')}" if game is not None else "on the board"
-                st.warning(f"No {n}-pick parlay {where} is worth it right now with proven stat types. "
+                st.warning(f"No {n}-pick parlay {where} is worth it right now with proven picks. "
                            "Try fewer picks or another game.")
                 return
             _slip().clear()
@@ -472,7 +495,7 @@ def page_build():
                    f"{payout:.1f}x instead of {base:.1f}x. Underdog shows the exact number when you "
                    "build the entry.")
     if any(l.get("verdict") != "trusted" for l in legs):
-        st.caption("⚠️ Includes a stat type the model hasn't proven on real lines yet.")
+        st.caption("⚠️ Includes a pick that isn't proven: the model is under 60% on it, or its stat type hasn't held up on real lines.")
 
     st.divider()
     c1, c2, c3 = st.columns([2, 2, 1], vertical_alignment="bottom")

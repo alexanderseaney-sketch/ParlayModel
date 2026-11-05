@@ -22,7 +22,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
 
@@ -108,12 +108,13 @@ jobs:
 
       # Re-grades every played week against real Underdog closing lines and rewrites
       # the per-stat track record the Picks screen uses to hide unproven stat types.
-      # ~7 min cold, so once a week: the Tuesday 12:00 UTC run (after Monday night)
-      # or any manual run.
+      # ~7 min cold, so only when a newly finished week isn't graded yet (the first run
+      # after Monday night's final score) or on any manual run. The old "Tuesday 12:00 UTC
+      # run" slot missed week 8 because scheduled runs drift past the hour.
       - name: Refresh real-line track record (weekly)
         continue-on-error: true
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%u%H)" = "212" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(python backtesting/needs_regrade.py)" = "yes" ]; then
             # The trained TD / quarter / half models build features from play-by-play;
             # without pbp.csv their point-in-time predictions fail and drop out of the
             # grading. Last two seasons only (gitignored, never committed).
@@ -122,7 +123,7 @@ jobs:
             # Same-game pick links (teammates and opponents) for same game parlays, ~10 s.
             python models/build_leg_correlations.py
           else
-            echo "Not the weekly slot -- skipping."
+            echo "Track record is up to date -- skipping."
           fi
 
       - name: Commit and push if anything changed
