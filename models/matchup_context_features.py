@@ -9,7 +9,9 @@ played or not, so training rows and the upcoming game get the same numbers.
                         RB rushing yards), not the all-purpose EPA the models had
   team_spread           points this team is favoured by (game script: big favourites
                         run more late, big underdogs throw more)
-  team_out_tgt_share    target share of teammates listed Out / Doubtful that week
+  team_out_tgt_share    target share of teammates listed Out / Doubtful that week, or on
+                        the reserve list (IR / PUP / NFI / suspended) after playing for
+                        the team within the last RESERVE_RECENT_WEEKS weeks of the season
                         (volume that has to go somewhere)
   team_out_carry_share  same for carries
   opp_def_regulars_out  opponent defenders with a 60%+ snap role listed Out / Doubtful
@@ -27,6 +29,10 @@ import pandas as pd
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 OUT_STATUSES = {"Out", "Doubtful"}
+# IR players aren't on the weekly injury report at all, so they come from the roster
+# reserve list. Only recent ones count: a player gone for months has had his volume
+# soaked up by the teammates' own rolling baselines already.
+RESERVE_RECENT_WEEKS = 6
 DEF_WINDOW = 8
 
 # model stat column -> (weekly_stats column summed, positions whose production counts)
@@ -85,14 +91,39 @@ def _player_share_asof(weekly: pd.DataFrame) -> pd.DataFrame:
     return w[["player_id", "_k", "tgt_share", "car_share"]]
 
 
+def _recent_reserve(weekly: pd.DataFrame) -> pd.DataFrame:
+    """Players on the roster reserve list (IR / PUP / NFI / suspended) for a week, kept
+    only if they played for that team earlier the same season within RESERVE_RECENT_WEEKS
+    weeks. Same columns as the injury-report rows."""
+    path = os.path.join(RAW_DIR, "roster_reserve.csv")
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=["gsis_id", "season", "week", "team", "full_name"])
+    res = pd.read_csv(path, low_memory=False).dropna(subset=["player_id", "season", "week"])
+    res = res.rename(columns={"player_id": "gsis_id", "player_name": "full_name"})
+    res[["season", "week"]] = res[["season", "week"]].astype(int)
+    played = weekly[["player_id", "recent_team", "season", "week"]].dropna().rename(
+        columns={"player_id": "gsis_id", "recent_team": "team", "week": "last_week"})
+    played["last_week"] = played["last_week"].astype(int)
+    last = res.merge(played, on=["gsis_id", "team", "season"], how="inner")
+    last = last[last["last_week"] < last["week"]]
+    last = last.groupby(["gsis_id", "season", "week"], as_index=False)["last_week"].max()
+    res = res.merge(last, on=["gsis_id", "season", "week"], how="inner")
+    res = res[res["week"] - res["last_week"] <= RESERVE_RECENT_WEEKS]
+    return res[["gsis_id", "season", "week", "team", "full_name"]]
+
+
 def build_injury_absences(weekly: pd.DataFrame, schedules: pd.DataFrame) -> pd.DataFrame:
     """(team, season, week) -> team_out_tgt_share, team_out_carry_share, opp_def_regulars_out."""
     inj = pd.read_csv(os.path.join(RAW_DIR, "injuries.csv"), low_memory=False)
     inj = inj[inj["report_status"].isin(OUT_STATUSES)].dropna(subset=["season", "week"])
+    inj = inj[["gsis_id", "season", "week", "team", "full_name"]]
+    inj = pd.concat([inj, _recent_reserve(weekly)], ignore_index=True)
     inj = inj.drop_duplicates(["gsis_id", "season", "week"])
     inj[["season", "week"]] = inj[["season", "week"]].astype(int)
+    inj["gsis_id"] = inj["gsis_id"].astype(str)
     inj["_k"] = inj["season"] * 100 + inj["week"] - 1  # role as of the previous week
     shares = _player_share_asof(weekly).sort_values("_k")
+    shares["player_id"] = shares["player_id"].astype(str)
     inj = pd.merge_asof(inj.sort_values("_k"), shares.rename(columns={"player_id": "gsis_id"}),
                         on="_k", by="gsis_id", direction="backward")
     off = (inj.groupby(["team", "season", "week"])[["tgt_share", "car_share"]].sum()
