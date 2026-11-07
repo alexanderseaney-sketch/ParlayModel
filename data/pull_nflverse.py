@@ -274,6 +274,14 @@ def pull_weekly_rosters(years):
     # its 100 MB hard limit mid-season. Its only reader is the roster gate in
     # models/current_predictions.py, which uses the latest season/week alone.
     save(df, "weekly_rosters.csv", key_cols, keep_recent_seasons=WEEKLY_ROSTER_SEASONS_KEPT)
+    # Reserve list (IR, PUP, NFI, suspended...) for every season, kept small so it can
+    # hold full history: models/matchup_context_features.py counts these players as out.
+    # IR players never appear on the weekly injury report, so without this the models
+    # missed e.g. Davante Adams on IR (2026 wk 7-9) when pricing Puka Nacua.
+    res = df[df["status"] == "RES"]
+    res = res[[c for c in ["season", "week", "team", "player_id", "player_name", "position",
+                           "status_description_abbr"] if c in res.columns]]
+    save(res, "roster_reserve.csv", key_cols)
     return df
 
 
