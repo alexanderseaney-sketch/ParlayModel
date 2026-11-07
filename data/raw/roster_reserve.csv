@@ -11880,7 +11880,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,9,CLE,00-0037251,Alex Wright,DL,R01
 2026,3,CLE,00-0037251,Alex Wright,DL,R01
 2026,8,PHI,00-0037258,Dameon Pierce,RB,R01
-2026,9,PHI,00-0037258,Dameon Pierce,RB,R01
 2026,2,KC,00-0037266,Matt Waletzko,OL,R01
 2026,1,KC,00-0037266,Matt Waletzko,OL,R01
 2026,9,KC,00-0037266,Matt Waletzko,OL,R01
@@ -13668,6 +13667,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,1,LA,00-0041587,Daniel Rickert,LB,R01
 2026,8,LA,00-0041587,Daniel Rickert,LB,R01
 2026,1,TB,00-0041592,Xavier Williams,DB,R01
+2026,9,PHI,00-0037258,Dameon Pierce,RB,R01
 2014,1,ARZ,00-0019546,John Abraham,OLB,A01
 2014,4,ARZ,00-0021235,Dave Zastudil,P,A01
 2014,1,ARZ,00-0021235,Dave Zastudil,P,A01
