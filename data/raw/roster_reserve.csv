@@ -12199,7 +12199,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,3,NO,00-0038566,Nick Saldiveri,OL,R04
 2026,1,NO,00-0038566,Nick Saldiveri,OL,R04
 2026,6,ATL,00-0038580,Yasir Abdullah,LB,R01
-2026,9,ATL,00-0038580,Yasir Abdullah,LB,R48
 2026,5,ATL,00-0038580,Yasir Abdullah,LB,R01
 2026,8,ATL,00-0038580,Yasir Abdullah,LB,R01
 2026,7,ATL,00-0038580,Yasir Abdullah,LB,R01
@@ -13024,7 +13023,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,ATL,00-0040432,Beaux Collins,WR,R48
 2026,3,ATL,00-0040432,Beaux Collins,WR,R48
 2026,4,ATL,00-0040432,Beaux Collins,WR,R48
-2026,9,ATL,00-0040432,Beaux Collins,WR,R48
 2026,6,ATL,00-0040432,Beaux Collins,WR,R48
 2026,6,CLE,00-0040466,Raheim Sanders,RB,R01
 2026,9,CLE,00-0040466,Raheim Sanders,RB,R01
@@ -13667,6 +13665,8 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,1,LA,00-0041587,Daniel Rickert,LB,R01
 2026,8,LA,00-0041587,Daniel Rickert,LB,R01
 2026,1,TB,00-0041592,Xavier Williams,DB,R01
+2026,9,ATL,00-0038580,Yasir Abdullah,LB,R48
+2026,9,ATL,00-0040432,Beaux Collins,WR,R48
 2026,9,PHI,00-0037258,Dameon Pierce,RB,R01
 2014,1,ARZ,00-0019546,John Abraham,OLB,A01
 2014,4,ARZ,00-0021235,Dave Zastudil,P,A01
