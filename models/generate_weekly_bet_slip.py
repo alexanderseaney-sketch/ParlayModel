@@ -265,11 +265,28 @@ def _entry_description(legs: list[dict], adjustments: list) -> str:
     return f"{picks} [{when}{corr}]"
 
 
-def build_entry_candidates(matched: pd.DataFrame, correlations: dict | None = None) -> list[dict]:
+def pool_from_picks(picks: pd.DataFrame) -> pd.DataFrame:
+    """Leg pool from the Picks screen's candidates (dashboard simple_pages.get_picks):
+    proven picks only, no quarter / half / longest-catch line under 80%. Those already
+    carry the form fallback, the safety check, the line-cut holdback and the losing-side
+    exclusions, which load_matched_props() above predates (2026-11-09)."""
+    q = picks[(picks["verdict"] == "trusted") & ~picks["skip_unless_sure"] & picks["team"].notna()
+              & picks["decimal"].notna()]
+    if q.empty:
+        return pd.DataFrame()
+    return q.assign(
+        full_name=q["player"], stat_value=q["line"], my_side=q["choice"].astype(str).str.lower(),
+        my_prob=q["chance"], decimal_price=q["decimal"], prob=q["chance"], market_prob=q["market"],
+        prop_type=q["prop_type"],
+    )
+
+
+def build_entry_candidates(matched: pd.DataFrame | None, correlations: dict | None = None,
+                           pool: pd.DataFrame | None = None) -> list[dict]:
     """Highest-EV valid Underdog entries (2-3 picks, 2+ teams, one pick per player)
     from the leg pool, kept only if the entry's Kelly fraction at its real payout
-    clears MIN_KELLY_EDGE."""
-    pool = build_leg_pool(matched)
+    clears MIN_KELLY_EDGE. Pass `pool` (pool_from_picks) to use the Picks rules."""
+    pool = build_leg_pool(matched) if pool is None else pool
     if pool.empty:
         return []
     best = find_best_entries(pool, n_legs_range=ENTRY_LEGS, top_k=50, pool_size=LEG_POOL_SIZE,
@@ -342,10 +359,13 @@ def main():
     print("which is a much stricter test than confidence alone. Only wager what you can afford to lose.")
     print()
 
-    matched = load_matched_props()
-    print(f"{len(matched)} live prop rows matched to a model prediction this week.\n")
+    # Same leg pool as the app's Picks screen (proven picks only).
+    from simple_pages import get_picks
+    picks, _ = get_picks()
+    pool = pool_from_picks(picks) if not picks.empty else pd.DataFrame()
+    print(f"{len(pool)} proven picks on the board this week.\n")
 
-    candidates = build_entry_candidates(matched)
+    candidates = build_entry_candidates(None, pool=pool)
     print(f"{len(candidates)} valid +EV Underdog entries found (2-3 picks, 2+ teams, "
           f"joint prob x real payout > 1).\n")
 

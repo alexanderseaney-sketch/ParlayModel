@@ -6,6 +6,7 @@ from sklearn.metrics import accuracy_score
 
 from player_prop_rush_rec_tds_features import build_rush_rec_tds_dataset
 from calibration_report import print_calibration_report
+from model_store import model_path, training_rows
 
 FEATURES = [
     "rush_rec_tds_rolling", "rush_rec_tds_last3", "carries_rolling", "carries_last3",
@@ -21,6 +22,7 @@ def main():
     df = df.dropna(subset=["rush_rec_tds_rolling"])
     print(f"Dataset: {len(df)} RB/WR/TE player-games\n")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
@@ -56,7 +58,7 @@ def main():
         models.append(m)
 
     import os
-    out_path = os.path.join(os.path.dirname(__file__), "player_prop_rush_rec_tds_model.pkl")
+    out_path = model_path("player_prop_rush_rec_tds_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": ["RB", "WR", "TE"]}, f)
     print(f"\nSaved -> {out_path}")

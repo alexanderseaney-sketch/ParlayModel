@@ -14,6 +14,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 
 from period_yardage_features import build_period_stat_dataset, STAT_CONFIGS
 from calibration_report import print_calibration_report
+from model_store import model_path, training_rows
 
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024]
 
@@ -42,6 +43,7 @@ def train_one(prop_type: str, period: str, stat_col: str) -> dict | None:
     base_rate = df["over_proxy_line"].mean()
     print(f"Base rate: {base_rate*100:.1f}%")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
@@ -92,7 +94,7 @@ def main():
 
     import os
     for prop_type, result in results.items():
-        out_path = os.path.join(os.path.dirname(__file__), f"player_prop_{prop_type}_model.pkl")
+        out_path = model_path(f"player_prop_{prop_type}_model.pkl")
         with open(out_path, "wb") as f:
             pickle.dump({k: v for k, v in result.items() if k != "pooled_auc"}, f)
         print(f"Saved -> {out_path}")

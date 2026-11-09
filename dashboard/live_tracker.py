@@ -231,7 +231,7 @@ def track_leg(player: str, stat: str, choice: str, line, bet_date=None) -> dict:
     final = game["state"] == "post"
     if value is None:
         if final:
-            out.update(state="final", status="void", text="DNP / not in box score — Underdog voids it")
+            out.update(state="final", status="void", text="DNP / not in box score: rescued, counts as a hit")
         else:
             out.update(state="live", value=0.0, text="no stats yet")
             value = 0.0
@@ -262,12 +262,14 @@ def track_leg(player: str, stat: str, choice: str, line, bet_date=None) -> dict:
     return out
 
 
-ICON = {"hit": "✅", "miss": "❌", "push": "➖", "void": "⚪", "alive": "🟡", "pending": "⏳"}
+ICON = {"hit": "✅", "miss": "❌", "push": "➖", "void": "🟣", "alive": "🟡", "pending": "⏳"}
 
 
 def entry_status(leg_results: list[str]) -> str:
     """Entry-level status from per-leg statuses (manual results or tracker)."""
-    s = [r for r in leg_results if r not in ("push", "void")]
+    # A void (DNP) leg is rescued: it counts as a hit (2026-11-02).
+    leg_results = ["hit" if r == "void" else r for r in leg_results]
+    s = [r for r in leg_results if r != "push"]
     if any(r in ("miss", "lost") for r in s):
         return "lost"
     if s and all(r in ("hit", "won") for r in s):

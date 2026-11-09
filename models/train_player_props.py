@@ -34,6 +34,8 @@ from xgboost import XGBClassifier
 from player_prop_features import build_receiving_yards_dataset
 from individual_context_features import build_player_injury_status, build_game_flags
 from calibration_report import print_calibration_report
+from matchup_context_features import MATCHUP_FEATURES, add_matchup_context
+from model_store import model_path, training_rows
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
@@ -42,7 +44,10 @@ FEATURES = [
     "target_share_rolling", "receiving_air_yards_rolling",
     "avg_separation_rolling", "avg_cushion_rolling", "avg_yac_above_expectation_rolling",
     "def_epa_allowed_rolling", "own_injury_severity", "div_game", "is_primetime",
-]
+] + MATCHUP_FEATURES
+# MATCHUP_FEATURES (PR #11's opponent / spread / teammates-out / usage trend, with PR #17's
+# IR teammates) added 2026-11-09: leave-one-season-out 2020-25 log loss .6698 -> .6692,
+# 2026 weeks out of sample .6727 -> .6685, accuracy 58.5% -> 59.6% (n=1172).
 HOLDOUT_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
 XGB_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
 
@@ -60,6 +65,7 @@ def _build_dataset() -> pd.DataFrame:
     df = df.merge(inj_status, on=["player_id", "season", "week"], how="left")
     df = df.merge(flags, on=["recent_team", "season", "week"], how="left")
     df["own_injury_severity"] = df["own_injury_severity"].fillna(0)
+    df = add_matchup_context(df, "receiving_yards", "targets_last3", "targets_rolling")
     return df
 
 
@@ -68,6 +74,7 @@ def main():
     df = df.dropna(subset=FEATURES)
     print(f"Dataset: {len(df)} WR/TE player-games ({df['season'].min()}-{df['season'].max()}, week 4+)\n")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     print(f"{'Holdout':<10} {'Accuracy':>10} {'AUC':>8} {'n_test':>8}")
     print("-" * 40)
@@ -109,7 +116,7 @@ def main():
         m.fit(X_all.iloc[idx], y_all.iloc[idx])
         models.append(m)
 
-    out_path = os.path.join(os.path.dirname(__file__), "player_prop_receiving_yards_model.pkl")
+    out_path = model_path("player_prop_receiving_yards_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": ["WR", "TE"]}, f)
     print(f"\nSaved -> {out_path}")

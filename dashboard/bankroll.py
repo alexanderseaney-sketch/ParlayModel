@@ -43,7 +43,7 @@ def settled_entries() -> pd.DataFrame:
     b = _with_entries(bets)
     rows = []
     for eid, legs in b.groupby("entry_id"):
-        # settle_entry re-prices an entry with a voided pick at the reduced multiplier.
+        # settle_entry re-prices an entry with a pushed pick at the reduced multiplier (DNP legs are rescued as wins).
         state, payout = settle_entry(legs)
         if state not in ("won", "lost", "push"):
             continue

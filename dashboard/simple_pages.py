@@ -39,16 +39,7 @@ TRACK_RECORD_PATH = os.path.join(ROOT_DIR, "backtesting", "line_history_track_re
 # with an 8%+ edge were the only band with a clearly positive ROI.
 STRONG_EDGE = 0.08
 GOOD_EDGE = 0.03
-# Alex's rule (2026-11-05, and 2026-10-22 for longest reception): quarter and half lines
-# and longest-reception lines stay off Picks and out of "Build my parlay" unless the model
-# is near-certain. Week 9's trackers leaned on 1Q/1H legs and they hit ~50-54%.
-NEAR_CERTAIN = 0.80
-NEAR_CERTAIN_ONLY_STATS = ("receiving_long",)
-
-
-def near_certain_only(stat_name: str) -> bool:
-    s = str(stat_name)
-    return s.startswith("period_") or s in NEAR_CERTAIN_ONLY_STATS
+from pick_rules import NEAR_CERTAIN, near_certain_only  # noqa: E402,F401  (re-exported)
 
 VERDICT_COPY = {
     "trusted": ("Proven", "Beats the market baseline on real lines; picks still need the model at 60%+"),
@@ -138,28 +129,10 @@ def get_picks() -> tuple[pd.DataFrame, dict]:
     c = c[c["chance"] > 0.5]
     c = (c.sort_values("edge", ascending=False)
          .drop_duplicates(["player", "stat_name"], keep="first"))
-    rec = load_track_record().get("by_stat", {})
-    # The side's own verdict where the record has one: a trusted stat can still have a
-    # losing side (assists Unders, receptions Overs), and those stay out of parlays.
-    def verdict(stat, choice):
-        r = rec.get(stat, {})
-        side = "over" if str(choice).lower() in ("over", "higher") else "under"
-        return r.get(f"{side}_verdict", r.get("verdict", "unproven"))
-    c["verdict"] = [verdict(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
-    # "trusted" now means a proven PICK (models/pick_rules.py): the model is 60%+ on its
-    # side of a coin-flip-ish stat whose side has held up on real lines. The old
-    # stat-type verdict alone hit 54.6% walk-forward, under a 3-pick's 55% break-even.
-    from pick_rules import is_proven_pick, side_of
-    proven = [is_proven_pick(rec.get(s), side_of(ch), p)
-              for s, ch, p in zip(c["stat_name"], c["choice"], c["model_prob"])]
-    c["verdict"] = np.where(proven, "trusted", np.where(c["verdict"] == "avoid", "avoid", "unproven"))
-    def record(stat, choice):
-        r = rec.get(stat, {})
-        side = "over" if str(choice).lower() in ("over", "higher") else "under"
-        acc = r.get(f"{side}_pick_accuracy")
-        return acc if acc is not None and r.get(f"picked_{side}", 0) >= 30 else r.get("accuracy")
-    c["record"] = [record(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
-    c["skip_unless_sure"] = c["stat_name"].map(near_certain_only) & (c["chance"] < NEAR_CERTAIN)
+    # Proven-pick rule, losing sides and the 80% bar for quarter / half / longest-catch
+    # lines all live in models/pick_rules.annotate, shared with +EV Finder and Weekly slip.
+    from pick_rules import annotate
+    c = annotate(c, load_track_record().get("by_stat", {}), chance_col="chance")
     return c.reset_index(drop=True), info
 
 
@@ -397,9 +370,18 @@ def _auto_build(picks: pd.DataFrame, games: dict):
             pool = picks[(picks["verdict"] == "trusted") & ~picks["skip_unless_sure"]].assign(prob=picks["chance"], market_prob=picks["market"])
             mode = "same_game" if kind == "Same game" else "multi_game"
             with st.spinner("Trying every combination..."):
-                best = find_best_entries(pool, n_legs_range=(n, n), top_k=1, pool_size=18 if n <= 4 else 13,
+                best = find_best_entries(pool, n_legs_range=(n, n), top_k=50, pool_size=18 if n <= 4 else 13,
                                          mode=mode, game=game)
             best = best[best["valid"] & (best["ev"] > 0)] if not best.empty else best
+            if mode == "same_game" and not best.empty:
+                # Game-script rule (models/game_scripts.py, 2026-11-09): Over stacks only in
+                # shootout spots, never in windy or low-total games.
+                from game_scripts import stack_warning
+                side = (_game_script(picks, game) or {}).get("stack_side")
+                def _fits(legs):
+                    n_over = sum(str(l["choice"]).lower() in ("over", "higher") for l in legs)
+                    return stack_warning(side, n_over, len(legs) - n_over) is None
+                best = best[best["legs"].map(_fits)]
             if best.empty:
                 where = f"in {games.get(game, 'this game')}" if game is not None else "on the board"
                 st.warning(f"No {n}-pick parlay {where} is worth it right now with proven picks. "
@@ -592,6 +574,8 @@ def _leg_line(l: pd.Series, t: dict | None) -> str:
     res = str(l.get("result") or "pending").lower()
     text = f"{l['player']}: {_pick_label(l['choice'], float(l['line']), l['stat'])}"
     actual = pd.to_numeric(l.get("actual"), errors="coerce")
+    if res == "won" and str(l.get("actual")).lower() == "rescued":
+        return f"🟣 {text} · rescued: didn't play, counts as a hit"
     if res != "pending":
         detail = ("voided, didn't play or landed on the line" if res == "push" and pd.isna(actual)
                   else "landed on the line" if res == "push"

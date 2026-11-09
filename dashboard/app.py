@@ -389,8 +389,12 @@ def page_weekly_bet_slip():
     if st.button("Generate this week's bets", type="primary", width="content"):
         try:
             with st.spinner("Pulling live predictions and current Underdog prices..."):
-                matched = load_matched_props(load_underdog_props())
-                candidates = build_entry_candidates(matched)
+                # Same proven-pick pool as Picks / My parlay (pick_rules.annotate).
+                from simple_pages import get_picks
+                from generate_weekly_bet_slip import pool_from_picks
+                picks, _ = get_picks()
+                matched = pool_from_picks(picks) if not picks.empty else pd.DataFrame()
+                candidates = build_entry_candidates(None, pool=matched)
                 allocated = allocate_budget(candidates, budget)
             st.session_state["bet_slip_result"] = {
                 "matched_count": len(matched), "candidate_count": len(candidates),
@@ -410,8 +414,8 @@ def page_weekly_bet_slip():
 
     yard_divider("MATCHED PROPS")
     st.caption(
-        f"{result['matched_count']} live props matched to a model prediction and passed "
-        f"the line-divergence check · {result['candidate_count']} valid Underdog entries +EV at real prices."
+        f"{result['matched_count']} proven picks on the board (same rules as Picks) · "
+        f"{result['candidate_count']} valid Underdog entries +EV at real prices."
     )
 
     if not result["allocated"]:
