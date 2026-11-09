@@ -117,6 +117,31 @@ def week_games() -> pd.DataFrame:
     return _week_games(_mtime("schedules.csv"), _mtime("weather_forecast.csv"))
 
 
+@st.cache_data(show_spinner=False)
+def _week_scripts(sched_m: float, wx_m: float) -> pd.DataFrame:
+    from game_scripts import fit, fill_roof, script_chances
+    s = load_csv_if_exists("schedules.csv")
+    g = week_games()
+    if s is None or g.empty:
+        return pd.DataFrame()
+    return script_chances(fill_roof(g, s), fit(s), wind_col="wind_forecast")
+
+
+def week_scripts() -> pd.DataFrame:
+    """week_games() plus shootout / blowout / slog chances and a same-game stacking tip
+    (models/game_scripts.py)."""
+    return _week_scripts(_mtime("schedules.csv"), _mtime("weather_forecast.csv"))
+
+
+def team_script(team) -> dict | None:
+    """This week's script row for the game a team plays in, or None."""
+    g = week_scripts()
+    if g.empty or not isinstance(team, str):
+        return None
+    hit = g[(g["home_team"] == team) | (g["away_team"] == team)]
+    return hit.iloc[0].to_dict() if not hit.empty else None
+
+
 # ------------------------------------------------------------------ line history
 @st.cache_data(show_spinner=False)
 def _line_history(m: float) -> pd.DataFrame:

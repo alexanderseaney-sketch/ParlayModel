@@ -375,8 +375,15 @@ def _auto_build(picks: pd.DataFrame, games: dict):
                                       or st.session_state.get("ph_game") not in options):
                 st.session_state["ph_game"] = match
             st.session_state["_ph_game_from"] = chosen
-            game = st.selectbox("Game", options, key="ph_game",
-                                format_func=lambda g: f"{games[g]} ({counts[g]} picks)")
+            def _game_txt(g):
+                sc = _game_script(picks, g)
+                tag = f" · {sc['script']}" if sc and sc.get("script") not in (None, "No line yet") else ""
+                return f"{games[g]} ({counts[g]} picks){tag}"
+
+            game = st.selectbox("Game", options, key="ph_game", format_func=_game_txt)
+            sc = _game_script(picks, game)
+            if sc:
+                st.caption(f"**{sc['script']}** ({sc['p_shootout'] * 100:.0f}% shootout chance). {sc['script_tip']}")
             st.caption("Picks from both teams in one game. Underdog pays less when picks tend to "
                        "hit together, and we price that in.")
         else:
@@ -401,6 +408,17 @@ def _auto_build(picks: pd.DataFrame, games: dict):
             _slip().clear()
             _slip().extend(_leg_from_pick(pd.Series(l)) for l in best.iloc[0]["legs"])
             st.rerun()
+
+
+def _game_script(picks: pd.DataFrame, game) -> dict | None:
+    """Script row (models/game_scripts.py) for an Underdog game, found through its teams."""
+    from research_data import team_script
+    teams = picks.loc[picks["game"] == game, "team"].dropna().unique() if game is not None else []
+    for t in teams:
+        sc = team_script(t)
+        if sc:
+            return sc
+    return None
 
 
 def _link_lines(links: list[dict]) -> list[str]:
@@ -436,6 +454,15 @@ def page_build():
     n_games = games_in(legs)
     if n_games == 1:
         st.markdown(f"**Same game parlay** · {games.get(legs[0].get('game'), '')}")
+        sc = _game_script(picks, legs[0].get("game")) if not picks.empty else None
+        if sc is None:
+            from research_data import team_script
+            sc = team_script(legs[0].get("team"))
+        if sc:
+            from game_scripts import stack_warning
+            n_over = sum(str(l["choice"]).lower() == "over" for l in legs)
+            warn = stack_warning(sc.get("stack_side"), n_over, len(legs) - n_over)
+            st.caption(("⚠️ " + warn + " " if warn else "") + f"Game script: **{sc['script']}**. {sc['script_tip']}")
     elif n_games > 1:
         st.markdown(f"**{len(legs)} picks across {n_games} games**")
     for i, l in enumerate(legs):
