@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 import ui
-from research_data import week_games, injury_report, priced_candidates, TEAM_NAMES
+from research_data import week_games, week_scripts, injury_report, priced_candidates, TEAM_NAMES
 
 
 def _ml(v) -> str:
@@ -47,6 +47,26 @@ def _game_props(away: str, home: str) -> pd.DataFrame:
     return c.sort_values("conf", ascending=False)
 
 
+def _pct(p) -> str:
+    return f"{p * 100:.0f}%" if p == p else "—"
+
+
+def _script_row(game_id: str) -> None:
+    """Shootout / blowout / slog chances from the total, spread and wind (models/game_scripts.py)."""
+    sc = week_scripts()
+    sc = sc[sc["game_id"] == game_id] if not sc.empty else sc
+    if sc.empty:
+        return
+    r = sc.iloc[0]
+    tiles = [("GAME SCRIPT", r["script"]), ("SHOOTOUT", _pct(r.get("p_shootout", float("nan")))),
+             ("BLOWOUT 17+", _pct(r.get("p_blowout", float("nan")))),
+             ("UNDER BY 10+", _pct(r.get("p_slog", float("nan"))))]
+    st.markdown("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:8px'>"
+                + "".join(_tile(a, b) for a, b in tiles) + "</div>", unsafe_allow_html=True)
+    st.caption(f"{r['script_tip']} Shootout = both teams score 27+ (14% of games). Chances come from the total, "
+               "spread and wind only: team stats like EPA and pace added nothing on top of them.")
+
+
 def page_game_center():
     st.title("🏟️ Game Center")
     games = week_games()
@@ -78,6 +98,7 @@ def page_game_center():
     st.markdown("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px'>"
                 + "".join(_tile(a, b) for a, b in tiles) + "</div>", unsafe_allow_html=True)
     st.caption("Lines from nflverse schedules (consensus close/current); implied points = (total ± spread) / 2.")
+    _script_row(g["game_id"])
 
     left, right = st.columns(2, gap="large")
     with left:
