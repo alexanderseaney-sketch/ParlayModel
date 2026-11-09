@@ -11226,7 +11226,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,NYG,00-0032667,Roy Robertson-Harris,DL,R01
 2026,7,NYG,00-0032667,Roy Robertson-Harris,DL,R01
 2026,7,SF,00-0032775,Demarcus Robinson,WR,R01
-2026,9,SF,00-0032775,Demarcus Robinson,WR,R48
 2026,3,SF,00-0032775,Demarcus Robinson,WR,R01
 2026,5,SF,00-0032775,Demarcus Robinson,WR,R01
 2026,6,SF,00-0032775,Demarcus Robinson,WR,R01
@@ -11276,7 +11275,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,5,NE,00-0033555,Mack Hollins,WR,R01
 2026,8,NE,00-0033555,Mack Hollins,WR,R01
 2026,7,NE,00-0033555,Mack Hollins,WR,R01
-2026,9,NE,00-0033555,Mack Hollins,WR,R48
 2026,6,NE,00-0033555,Mack Hollins,WR,R01
 2026,2,ATL,00-0033752,Storm Norton,OL,R04
 2026,4,ATL,00-0033752,Storm Norton,OL,R04
@@ -11292,7 +11290,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,2,LA,00-0033868,Myles Garrett,LB,R01
 2026,6,LA,00-0033868,Myles Garrett,LB,R01
 2026,4,LA,00-0033868,Myles Garrett,LB,R01
-2026,9,LA,00-0033868,Myles Garrett,LB,R48
 2026,7,LA,00-0033868,Myles Garrett,LB,R01
 2026,3,LA,00-0033868,Myles Garrett,LB,R01
 2026,9,MIN,00-0033872,Jamal Adams,LB,R01
@@ -11381,6 +11378,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,9,NYG,00-0034673,Tremaine Edmunds,LB,R01
 2026,2,SF,00-0034775,Christian Kirk,WR,R48
 2026,6,SF,00-0034775,Christian Kirk,WR,R48
+2026,9,SF,00-0034775,Christian Kirk,WR,R01
 2026,3,SF,00-0034775,Christian Kirk,WR,R48
 2026,1,SF,00-0034775,Christian Kirk,WR,R48
 2026,4,SF,00-0034775,Christian Kirk,WR,R48
@@ -11652,6 +11650,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,6,NO,00-0036619,Dillon Radunz,OL,R01
 2026,4,NO,00-0036619,Dillon Radunz,OL,R01
 2026,3,NO,00-0036619,Dillon Radunz,OL,R01
+2026,9,WAS,00-0036626,Dyami Brown,WR,R01
 2026,7,CHI,00-0036634,Tony Fields II,LB,R01
 2026,4,CHI,00-0036634,Tony Fields II,LB,R01
 2026,5,CHI,00-0036634,Tony Fields II,LB,R01
@@ -11842,6 +11841,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,3,SEA,00-0037156,Irvin Charles,WR,R48
 2026,2,SEA,00-0037156,Irvin Charles,WR,R48
 2026,1,SEA,00-0037156,Irvin Charles,WR,R48
+2026,9,LA,00-0037195,Jaylen Watson,DB,R01
 2026,7,DET,00-0037197,Isiah Pacheco,RB,R01
 2026,4,DET,00-0037197,Isiah Pacheco,RB,R01
 2026,9,DET,00-0037197,Isiah Pacheco,RB,R01
@@ -11991,7 +11991,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,MIA,00-0037549,Darrell Baker Jr.,DB,R04
 2026,4,MIA,00-0037549,Darrell Baker Jr.,DB,R04
 2026,5,MIA,00-0037549,Darrell Baker Jr.,DB,R04
-2026,9,LA,00-0037557,Ronnie Rivers,RB,R48
 2026,3,LA,00-0037557,Ronnie Rivers,RB,R01
 2026,8,LA,00-0037557,Ronnie Rivers,RB,R01
 2026,4,LA,00-0037557,Ronnie Rivers,RB,R01
@@ -12041,6 +12040,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,DET,00-0037667,Kerby Joseph,DB,R04
 2026,8,DET,00-0037667,Kerby Joseph,DB,R04
 2026,2,DET,00-0037667,Kerby Joseph,DB,R04
+2026,9,ATL,00-0037746,Brian Robinson,RB,R01
 2026,8,IND,00-0037753,Cam Taylor-Britt,DB,R01
 2026,1,IND,00-0037753,Cam Taylor-Britt,DB,R40
 2026,9,IND,00-0037753,Cam Taylor-Britt,DB,R01
@@ -12129,6 +12129,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,CLE,00-0038105,Damarri Mathis,DB,R01
 2026,6,CLE,00-0038105,Damarri Mathis,DB,R01
 2026,1,CLE,00-0038105,Damarri Mathis,DB,R01
+2026,9,DEN,00-0038106,Eyioma Uwazurike,DL,R01
 2026,8,IND,00-0038107,Micheal Clemons,DL,R01
 2026,9,IND,00-0038107,Micheal Clemons,DL,R01
 2026,5,IND,00-0038107,Micheal Clemons,DL,R01
@@ -12347,6 +12348,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,HOU,00-0039009,Dylan Horton,DL,R01
 2026,1,HOU,00-0039009,Dylan Horton,DL,R01
 2026,2,HOU,00-0039009,Dylan Horton,DL,R01
+2026,9,DET,00-0039018,Jack Campbell,LB,R01
 2026,6,SEA,00-0039020,Anthony Bradford,OL,R01
 2026,3,SEA,00-0039020,Anthony Bradford,OL,R01
 2026,4,SEA,00-0039020,Anthony Bradford,OL,R01
@@ -12470,7 +12472,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,1,DAL,00-0039352,Marist Liufau,LB,R48
 2026,5,DAL,00-0039352,Marist Liufau,LB,R48
 2026,4,DAL,00-0039352,Marist Liufau,LB,R48
-2026,9,DAL,00-0039352,Marist Liufau,LB,R48
 2026,3,DAL,00-0039352,Marist Liufau,LB,R48
 2026,2,DET,00-0039362,Giovanni Manu,OL,R05
 2026,4,DET,00-0039362,Giovanni Manu,OL,R05
@@ -12666,7 +12667,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,5,ARI,00-0039808,Isaiah Adams,OL,R01
 2026,6,ARI,00-0039808,Isaiah Adams,OL,R01
 2026,8,ARI,00-0039808,Isaiah Adams,OL,R01
-2026,9,ARI,00-0039808,Isaiah Adams,OL,R48
 2026,7,ARI,00-0039808,Isaiah Adams,OL,R01
 2026,8,DEN,00-0039809,Jonah Elliss,LB,R01
 2026,7,DEN,00-0039809,Jonah Elliss,LB,R01
@@ -12729,7 +12729,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,8,NYJ,00-0039886,T'Vondre Sweat,DL,R01
 2026,1,WAS,00-0039906,Jer'Zhan Newton,DL,R01
 2026,4,WAS,00-0039906,Jer'Zhan Newton,DL,R01
-2026,9,WAS,00-0039906,Jer'Zhan Newton,DL,R48
 2026,8,WAS,00-0039906,Jer'Zhan Newton,DL,R48
 2026,3,WAS,00-0039906,Jer'Zhan Newton,DL,R01
 2026,2,WAS,00-0039906,Jer'Zhan Newton,DL,R01
@@ -12825,7 +12824,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,5,NO,00-0040125,Kelvin Banks Jr.,OL,R01
 2026,3,NO,00-0040125,Kelvin Banks Jr.,OL,R01
 2026,7,NO,00-0040125,Kelvin Banks Jr.,OL,R01
-2026,9,NO,00-0040125,Kelvin Banks Jr.,OL,R48
 2026,3,MIA,00-0040127,Kenneth Grant,DL,R48
 2026,2,MIA,00-0040127,Kenneth Grant,DL,R48
 2026,1,MIA,00-0040127,Kenneth Grant,DL,R48
@@ -12839,7 +12837,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,HOU,00-0040130,Jayden Higgins,WR,R01
 2026,2,HOU,00-0040130,Jayden Higgins,WR,R01
 2026,7,DEN,00-0040134,Pat Bryant,WR,R01
-2026,9,DEN,00-0040134,Pat Bryant,WR,R48
 2026,6,DEN,00-0040134,Pat Bryant,WR,R01
 2026,5,DEN,00-0040134,Pat Bryant,WR,R01
 2026,8,DEN,00-0040134,Pat Bryant,WR,R01
@@ -13333,7 +13330,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,3,LV,00-0041005,Corey Rucker,WR,R01
 2026,6,LV,00-0041005,Corey Rucker,WR,R01
 2026,9,ARI,00-0041027,Jeremiyah Love,RB,R01
-2026,9,NO,00-0041029,Jordyn Tyson,WR,R48
 2026,1,NO,00-0041029,Jordyn Tyson,WR,R48
 2026,5,NO,00-0041029,Jordyn Tyson,WR,R48
 2026,4,NO,00-0041029,Jordyn Tyson,WR,R48
@@ -13635,6 +13631,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,5,MIA,00-0041527,Kyle Louis,LB,R01
 2026,3,MIA,00-0041527,Kyle Louis,LB,R01
 2026,4,MIA,00-0041527,Kyle Louis,LB,R01
+2026,9,DAL,00-0041537,Malachi Lawrence,LB,R01
 2026,9,CIN,00-0041546,Cashius Howell,DL,R01
 2026,9,LV,00-0041553,Keyron Crawford,LB,R01
 2026,5,LV,00-0041553,Keyron Crawford,LB,R01
@@ -13665,6 +13662,16 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,1,LA,00-0041587,Daniel Rickert,LB,R01
 2026,8,LA,00-0041587,Daniel Rickert,LB,R01
 2026,1,TB,00-0041592,Xavier Williams,DB,R01
+2026,9,SF,00-0032775,Demarcus Robinson,WR,R48
+2026,9,NE,00-0033555,Mack Hollins,WR,R48
+2026,9,LA,00-0033868,Myles Garrett,LB,R48
+2026,9,LA,00-0037557,Ronnie Rivers,RB,R48
+2026,9,DAL,00-0039352,Marist Liufau,LB,R48
+2026,9,ARI,00-0039808,Isaiah Adams,OL,R48
+2026,9,WAS,00-0039906,Jer'Zhan Newton,DL,R48
+2026,9,NO,00-0040125,Kelvin Banks Jr.,OL,R48
+2026,9,DEN,00-0040134,Pat Bryant,WR,R48
+2026,9,NO,00-0041029,Jordyn Tyson,WR,R48
 2026,9,ATL,00-0038580,Yasir Abdullah,LB,R48
 2026,9,ATL,00-0040432,Beaux Collins,WR,R48
 2026,9,PHI,00-0037258,Dameon Pierce,RB,R01
