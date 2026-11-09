@@ -49,7 +49,9 @@ def _payout_multiple(val) -> float | None:
 
 
 _RESULT_TO_STATUS = {"won": "hit", "lost": "miss", "push": "push", "pending": "pending"}
-_STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "push"}
+# A DNP / inactive leg is "rescued": it counts as a hit at full payout, the way the
+# parlay app Alex bets on settles it (Alex, 2026-11-02).
+_STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "won"}
 
 
 # Underdog's legacy fixed table (models/parlay_calculator.STANDARD_PAYOUTS), used only to

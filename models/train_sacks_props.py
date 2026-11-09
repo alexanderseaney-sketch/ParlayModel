@@ -22,6 +22,7 @@ from xgboost import XGBClassifier
 
 from defensive_sacks_features import build_sacks_dataset, DEFENSIVE_POSITIONS
 from calibration_report import print_calibration_report
+from model_store import model_path, training_rows
 
 FEATURES = ["sacks_rolling", "sacks_last3", "plays_on_defense_rolling",
             "plays_on_defense_last3", "team_sacks_rolling"]
@@ -35,6 +36,7 @@ def main():
     print(f"Dataset: {len(df)} defender-games\n")
     print(f"Base rate (over own rolling avg): {df['over_proxy_line'].mean()*100:.1f}%")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
@@ -75,7 +77,7 @@ def main():
         models.append(m)
 
     import os
-    out_path = os.path.join(os.path.dirname(__file__), "player_prop_sacks_model.pkl")
+    out_path = model_path("player_prop_sacks_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": DEFENSIVE_POSITIONS}, f)
     print(f"\nSaved -> {out_path}")

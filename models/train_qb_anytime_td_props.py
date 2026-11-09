@@ -22,6 +22,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from first_td_scorer_features import build_first_td_scorer_dataset
 from period_rush_rec_tds_features import build_period_rush_rec_tds_dataset
 from calibration_report import print_calibration_report
+from model_store import model_path, training_rows
 
 FEATURES = ["rush_rec_tds_rolling", "rush_rec_tds_last3", "carries_rolling", "carries_last3",
             "targets_rolling", "targets_last3", "rushing_yards_rolling", "receiving_yards_rolling",
@@ -36,6 +37,7 @@ def train_one(prop_type: str, df) -> None:
     print(f"Dataset: {len(df)} QB player-games")
     print(f"Base rate: {df['over_proxy_line'].mean()*100:.1f}%")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
@@ -68,7 +70,7 @@ def train_one(prop_type: str, df) -> None:
         models.append(m)
 
     import os
-    out_path = os.path.join(os.path.dirname(__file__), f"player_prop_{prop_type}_model.pkl")
+    out_path = model_path(f"player_prop_{prop_type}_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": ["QB"]}, f)
     print(f"  Saved -> {out_path}")

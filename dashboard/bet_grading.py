@@ -5,9 +5,11 @@ from the final box score, so My Bets settles entries without anyone tapping Won/
 Sources, both free: the ESPN box scores live_tracker uses (no key), and as a backup when
 ESPN can't be reached, nflverse's weekly player stats (data/raw/weekly_stats.csv, pulled
 by the 6-hourly refresh). A leg is written back only once its game is final:
-  hit -> "won", miss -> "lost", push (exactly on the line) or void (player inactive / not
-  in the box score) -> "push", which bet_entries.settle_entry removes from the entry and
-  re-prices it at the reduced multiplier, the way Underdog does.
+  hit -> "won", miss -> "lost", push (exactly on the line) -> "push", which
+  bet_entries.settle_entry removes from the entry and re-prices at the reduced multiplier.
+  void (player inactive / not in the box score) -> "won": a rescued pick counts as a hit
+  at full payout, matching the parlay app Alex bets on (2026-11-02). Its "actual" is
+  stored as "rescued".
 Legs still to be played, still live, or on a stat type the box score can't grade stay
 "pending". Which stat types can be graded is live_tracker.STAT_FUNCS (Underdog stat_name
 -> ESPN box-score value): add a stat there and it is tracked live AND auto-graded. The
@@ -25,7 +27,9 @@ import streamlit as st
 from live_tracker import STAT_FUNCS, bet_week, track_leg
 from utils import RAW_DIR, normalize_name
 
-_STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "push"}
+# A DNP / inactive leg is "rescued": it counts as a hit at full payout, the way the
+# parlay app Alex bets on settles it (Alex, 2026-11-02).
+_STATUS_TO_RESULT = {"hit": "won", "miss": "lost", "push": "push", "void": "won"}
 
 
 def _sum(*cols):
@@ -121,7 +125,8 @@ def grade_leg(row: pd.Series) -> tuple[str, float | None, dict]:
     """(result to store -- won|lost|push|pending, final stat value, tracker output)."""
     t = track_leg(row["player"], row["stat"], row["choice"], row["line"], bet_date_for_week(row))
     if t["state"] == "final" and t["status"] in _STATUS_TO_RESULT:
-        return _STATUS_TO_RESULT[t["status"]], t.get("value"), t
+        value = "rescued" if t["status"] == "void" else t.get("value")
+        return _STATUS_TO_RESULT[t["status"]], value, t
     if t["state"] in ("unknown", "untracked"):  # ESPN unreachable / player or stat not found
         value, line = _weekly_value(row), pd.to_numeric(row["line"], errors="coerce")
         if value is not None and pd.notna(line):

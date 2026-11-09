@@ -232,6 +232,7 @@ PROP_CONFIGS = {
     "receiving_yards": {
         "stat_name": "receiving_yds",
         "model_path": "player_prop_receiving_yards_model.pkl",
+        "matchup": ("receiving_yards", "targets_last3", "targets_rolling"),
         "positions": ["WR", "TE"],
         "proxy_col": "receiving_yards_rolling",
         "context": ["injury", "game_flags"],

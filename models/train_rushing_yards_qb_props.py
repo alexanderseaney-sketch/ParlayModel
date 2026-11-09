@@ -21,6 +21,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 
 from player_prop_rushing_features import build_rushing_yards_dataset
 from calibration_report import print_calibration_report
+from model_store import model_path, training_rows
 
 FEATURES = ["rushing_yards_rolling", "rushing_yards_last3", "carries_rolling",
             "carries_last3", "def_epa_allowed_rolling"]
@@ -33,6 +34,7 @@ def main():
     df = df.dropna(subset=FEATURES)
     print(f"Dataset: {len(df)} QB player-games\n")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     for holdout in HOLDOUT_SEASONS:
         train = df[df["season"] != holdout]
@@ -71,7 +73,7 @@ def main():
         models.append(m)
 
     import os
-    out_path = os.path.join(os.path.dirname(__file__), "player_prop_rushing_yards_qb_model.pkl")
+    out_path = model_path("player_prop_rushing_yards_qb_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": ["QB"]}, f)
     print(f"\nSaved -> {out_path}")

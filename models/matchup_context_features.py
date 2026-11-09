@@ -42,6 +42,7 @@ OPP_ALLOWED = {
     "interceptions": ("interceptions", ("QB",)),
     "receptions": ("receptions", ("WR", "TE")),
     "rushing_yards": ("rushing_yards", ("RB",)),
+    "receiving_yards": ("receiving_yards", ("WR", "TE")),
 }
 
 
@@ -166,9 +167,8 @@ def build_matchup_context(stat: str, weekly: pd.DataFrame | None = None,
 MATCHUP_FEATURES = ["opp_allowed_rolling", "team_spread", "team_out_tgt_share",
                     "team_out_carry_share", "opp_def_regulars_out", "usage_trend"]
 
-# Last season the trained models are fitted on. 2026 stays out so the real-Underdog-line
-# track record (backtesting/backtest_line_history.py) grades games the models never saw.
-FINAL_FIT_MAX_SEASON = 2025
+# Which seasons a model trains on is now models/model_store.py: a live copy fit on every
+# finished game and a holdout copy fit through 2025 that the real-line track record uses.
 
 
 def add_matchup_context(df: pd.DataFrame, stat: str, last3_col: str, rolling_col: str,

@@ -267,14 +267,20 @@ def riskiest_leg(legs: list[dict]) -> dict | None:
 def find_best_entries(candidates: pd.DataFrame, n_legs_range=(2, 4), top_k: int = 15,
                       pool_size: int = 18, min_leg_edge: float = 0.0, payout_mode: str = "product",
                       correlations: dict[frozenset, float] | None = None,
-                      mode: str = "any", game=None) -> pd.DataFrame:
+                      mode: str = "any", game=None, skip_clashes: bool = True,
+                      max_leg_uses: int | None = None) -> pd.DataFrame:
     """Exhaustive search over the `pool_size` best single legs (by edge) for the highest-
     EV valid entries of each size in n_legs_range. candidates needs columns: player,
     team, stat_name, line, choice, prob, decimal, market_prob, edge, position_prop,
     payout_multiplier (optional), and leg_key/game for same-game links.
     pool_size 18 keeps a 4-leg search at ~3k combos.
     mode: "any"; "same_game" (every leg from `game`, both teams allowed); or
-    "multi_game" (at most one leg per game, so no leg's game script sinks another)."""
+    "multi_game" (at most one leg per game, so no leg's game script sinks another).
+    skip_clashes: drop entries telling two stories at once (a QB's passing Over with his
+    own receivers' Unders or the reverse, pick_rules.clashing_stories).
+    max_leg_uses: when set, no single pick appears in more than this many of the returned
+    entries (week 8: two over-used legs sank 10 of 45 losing entries)."""
+    from pick_rules import clashing_stories
     if candidates.empty:
         return pd.DataFrame()
     if correlations is None:
@@ -296,6 +302,8 @@ def find_best_entries(candidates: pd.DataFrame, n_legs_range=(2, 4), top_k: int 
                 continue
             if mode == "multi_game" and games_in(combo) < len(combo):
                 continue
+            if skip_clashes and clashing_stories(combo):
+                continue
             res = evaluate_entry(combo, payout_mode, correlations)
             if res["ev"] is None:
                 continue
@@ -306,5 +314,15 @@ def find_best_entries(candidates: pd.DataFrame, n_legs_range=(2, 4), top_k: int 
     if not rows:
         return pd.DataFrame()
     out = pd.DataFrame(rows).sort_values("ev", ascending=False)
+    if max_leg_uses:
+        uses, keep = {}, []
+        for legs in out["legs"]:
+            ks = [(l["player"], l["stat_name"], str(l["choice"]).lower()) for l in legs]
+            ok = all(uses.get(k, 0) < max_leg_uses for k in ks)
+            keep.append(ok)
+            if ok:
+                for k in ks:
+                    uses[k] = uses.get(k, 0) + 1
+        out = out[keep]
     # Diversify: keep each size's best entries rather than letting one size dominate.
     return out.groupby("n_legs", group_keys=False).head(top_k).sort_values("ev", ascending=False).reset_index(drop=True)

@@ -114,8 +114,19 @@ def pull_pbp(years):
     try:
         df = nfl.import_pbp_data(years, downcast=True)
     except Exception as e:  # noqa: BLE001 -- includes the library's own NameError
-        print(f"[pbp] include_participation=True failed ({e}); retrying without it.")
-        df = nfl.import_pbp_data(years, downcast=True, include_participation=False)
+        # Year by year, so one season without a participation file (the current one)
+        # doesn't strip defenders_in_box from every other season too: the receiving-
+        # yards model needs that column, and without it its point-in-time predictions
+        # failed and it dropped out of the real-line grading (fixed 2026-11-09).
+        print(f"[pbp] include_participation=True failed ({e}); pulling year by year.")
+        parts = []
+        for y in years:
+            try:
+                parts.append(nfl.import_pbp_data([y], downcast=True))
+            except Exception as e2:  # noqa: BLE001
+                print(f"[pbp] {y}: no participation data ({e2}); pulling without it.")
+                parts.append(nfl.import_pbp_data([y], downcast=True, include_participation=False))
+        df = pd.concat(parts, ignore_index=True)
     key_cols = ["game_id", "play_id"]
     validate(df, "play_by_play", key_cols=key_cols, warn_null_cols=["epa", "posteam"])
     save(df, "pbp.csv", key_cols)

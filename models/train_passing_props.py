@@ -28,7 +28,8 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from player_prop_passing_features import build_passing_yards_dataset
 from game_context_features import build_game_context
 from calibration_report import print_calibration_report
-from matchup_context_features import MATCHUP_FEATURES, FINAL_FIT_MAX_SEASON, add_matchup_context
+from model_store import model_path, training_rows
+from matchup_context_features import MATCHUP_FEATURES, add_matchup_context
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
 
@@ -56,6 +57,7 @@ def main():
     df = df.dropna(subset=FEATURES)
     print(f"Dataset: {len(df)} QB player-games ({df['season'].min()}-{df['season'].max()}, week 4+)\n")
 
+    df = training_rows(df)  # model_store: every finished game (live) or through 2025 (holdout)
     all_probs, all_y, all_correct = [], [], []
     print(f"{'Holdout':<10} {'Accuracy':>10} {'AUC':>8} {'n_test':>8}")
     print("-" * 40)
@@ -87,8 +89,6 @@ def main():
         if mask.sum() > 0:
             print(f"  >={t}: {all_correct[mask].mean()*100:.1f}% ({mask.sum()} rows, {mask.mean()*100:.1f}%)")
 
-    # Final fit stops at FINAL_FIT_MAX_SEASON so 2026 real lines stay a held-out test.
-    df = df[df["season"] <= FINAL_FIT_MAX_SEASON]
     X_all, y_all = df[FEATURES], df["over_proxy_line"]
     rng = np.random.RandomState(42)
     n = len(X_all)
@@ -99,7 +99,7 @@ def main():
         m.fit(X_all.iloc[idx], y_all.iloc[idx])
         models.append(m)
 
-    out_path = os.path.join(os.path.dirname(__file__), "player_prop_passing_yards_model.pkl")
+    out_path = model_path("player_prop_passing_yards_model.pkl")
     with open(out_path, "wb") as f:
         pickle.dump({"models": models, "features": FEATURES, "position_scope": ["QB"]}, f)
     print(f"\nSaved -> {out_path}")

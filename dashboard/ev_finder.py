@@ -369,6 +369,10 @@ def page_ev_finder():
         min_edge = st.slider("Min edge over market", 0.0, 0.20, 0.02, 0.01, format="%.2f",
                              help="Model probability minus the market's fair probability for that side.")
         legs_range = st.slider("Entry size (picks)", 2, 6, (2, 4))
+        proven_only = st.toggle("Proven picks only", value=True, key="ev_proven",
+                                help="Same rule as Picks: the model 60%+ on its side of a coin-flip-ish "
+                                     "stat whose side has held up on real Underdog lines. Off shows "
+                                     "everything except losing sides.")
         payout_mode = st.radio("Entry payout", ["product", "standard"], horizontal=True,
                                format_func=lambda m: "Pick prices" if m == "product" else "Legacy table",
                                help="Pick prices: entry pays the product of each pick's decimal price "
@@ -384,6 +388,16 @@ def page_ev_finder():
                    "`python models/current_predictions.py` (Research → Data).")
         return
     cands = _apply_prob_source(cands, prob_source)
+    # Same rules as Picks (models/pick_rules.annotate): losing sides never show, and
+    # quarter / half / longest-catch lines only at 80%+.
+    from pick_rules import annotate
+    from simple_pages import load_track_record
+    cands = annotate(cands, load_track_record().get("by_stat", {}))
+    cands = cands[~cands["skip_unless_sure"]]
+    cands = cands[cands["verdict"] == "trusted"] if proven_only else cands[cands["verdict"] != "avoid"]
+    if cands.empty:
+        st.info("No picks clear the proven-pick bar right now. Turn off **Proven picks only** in the sidebar.")
+        return
     import game_filter
     sel_game = game_filter.game_filter(cands["team"], key="ev")
     if sel_game:
@@ -419,7 +433,8 @@ def page_ev_finder():
 
     with tab_auto:
         st.caption("Exhaustive search over the 18 best-edge picks (one per player, ≥2 teams per entry), "
-                   "ranked by correlation-adjusted EV.")
+                   "ranked by correlation-adjusted EV. No pick is used in more than 2 entries, and no "
+                   "entry bets a QB's passing one way and his own receivers the other.")
         st.warning("Entry EV multiplies every leg's edge, so any overstatement compounds: a 4-pick "
                    "entry at +90% EV is four ~+17% legs. On real Underdog lines so far the model's "
                    "edges have been only partly real (Picks → Track record) — "
@@ -427,7 +442,7 @@ def page_ev_finder():
         with st.spinner("Searching combinations…"):
             best = find_best_entries(cands, n_legs_range=legs_range, top_k=8, pool_size=18,
                                      min_leg_edge=min_edge, payout_mode=payout_mode,
-                                     correlations=load_leg_correlations())
+                                     correlations=load_leg_correlations(), max_leg_uses=2)
         if best.empty:
             st.info("No valid entries from picks clearing this edge. Lower the edge floor.")
         else:
