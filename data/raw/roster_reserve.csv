@@ -11760,6 +11760,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,ATL,00-0036984,Trey Sermon,RB,R01
 2026,8,ATL,00-0036984,Trey Sermon,RB,R01
 2026,5,ATL,00-0036984,Trey Sermon,RB,R01
+2026,9,BUF,00-0036988,Josh Palmer,WR,A01
 2026,3,PHI,00-0037002,Landon Dickerson,OL,R01
 2026,5,PHI,00-0037002,Landon Dickerson,OL,R01
 2026,6,PHI,00-0037002,Landon Dickerson,OL,R48
@@ -13390,6 +13391,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,2,CIN,00-0041098,Brian Parker II,OL,R48
 2026,3,CIN,00-0041098,Brian Parker II,OL,R48
 2026,8,CIN,00-0041098,Brian Parker II,OL,R48
+2026,9,MIN,00-0041104,Demond Claiborne,RB,A01
 2026,8,NYJ,00-0041120,VJ Payne,DB,R48
 2026,1,NYJ,00-0041120,VJ Payne,DB,R48
 2026,2,NYJ,00-0041120,VJ Payne,DB,R48
