@@ -276,7 +276,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039398,Joe Milton III,QB,PHI,passing_and_rushing_yds,207.6509,3
 00-0039732,Bo Nix,QB,DEN,passing_and_rushing_yds,213.6862,12
 00-0039851,Drake Maye,QB,NE,passing_and_rushing_yds,280.1061,12
-00-0039910,Jayden Daniels,QB,WAS,passing_and_rushing_yds,246.8717,12
+00-0039910,Jayden Daniels,QB,WAS,passing_and_rushing_yds,247.068,12
 00-0039917,Michael Penix Jr.,QB,ATL,passing_and_rushing_yds,208.9092,12
 00-0039918,Caleb Williams,QB,CHI,passing_and_rushing_yds,285.7443,12
 00-0039923,J.J. McCarthy,QB,NYG,passing_and_rushing_yds,201.987,12
@@ -2227,7 +2227,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037755,Jelani Woods,TE,NYJ,receiving_long,4.6322,8
 00-0037801,KaVontae Turpin,WR,DAL,receiving_long,8.8673,12
 00-0037805,Jeremy Ruckert,TE,NYJ,receiving_long,7.052,12
-00-0037809,Chig Okonkwo,TE,WAS,receiving_long,18.3809,12
+00-0037809,Chig Okonkwo,TE,WAS,receiving_long,18.5773,12
 00-0037816,Romeo Doubs,WR,NE,receiving_long,26.9876,12
 00-0037837,Calvin Austin III,WR,PIT,receiving_long,12.08,12
 00-0037838,Isaiah Likely,TE,NYG,receiving_long,18.8682,12
@@ -2834,7 +2834,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037755,Jelani Woods,TE,NYJ,rush_rec_yds,4.6322,8
 00-0037801,KaVontae Turpin,WR,DAL,rush_rec_yds,13.2959,12
 00-0037805,Jeremy Ruckert,TE,NYJ,rush_rec_yds,12.2696,12
-00-0037809,Chig Okonkwo,TE,WAS,rush_rec_yds,40.7887,12
+00-0037809,Chig Okonkwo,TE,WAS,rush_rec_yds,40.9851,12
 00-0037816,Romeo Doubs,WR,NE,rush_rec_yds,46.8266,12
 00-0037837,Calvin Austin III,WR,PIT,rush_rec_yds,20.3494,12
 00-0037838,Isaiah Likely,TE,NYG,rush_rec_yds,52.433,12
@@ -4699,7 +4699,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037755,Jelani Woods,TE,NYJ,fantasy_points,0.7656,8
 00-0037801,KaVontae Turpin,WR,DAL,fantasy_points,2.6719,12
 00-0037805,Jeremy Ruckert,TE,NYJ,fantasy_points,3.277,12
-00-0037809,Chig Okonkwo,TE,WAS,fantasy_points,6.1625,12
+00-0037809,Chig Okonkwo,TE,WAS,fantasy_points,6.1822,12
 00-0037816,Romeo Doubs,WR,NE,fantasy_points,9.4647,12
 00-0037834,Brock Purdy,QB,SF,fantasy_points,20.7438,12
 00-0037837,Calvin Austin III,WR,PIT,fantasy_points,3.9279,12
@@ -4886,7 +4886,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039893,Brian Thomas Jr.,WR,JAX,fantasy_points,4.5204,12
 00-0039894,Xavier Worthy,WR,KC,fantasy_points,5.9367,12
 00-0039901,Keon Coleman,WR,BUF,fantasy_points,7.0259,12
-00-0039910,Jayden Daniels,QB,WAS,fantasy_points,18.0241,12
+00-0039910,Jayden Daniels,QB,WAS,fantasy_points,18.032,12
 00-0039912,Ben Sinnott,TE,WAS,fantasy_points,1.2824,12
 00-0039915,Ladd McConkey,WR,LAC,fantasy_points,6.5497,12
 00-0039916,Ricky Pearsall,WR,SF,fantasy_points,7.1351,12
@@ -15777,7 +15777,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037755,Jelani Woods,TE,NYJ,receiving_yds,4.6322,8
 00-0037801,KaVontae Turpin,WR,DAL,receiving_yds,10.5813,12
 00-0037805,Jeremy Ruckert,TE,NYJ,receiving_yds,12.2696,12
-00-0037809,Chig Okonkwo,TE,WAS,receiving_yds,40.7887,12
+00-0037809,Chig Okonkwo,TE,WAS,receiving_yds,40.9851,12
 00-0037816,Romeo Doubs,WR,NE,receiving_yds,46.8266,12
 00-0037837,Calvin Austin III,WR,PIT,receiving_yds,20.3494,12
 00-0037838,Isaiah Likely,TE,NYG,receiving_yds,52.433,12
@@ -16685,7 +16685,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039398,Joe Milton III,QB,PHI,passing_yds,159.868,3
 00-0039732,Bo Nix,QB,DEN,passing_yds,197.5967,12
 00-0039851,Drake Maye,QB,NE,passing_yds,258.8191,12
-00-0039910,Jayden Daniels,QB,WAS,passing_yds,209.8534,12
+00-0039910,Jayden Daniels,QB,WAS,passing_yds,210.0497,12
 00-0039917,Michael Penix Jr.,QB,ATL,passing_yds,196.0735,12
 00-0039918,Caleb Williams,QB,CHI,passing_yds,265.5409,12
 00-0039923,J.J. McCarthy,QB,NYG,passing_yds,186.0022,12
