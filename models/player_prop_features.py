@@ -18,6 +18,7 @@ import os
 
 import pandas as pd
 
+from partial_games import full_game
 from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -57,11 +58,14 @@ def build_receiving_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # features are computed instead of before -- still excludes a barely-used game
     # from being a training LABEL, without also erasing it from being part of
     # every later week's rolling INPUT.
+    # Partial games (left hurt, benched, came off the bench) don't count toward his
+    # baselines -- see partial_games.py.
+    wr_te["_full"] = full_game(wr_te)
     for col in ["receiving_yards", "targets", "target_share", "receiving_air_yards"]:
         wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW,
-                                    team_col="recent_team")
+                                    team_col="recent_team", count_col="_full")
         # Recent form: trailing 3-game average, more responsive than season-to-date
-        wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3)
+        wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3, count_col="_full")
 
     # NGS rolling (avg separation, YAC over expected — same no-leakage pattern)
     ngs = ngs_receiving.rename(columns={"player_gsis_id": "player_id", "yards": "ngs_yards"})

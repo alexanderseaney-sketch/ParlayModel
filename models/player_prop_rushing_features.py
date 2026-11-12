@@ -19,6 +19,7 @@ import os
 
 import pandas as pd
 
+from partial_games import full_game
 from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -48,10 +49,13 @@ def build_rushing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # player's own baseline silently excluded their cold games, not just this week's
     # label, inflating the proxy for anyone with an irregular rushing role. Applied
     # below instead, after the rolling features are computed.
+    # Partial games (left hurt, benched, came off the bench) don't count toward his
+    # baselines -- see partial_games.py.
+    rb["_full"] = full_game(rb)
     for col in ["rushing_yards", "carries", "targets", "receiving_yards"]:
         rb[f"{col}_rolling"] = cross_season_rolling(rb, "player_id", col, window=_ROLLING_WINDOW,
-                                 team_col="recent_team")
-        rb[f"{col}_last3"] = cross_season_rolling(rb, "player_id", col, window=3)
+                                 team_col="recent_team", count_col="_full")
+        rb[f"{col}_last3"] = cross_season_rolling(rb, "player_id", col, window=3, count_col="_full")
 
     # NGS rushing: rush yards over expected is the cleanest efficiency signal here —
     # directly analogous to CPOE for the receiving model

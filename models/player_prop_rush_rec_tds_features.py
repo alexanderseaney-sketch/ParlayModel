@@ -29,6 +29,7 @@ import os
 
 import pandas as pd
 
+from partial_games import full_game
 from feature_engineering import cross_season_rolling, qualify
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -58,14 +59,17 @@ def build_rush_rec_tds_dataset(min_week: int = 1) -> pd.DataFrame:
     # 2026-08-23): filtering low-touch games out before this rolling average meant a
     # player's own baseline silently excluded their cold/inactive games, not just this
     # week's label. Applied below instead, after the rolling features are computed.
+    # Partial games (left hurt, benched, came off the bench) don't count toward his
+    # baselines -- see partial_games.py.
+    skill["_full"] = full_game(skill)
     for col in ["rush_rec_tds", "carries", "targets"]:
         skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW,
-                                    team_col="recent_team")
-        skill[f"{col}_last3"] = cross_season_rolling(skill, "player_id", col, window=3)
+                                    team_col="recent_team", count_col="_full")
+        skill[f"{col}_last3"] = cross_season_rolling(skill, "player_id", col, window=3, count_col="_full")
 
     for col in ["rushing_yards", "receiving_yards"]:
         skill[f"{col}_rolling"] = cross_season_rolling(skill, "player_id", col, window=_ROLLING_WINDOW,
-                                    team_col="recent_team")
+                                    team_col="recent_team", count_col="_full")
 
     # Opponent defense strength -- how many EPA/play they typically allow
     from feature_engineering import build_team_week_offense, build_team_week_defense

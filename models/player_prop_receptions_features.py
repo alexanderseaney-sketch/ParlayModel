@@ -6,6 +6,7 @@ import os
 
 import pandas as pd
 
+from partial_games import full_game
 from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -34,10 +35,13 @@ def build_receptions_dataset(min_week: int = 1) -> pd.DataFrame:
     # filtering low-target games out before this rolling average meant a player's own
     # baseline silently excluded their cold games, not just this week's label. Applied
     # below instead, after the rolling features are computed.
+    # Partial games (left hurt, benched, came off the bench) don't count toward his
+    # baselines -- see partial_games.py.
+    wr_te["_full"] = full_game(wr_te)
     for col in ["receptions", "targets", "target_share", "receiving_air_yards"]:
         wr_te[f"{col}_rolling"] = cross_season_rolling(wr_te, "player_id", col, window=_ROLLING_WINDOW,
-                                    team_col="recent_team")
-        wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3)
+                                    team_col="recent_team", count_col="_full")
+        wr_te[f"{col}_last3"] = cross_season_rolling(wr_te, "player_id", col, window=3, count_col="_full")
     # Catch rate — completions per target, a real skill/role signal separate from volume.
     # replace(0, nan), not (0, pd.NA): dividing by a pd.NA-bearing Series yields an
     # object-dtype column that XGBoost's DMatrix rejects outright. targets_rolling can

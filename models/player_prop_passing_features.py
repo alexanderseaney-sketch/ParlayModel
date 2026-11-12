@@ -9,6 +9,7 @@ import os
 
 import pandas as pd
 
+from partial_games import full_game
 from feature_engineering import cross_season_rolling, load_ngs, merge_ngs, qualify
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw")
@@ -40,7 +41,9 @@ def build_passing_yards_dataset(min_week: int = 1) -> pd.DataFrame:
     # Baselines count only games he actually played QB (MIN_ATTEMPTS_TO_QUALIFY+
     # attempts): a backup's kneel-downs and holder snaps aren't evidence of how he
     # plays as the starter, which is the only QB Underdog posts lines for.
-    qb["_played_qb"] = qb["attempts"].fillna(0) >= MIN_ATTEMPTS_TO_QUALIFY
+    # Partial games (left hurt, benched, came off the bench) don't count either: 23
+    # attempts in relief is not a start -- see partial_games.py.
+    qb["_played_qb"] = (qb["attempts"].fillna(0) >= MIN_ATTEMPTS_TO_QUALIFY) & full_game(qb)
     for col in ["passing_yards", "attempts", "passing_tds", "interceptions"]:
         qb[f"{col}_rolling"] = cross_season_rolling(qb, "player_id", col, window=_ROLLING_WINDOW,
                                  team_col="recent_team", count_col="_played_qb")
