@@ -40,7 +40,7 @@ def _week_bounds(schedules: pd.DataFrame) -> pd.DataFrame:
 
 
 def _history(history: pd.DataFrame, normalize) -> pd.DataFrame:
-    h = history[history["event"] != "pulled"].copy()
+    h = history.copy()
     h["t"] = (pd.to_datetime(h["seen_at"], utc=True).dt.tz_convert("US/Eastern").dt.tz_localize(None))
     h["_k"] = h["full_name"].apply(normalize)
     return h.sort_values("t")
@@ -55,7 +55,20 @@ def week_open_lines(history: pd.DataFrame, schedules: pd.DataFrame, season: int,
         return pd.DataFrame(columns=["_k", "stat_name", "open_line"])
     w = w.iloc[0]
     h = _history(history, normalize)
-    h = h[(h["t"] >= w["start"]) & (h["t"] < w["end"])]
+    h = h[h["t"] < w["end"]]
+    # A team that played on Sunday gets next week's lines late Sunday or on Monday, before
+    # the previous week's Monday game. Those rows sit before w["start"], so the old window
+    # missed them and took a later, already-moved line as the open (2026-11-12: Antonio
+    # Williams catches opened 4.5 on 11/09, were cut to 3.5, and the Under was not held
+    # back). A line counts as this week's once it comes after the player's last-week line
+    # was pulled; players with no pulled row fall back to the old start.
+    prev = wk[wk["min"] < w["min"]]
+    prev_start = prev["min"].iloc[-1] if len(prev) else w["start"]
+    h = h[h["t"] >= prev_start]
+    pulled = h[(h["event"] == "pulled") & (h["t"] < w["start"])]
+    last_pull = pulled.groupby(["_k", "stat_name"])["t"].max().rename("_pull").reset_index()
+    h = h[h["event"] != "pulled"].merge(last_pull, on=["_k", "stat_name"], how="left")
+    h = h[h["t"] > h["_pull"].fillna(w["start"] - pd.Timedelta(seconds=1))]
     return h.drop_duplicates(["_k", "stat_name"])[["_k", "stat_name", "line"]] \
         .rename(columns={"line": "open_line"})
 
