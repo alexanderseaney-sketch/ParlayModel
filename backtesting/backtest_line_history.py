@@ -185,37 +185,37 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
     verdict it replaced (2026-11-05). Period and longest-reception props are left out:
     Alex keeps them out of parlays unless near-certain.
 
-    Also split out (2026-11-14): `moved_your_way`, the proven picks that are only proven
-    because the line was raised (models/line_moves.moved_your_way), `model_only`, the
-    rest, and `watch_snap_dip`, the catch picks at 55%+ flagged by models/role_flux.py
-    whatever their verdict. That last one is not a rule yet. Check it here after each
-    week before making it one."""
+    Also split out (2026-11-14): `model_only`, the picks proven on model confidence
+    alone; `moved_your_way`, the ones only proven because the line was raised
+    (models/line_moves.moved_your_way); and `workload_flux`, the ones only proven because
+    the player's last game was disrupted (models/role_flux.py). The last was found on
+    2026 wks 4-9 themselves, so read it on the weeks after those."""
     import pick_rules as R
     d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()].copy()
     d = d[~d["stat_name"].str.startswith("period_") & (d["stat_name"] != "receiving_long")]
     d["side"] = np.where(d["model_prob_over"] > 0.5, "over", "under")
     d["side_prob"] = np.where(d["side"] == "over", d["model_prob_over"], 1 - d["model_prob_over"])
     d["hit"] = (d["side"] == "over") == (d["went_over"] == 1)
-    for c in ("moved_your_way", "snap_dip"):
+    for c in ("moved_your_way", "workload_flux"):
         d[c] = d[c].fillna(False).astype(bool) if c in d.columns else False
     wk = d["season"] * 100 + d["week"]
-    rules = ("new_rule", "old_rule", "model_only", "moved_your_way", "watch_snap_dip")
+    rules = ("new_rule", "old_rule", "model_only", "moved_your_way", "workload_flux")
     out = {"weeks": [], **{k: {"n": 0, "hits": 0} for k in rules}}
     for w in sorted(wk.unique())[1:]:
         rec = track_record(g[(g["season"] * 100 + g["week"]) < w])["by_stat"]
         x = d[wk == w]
         base = np.array([R.is_proven_pick(rec.get(s), sd, p)
                          for s, sd, p in zip(x["stat_name"], x["side"], x["side_prob"])], bool)
-        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m)
-                        for s, sd, p, m in zip(x["stat_name"], x["side"], x["side_prob"], x["moved_your_way"])], bool)
+        moved = np.array([R.is_proven_pick(rec.get(s), sd, p, m)
+                          for s, sd, p, m in zip(x["stat_name"], x["side"], x["side_prob"], x["moved_your_way"])], bool)
+        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f)
+                        for s, sd, p, m, f in zip(x["stat_name"], x["side"], x["side_prob"],
+                                                  x["moved_your_way"], x["workload_flux"])], bool)
         old = np.array([rec.get(s, {}).get(f"{sd}_verdict") == "trusted"
                         for s, sd in zip(x["stat_name"], x["side"])], bool)
-        avoid = np.array([rec.get(s, {}).get(f"{sd}_verdict", rec.get(s, {}).get("verdict")) == "avoid"
-                          for s, sd in zip(x["stat_name"], x["side"])], bool)
-        dip = x["snap_dip"].to_numpy() & (x["side_prob"].to_numpy() >= R.MOVED_YOUR_WAY_SIDE_PROB) & ~avoid
         row = {"week": f"{w // 100}-wk{w % 100}"}
         for k, m in (("new_rule", new), ("old_rule", old), ("model_only", base),
-                     ("moved_your_way", new & ~base), ("watch_snap_dip", dip)):
+                     ("moved_your_way", moved & ~base), ("workload_flux", new & ~moved)):
             n, h = int(m.sum()), int(x.loc[m, "hit"].sum())
             row[k] = {"n": n, "accuracy": h / n if n else None}
             out[k]["n"] += n
@@ -285,8 +285,9 @@ def gate_line_moves(g: pd.DataFrame) -> pd.DataFrame:
     """Ungate the Under picks the app holds back because the line was already cut since
     it opened that week (models/line_moves.py), so the track record grades what Picks
     shows. Also adds open_line, moved_your_way (an Under on a line raised 10%+ since it
-    opened, which pick_rules counts as proven from 55%) and snap_dip (the watch flag in
-    models/role_flux.py), each as it stood before that week's games."""
+    opened) and workload_flux (a catch prop for a player whose last game was disrupted,
+    models/role_flux.py), each as it stood before that week's games. pick_rules counts
+    both as proven from 55%."""
     import line_moves
     import role_flux
     from utils import normalize_name
@@ -295,7 +296,7 @@ def gate_line_moves(g: pd.DataFrame) -> pd.DataFrame:
     snaps = pd.read_csv(snaps_path, low_memory=False) if os.path.exists(snaps_path) else None
     g = g.copy()
     g["_k"] = g["full_name"].apply(normalize_name)
-    g["open_line"], g["moved_your_way"], g["snap_dip"] = np.nan, False, False
+    g["open_line"], g["moved_your_way"], g["workload_flux"] = np.nan, False, False
     for (season, week), x in g.groupby(["season", "week"]):
         opens = line_moves.week_open_lines(hist, B.SCHEDULES, int(season), int(week), normalize_name)
         m = x[["_k", "stat_name"]].merge(opens, on=["_k", "stat_name"], how="left")
@@ -305,8 +306,8 @@ def gate_line_moves(g: pd.DataFrame) -> pd.DataFrame:
         g.loc[x.index, "open_line"] = m["open_line"].to_numpy()
         g.loc[x.index, "moved_your_way"] = line_moves.moved_your_way(
             x["stat_name"], x["stat_value"], m["open_line"], under)
-        g.loc[x.index, "snap_dip"] = role_flux.flag(
-            x["stat_name"], x["_k"], role_flux.snap_dips(snaps, normalize_name, int(season), int(week)))
+        g.loc[x.index, "workload_flux"] = role_flux.flag(
+            x["stat_name"], x["_k"], role_flux.workload_flux(snaps, normalize_name, int(season), int(week)))
     return g
 
 
@@ -362,7 +363,7 @@ def main():
     g = gate_line_moves(g)
     keep =["gated", "season", "week", "_team", "full_name", "stat_name", "stat_value", "choice",
             "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over",
-            "open_line", "moved_your_way", "snap_dip"]
+            "open_line", "moved_your_way", "workload_flux"]
     g[[c for c in keep if c in g.columns]].to_csv(OUT_CSV, index=False)
     rec = track_record(g)
     rec["pick_rule_check"] = pick_rule_check(g)
