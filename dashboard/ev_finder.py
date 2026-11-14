@@ -215,10 +215,17 @@ def build_candidates(min_edge_floor: float = -1.0) -> tuple[pd.DataFrame, dict]:
 
 def line_move_check(c: pd.DataFrame, pulled_at) -> pd.DataFrame:
     """open_line: where this week's line opened. moved_to_under: an Under whose line
-    Underdog has already cut since then (models/line_moves.py), held back from Picks."""
+    Underdog has already cut since then (models/line_moves.py), held back from Picks.
+    moved_your_way: an Under whose line was raised 10%+ since then, which pick_rules
+    counts as proven from 55%. snap_dip: the watch flag in models/role_flux.py."""
     import line_moves
+    import role_flux
     c = c.copy()
-    c["open_line"], c["moved_to_under"] = np.nan, False
+    c["open_line"], c["moved_to_under"], c["moved_your_way"], c["snap_dip"] = np.nan, False, False, False
+    snaps = load_csv_if_exists("snap_counts.csv")
+    if snaps is not None and not c.empty:
+        c["snap_dip"] = role_flux.flag(c["stat_name"], c["_k"],
+                                       role_flux.snap_dips(snaps, normalize_name, int(snaps["season"].max())))
     history, schedules = load_csv_if_exists("underdog_line_history.csv"), load_csv_if_exists("schedules.csv")
     if history is None or schedules is None or c.empty:
         return c
@@ -230,6 +237,7 @@ def line_move_check(c: pd.DataFrame, pulled_at) -> pd.DataFrame:
     c["open_line"] = m["open_line"].to_numpy()
     under = ~c["choice"].astype(str).str.lower().isin(["over", "higher"])
     c["moved_to_under"] = line_moves.moved_to_under(c["stat_name"], c["line"], c["open_line"], under)
+    c["moved_your_way"] = line_moves.moved_your_way(c["stat_name"], c["line"], c["open_line"], under)
     return c
 
 

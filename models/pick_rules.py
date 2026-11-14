@@ -18,31 +18,44 @@ whose lines are close to a coin flip:
 
 The last rule is the one used here. Period (1Q/1H) and longest-reception props are left
 out of those numbers because Alex keeps them out of parlays unless near-certain.
+
+Added 2026-11-14, "line moved your way": an Under whose line Underdog RAISED 10%+ since
+it opened (models/line_moves.moved_your_way) is proven from 55% model confidence, not
+60%. Walk-forward on wks 4-9 that adds 304 picks at 62.2% to the 781 at 62.5% the rule
+above finds (together 1085 at 62.4%; the grid was flat from 53% to 60% confidence and
+from a 5% to a 15% raise). Tested the same day and NOT used: Overs after a line cut
+(52%), indoor games, a player's own record against his lines, depth-chart changes, and
+negative-binomial pricing for the trained count models. One more is only being watched:
+catch picks for a player whose snap share dipped last game (models/role_flux.py).
 """
 CONFIDENT_SIDE_PROB = 0.60   # model's own chance for the side it picks
 BALANCED = (0.30, 0.70)      # stat's real-line over rate: skip near-certain TD/sack Unders etc.
 SIDE_MIN_N = 50
 SIDE_MIN_ACC = 6 ** (-1 / 3)  # 55.0%, a standard 3-pick entry's break-even per pick
+MOVED_YOUR_WAY_SIDE_PROB = 0.55  # bar for an Under whose line was raised 10%+ since open
 
 
 def side_of(choice) -> str:
     return "over" if str(choice).lower() in ("over", "higher") else "under"
 
 
-def is_proven_pick(rec_row: dict | None, side: str, model_side_prob) -> bool:
-    """rec_row: the stat's entry in the track record's by_stat (None if never graded)."""
+def is_proven_pick(rec_row: dict | None, side: str, model_side_prob, moved_your_way: bool = False) -> bool:
+    """rec_row: the stat's entry in the track record's by_stat (None if never graded).
+    moved_your_way: line_moves.moved_your_way for this pick (an Under on a raised line)."""
     if not rec_row or model_side_prob is None:
         return False
     try:
         p = float(model_side_prob)
     except (TypeError, ValueError):
         return False
+    if rec_row.get(f"{side}_verdict", rec_row.get("verdict")) == "avoid":
+        return False
+    if moved_your_way and side == "under" and p >= MOVED_YOUR_WAY_SIDE_PROB:
+        return True
     if not p >= CONFIDENT_SIDE_PROB:
         return False
     over_rate = rec_row.get("over_rate")
     if over_rate is None or not BALANCED[0] < over_rate < BALANCED[1]:
-        return False
-    if rec_row.get(f"{side}_verdict", rec_row.get("verdict")) == "avoid":
         return False
     n = rec_row.get(f"picked_{side}") or 0
     acc = rec_row.get(f"{side}_pick_accuracy")
@@ -67,7 +80,9 @@ def annotate(c, by_stat: dict, chance_col: str = "blend_prob"):
     screen and script that picks legs applies the same rules:
 
       verdict "trusted"  = proven pick (is_proven_pick: model 60%+ on a balanced stat whose
-                           side has held up on real lines)
+                           side has held up on real lines, or an Under at 55%+ whose line
+                           was raised 10%+ since it opened: column moved_your_way, when
+                           the frame has one)
       verdict "avoid"    = the side (or stat) loses on real lines (PR #15: assists Unders,
                            receptions Overs, ...)
       skip_unless_sure   = quarter / half / longest-catch line under NEAR_CERTAIN.
@@ -86,8 +101,9 @@ def annotate(c, by_stat: dict, chance_col: str = "blend_prob"):
         return acc if acc is not None and (r.get(f"picked_{s}") or 0) >= 30 else r.get("accuracy")
 
     raw = [side_verdict(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
-    proven = [is_proven_pick(by_stat.get(s), side_of(ch), p)
-              for s, ch, p in zip(c["stat_name"], c["choice"], c["model_prob"])]
+    moved = c["moved_your_way"] if "moved_your_way" in c.columns else [False] * len(c)
+    proven = [is_proven_pick(by_stat.get(s), side_of(ch), p, bool(m))
+              for s, ch, p, m in zip(c["stat_name"], c["choice"], c["model_prob"], moved)]
     c["verdict"] = np.where(proven, "trusted", np.where(np.array(raw) == "avoid", "avoid", "unproven"))
     c["record"] = [record(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
     c["skip_unless_sure"] = c["stat_name"].map(near_certain_only) & (c[chance_col].astype(float) < NEAR_CERTAIN)

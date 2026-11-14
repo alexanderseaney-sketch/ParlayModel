@@ -183,30 +183,45 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
     """Walk-forward check of models/pick_rules.py: each week's picks judged only with the
     track record of the weeks before it, for the proven-pick rule and the old stat-type
     verdict it replaced (2026-11-05). Period and longest-reception props are left out:
-    Alex keeps them out of parlays unless near-certain."""
+    Alex keeps them out of parlays unless near-certain.
+
+    Also split out (2026-11-14): `moved_your_way`, the proven picks that are only proven
+    because the line was raised (models/line_moves.moved_your_way), `model_only`, the
+    rest, and `watch_snap_dip`, the catch picks at 55%+ flagged by models/role_flux.py
+    whatever their verdict. That last one is not a rule yet. Check it here after each
+    week before making it one."""
     import pick_rules as R
     d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()].copy()
     d = d[~d["stat_name"].str.startswith("period_") & (d["stat_name"] != "receiving_long")]
     d["side"] = np.where(d["model_prob_over"] > 0.5, "over", "under")
     d["side_prob"] = np.where(d["side"] == "over", d["model_prob_over"], 1 - d["model_prob_over"])
     d["hit"] = (d["side"] == "over") == (d["went_over"] == 1)
+    for c in ("moved_your_way", "snap_dip"):
+        d[c] = d[c].fillna(False).astype(bool) if c in d.columns else False
     wk = d["season"] * 100 + d["week"]
-    out = {"weeks": [], "new_rule": {"n": 0, "hits": 0}, "old_rule": {"n": 0, "hits": 0}}
+    rules = ("new_rule", "old_rule", "model_only", "moved_your_way", "watch_snap_dip")
+    out = {"weeks": [], **{k: {"n": 0, "hits": 0} for k in rules}}
     for w in sorted(wk.unique())[1:]:
         rec = track_record(g[(g["season"] * 100 + g["week"]) < w])["by_stat"]
         x = d[wk == w]
-        new = np.array([R.is_proven_pick(rec.get(s), sd, p)
-                        for s, sd, p in zip(x["stat_name"], x["side"], x["side_prob"])], bool)
+        base = np.array([R.is_proven_pick(rec.get(s), sd, p)
+                         for s, sd, p in zip(x["stat_name"], x["side"], x["side_prob"])], bool)
+        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m)
+                        for s, sd, p, m in zip(x["stat_name"], x["side"], x["side_prob"], x["moved_your_way"])], bool)
         old = np.array([rec.get(s, {}).get(f"{sd}_verdict") == "trusted"
                         for s, sd in zip(x["stat_name"], x["side"])], bool)
+        avoid = np.array([rec.get(s, {}).get(f"{sd}_verdict", rec.get(s, {}).get("verdict")) == "avoid"
+                          for s, sd in zip(x["stat_name"], x["side"])], bool)
+        dip = x["snap_dip"].to_numpy() & (x["side_prob"].to_numpy() >= R.MOVED_YOUR_WAY_SIDE_PROB) & ~avoid
         row = {"week": f"{w // 100}-wk{w % 100}"}
-        for k, m in (("new_rule", new), ("old_rule", old)):
+        for k, m in (("new_rule", new), ("old_rule", old), ("model_only", base),
+                     ("moved_your_way", new & ~base), ("watch_snap_dip", dip)):
             n, h = int(m.sum()), int(x.loc[m, "hit"].sum())
             row[k] = {"n": n, "accuracy": h / n if n else None}
             out[k]["n"] += n
             out[k]["hits"] += h
         out["weeks"].append(row)
-    for k in ("new_rule", "old_rule"):
+    for k in rules:
         out[k]["accuracy"] = out[k]["hits"] / out[k]["n"] if out[k]["n"] else None
     return out
 
@@ -269,19 +284,44 @@ def _add_period_actuals(weekly: pd.DataFrame) -> pd.DataFrame:
 def gate_line_moves(g: pd.DataFrame) -> pd.DataFrame:
     """Ungate the Under picks the app holds back because the line was already cut since
     it opened that week (models/line_moves.py), so the track record grades what Picks
-    shows."""
+    shows. Also adds open_line, moved_your_way (an Under on a line raised 10%+ since it
+    opened, which pick_rules counts as proven from 55%) and snap_dip (the watch flag in
+    models/role_flux.py), each as it stood before that week's games."""
     import line_moves
+    import role_flux
     from utils import normalize_name
     hist = pd.read_csv(os.path.join(B.RAW, "underdog_line_history.csv"))
+    snaps_path = os.path.join(B.RAW, "snap_counts.csv")
+    snaps = pd.read_csv(snaps_path, low_memory=False) if os.path.exists(snaps_path) else None
     g = g.copy()
     g["_k"] = g["full_name"].apply(normalize_name)
+    g["open_line"], g["moved_your_way"], g["snap_dip"] = np.nan, False, False
     for (season, week), x in g.groupby(["season", "week"]):
         opens = line_moves.week_open_lines(hist, B.SCHEDULES, int(season), int(week), normalize_name)
         m = x[["_k", "stat_name"]].merge(opens, on=["_k", "stat_name"], how="left")
         under = (x["model_prob_over"] < 0.5).to_numpy()
         held = line_moves.moved_to_under(x["stat_name"], x["stat_value"], m["open_line"], under)
         g.loc[x.index[held], "gated"] = False
+        g.loc[x.index, "open_line"] = m["open_line"].to_numpy()
+        g.loc[x.index, "moved_your_way"] = line_moves.moved_your_way(
+            x["stat_name"], x["stat_value"], m["open_line"], under)
+        g.loc[x.index, "snap_dip"] = role_flux.flag(
+            x["stat_name"], x["_k"], role_flux.snap_dips(snaps, normalize_name, int(season), int(week)))
     return g
+
+
+def recheck():
+    """Recompute only pick_rule_check from the committed graded CSV (seconds, not the
+    hour a full regrade takes): `python backtesting/backtest_line_history.py --recheck`."""
+    g = gate_line_moves(pd.read_csv(OUT_CSV))
+    chk = pick_rule_check(g)
+    for row in chk["weeks"]:
+        print(row["week"], "  ".join(
+            f"{k} {v['accuracy'] * 100:.0f}% ({v['n']})" for k, v in row.items() if k != "week" and v["n"]))
+    for k, v in chk.items():
+        if k != "weeks" and v["n"]:
+            print(f"  walk-forward {k}: {v['accuracy'] * 100:.1f}% on {v['n']} picks")
+    return chk
 
 
 def main():
@@ -321,7 +361,8 @@ def main():
         g = pd.concat([g, extra], ignore_index=True)
     g = gate_line_moves(g)
     keep =["gated", "season", "week", "_team", "full_name", "stat_name", "stat_value", "choice",
-            "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over"]
+            "model_prob_over", "real_line_used", "proxy_line", "prop_type", "actual", "went_over",
+            "open_line", "moved_your_way", "snap_dip"]
     g[[c for c in keep if c in g.columns]].to_csv(OUT_CSV, index=False)
     rec = track_record(g)
     rec["pick_rule_check"] = pick_rule_check(g)
@@ -333,11 +374,11 @@ def main():
         print(f"  {stat:26} n={r['n']:>4}  model {r['accuracy']*100:5.1f}%  "
               f"baseline {r['baseline']*100:5.1f}%  overs hit {r['over_rate']*100:5.1f}%  -> {r['verdict']}")
     chk = rec["pick_rule_check"]
-    for k in ("new_rule", "old_rule"):
-        if chk[k]["n"]:
-            print(f"  walk-forward {k}: {chk[k]['accuracy'] * 100:.1f}% on {chk[k]['n']} picks")
+    for k, v in chk.items():
+        if k != "weeks" and v["n"]:
+            print(f"  walk-forward {k}: {v['accuracy'] * 100:.1f}% on {v['n']} picks")
     print(f"Saved -> {OUT_JSON}")
 
 
 if __name__ == "__main__":
-    main()
+    recheck() if "--recheck" in sys.argv else main()
