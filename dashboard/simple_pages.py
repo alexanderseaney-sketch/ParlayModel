@@ -43,7 +43,8 @@ from pick_rules import NEAR_CERTAIN, near_certain_only  # noqa: E402,F401  (re-e
 
 VERDICT_COPY = {
     "trusted": ("Proven", "Beats the market baseline on real lines; picks still need the model at 60%+ "
-                          "(55%+ for an Under whose line was raised 10%+ since it opened)"),
+                          "(55%+ for an Under whose line was raised 10%+ since it opened, or a catch "
+                          "pick on a player coming off a snap dip or a missed game)"),
     "unproven": ("Unproven", "No better than always taking the commoner side yet"),
     "avoid": ("Avoid", "Worse than a coin flip on real lines"),
 }
@@ -267,6 +268,9 @@ def page_picks():
                      else '<span class="ph-tag ph-warn">Not graded yet</span>')
         if r.get("moved_your_way") and pd.notna(r.get("open_line")):
             tags += f'<span class="ph-tag ph-good">Line raised from {r["open_line"]:g}</span>'
+        if r.get("workload_flux"):
+            tags += ('<span class="ph-tag ph-good">Back from a missed game</span>' if r.get("flux_kind") == "returning"
+                     else '<span class="ph-tag ph-good">Snaps dipped last game</span>')
         is_over = str(r["choice"]).lower() in ("over", "higher")
         if r.get("last5_n", 0) == 5 and pd.notna(r.get("last5_over")):
             against = r["last5_over"] <= 1 if is_over else r["last5_over"] >= 4
