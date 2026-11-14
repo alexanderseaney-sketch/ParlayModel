@@ -42,7 +42,8 @@ GOOD_EDGE = 0.03
 from pick_rules import NEAR_CERTAIN, near_certain_only  # noqa: E402,F401  (re-exported)
 
 VERDICT_COPY = {
-    "trusted": ("Proven", "Beats the market baseline on real lines; picks still need the model at 60%+"),
+    "trusted": ("Proven", "Beats the market baseline on real lines; picks still need the model at 60%+ "
+                          "(55%+ for an Under whose line was raised 10%+ since it opened)"),
     "unproven": ("Unproven", "No better than always taking the commoner side yet"),
     "avoid": ("Avoid", "Worse than a coin flip on real lines"),
 }
@@ -264,6 +265,8 @@ def page_picks():
         if r["verdict"] != "trusted":
             tags += ('<span class="ph-tag ph-warn">Unproven pick</span>' if pd.notna(r["record"])
                      else '<span class="ph-tag ph-warn">Not graded yet</span>')
+        if r.get("moved_your_way") and pd.notna(r.get("open_line")):
+            tags += f'<span class="ph-tag ph-good">Line raised from {r["open_line"]:g}</span>'
         is_over = str(r["choice"]).lower() in ("over", "higher")
         if r.get("last5_n", 0) == 5 and pd.notna(r.get("last5_over")):
             against = r["last5_over"] <= 1 if is_over else r["last5_over"] >= 4

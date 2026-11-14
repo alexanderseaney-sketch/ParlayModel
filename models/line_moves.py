@@ -25,6 +25,15 @@ STATS = {
     "tackles", "assists", "tackles_and_assists", "fantasy_points", "kicking_points",
 }
 DROP = 0.02  # line cut by at least this share of its opening value
+# "Line moved your way" (2026-11-14): Underdog raises a line when Over money and news push
+# it up, and on real closing lines those raises overshoot. Model Under picks on a line
+# raised 10%+ since it opened hit 60.4% (n=889, 2026 wks 1, 4-9) against 55% for Unders
+# on lines that didn't move, and beat them in every week from week 4 on. First seen on
+# wks 1, 4-7 (62.8%, n=333) and it held on wks 8 and 9 (61%, 64%), which it had not seen.
+# Taking the Under after a raise with no model behind it hit 58%; where the model liked
+# the Over instead it hit 49%, so the model still has to agree. pick_rules counts these
+# Unders as proven from 55% model confidence instead of 60%.
+RISE = 0.10
 
 
 def _week_bounds(schedules: pd.DataFrame) -> pd.DataFrame:
@@ -93,3 +102,14 @@ def moved_to_under(stat_name, line, open_line, picks_under) -> np.ndarray:
     with np.errstate(invalid="ignore", divide="ignore"):
         cut = (open_line - line) / np.where(open_line > 0, open_line, np.nan)
     return np.isin(stat, list(STATS)) & np.asarray(picks_under, bool) & (np.nan_to_num(cut) >= DROP)
+
+
+def moved_your_way(stat_name, line, open_line, picks_under) -> np.ndarray:
+    """True where the pick is an Under on a volume stat whose line was raised RISE or more
+    since it opened."""
+    stat = pd.Series(stat_name).astype(str).to_numpy()
+    line = np.asarray(line, float)
+    open_line = np.asarray(open_line, float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        rise = (line - open_line) / np.where(open_line > 0, open_line, np.nan)
+    return np.isin(stat, list(STATS)) & np.asarray(picks_under, bool) & (np.nan_to_num(rise) >= RISE)
