@@ -11187,7 +11187,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2025,17,CLE,00-0040784,Quinshon Judkins,RB,R01
 2025,5,KC,,Bob Stein,LB,R09
 2025,6,NE,,Dick Capp,LB,R09
-2026,10,NE,00-0029685,Greg Van Roten,OL,R48
 2026,5,NE,00-0029685,Greg Van Roten,OL,R01
 2026,9,NE,00-0029685,Greg Van Roten,OL,R48
 2026,7,NE,00-0029685,Greg Van Roten,OL,R01
@@ -11198,6 +11197,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,10,LA,00-0031381,Davante Adams,WR,R01
 2026,8,LA,00-0031381,Davante Adams,WR,R01
 2026,9,LA,00-0031381,Davante Adams,WR,R01
+2026,10,CLE,00-0031595,Michael Burton,RB,R01
 2026,3,LAC,00-0032103,Denzel Perryman,LB,R01
 2026,1,LAC,00-0032103,Denzel Perryman,LB,R01
 2026,9,LAC,00-0032103,Denzel Perryman,LB,R48
@@ -11256,12 +11256,12 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,9,DAL,00-0033093,Jonathan Bullard,DL,R48
 2026,5,DAL,00-0033093,Jonathan Bullard,DL,R01
 2026,7,DAL,00-0033093,Jonathan Bullard,DL,R01
-2026,10,DAL,00-0033093,Jonathan Bullard,DL,R48
 2026,7,GB,00-0033109,Javon Hargrave,DL,R01
 2026,8,GB,00-0033109,Javon Hargrave,DL,R01
 2026,9,GB,00-0033109,Javon Hargrave,DL,R01
 2026,10,GB,00-0033109,Javon Hargrave,DL,R01
 2026,6,GB,00-0033109,Javon Hargrave,DL,R01
+2026,10,IND,00-0033217,Mo Alie-Cox,TE,R01
 2026,2,CAR,00-0033284,Taylor Moton,OL,R27
 2026,1,CAR,00-0033284,Taylor Moton,OL,R27
 2026,8,CAR,00-0033284,Taylor Moton,OL,R01
@@ -11438,7 +11438,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,8,IND,00-0034825,Arden Key,DL,R01
 2026,7,IND,00-0034825,Arden Key,DL,R01
 2026,6,IND,00-0034825,Arden Key,DL,R01
-2026,10,IND,00-0034825,Arden Key,DL,R48
 2026,9,IND,00-0034825,Arden Key,DL,R01
 2026,5,IND,00-0034825,Arden Key,DL,R01
 2026,3,NE,00-0034828,Harold Landry III,LB,R04
@@ -11601,6 +11600,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,6,SF,00-0035829,Austen Pleasants,OL,R48
 2026,4,SF,00-0035829,Austen Pleasants,OL,R48
 2026,10,SF,00-0035829,Austen Pleasants,OL,R48
+2026,10,TEN,00-0035889,Tommy Townsend,P,R01
 2026,3,CAR,00-0035890,Tershawn Wharton,DL,R04
 2026,1,CAR,00-0035890,Tershawn Wharton,DL,R04
 2026,4,CAR,00-0035890,Tershawn Wharton,DL,R04
@@ -11610,7 +11610,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,9,TB,00-0035942,Christian Rozeboom,LB,R01
 2026,10,BAL,00-0035993,Tyler Huntley,QB,R01
 2026,9,BAL,00-0035993,Tyler Huntley,QB,A01
-2026,10,NE,00-0036187,Reggie Gilliam,RB,R48
 2026,7,NE,00-0036187,Reggie Gilliam,RB,R01
 2026,5,NE,00-0036187,Reggie Gilliam,RB,R01
 2026,8,NE,00-0036187,Reggie Gilliam,RB,R01
@@ -11668,6 +11667,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,DAL,00-0036295,Matt Hennessy,OL,R01
 2026,10,DAL,00-0036295,Matt Hennessy,OL,R01
 2026,3,DAL,00-0036295,Matt Hennessy,OL,R01
+2026,10,IND,00-0036298,Akeem Davis-Gaither,LB,R01
 2026,1,NYJ,00-0036300,Mykal Walker,LB,R01
 2026,8,KC,00-0036374,L'Jarius Sneed,DB,R01
 2026,9,KC,00-0036374,L'Jarius Sneed,DB,R01
@@ -11817,7 +11817,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,NO,00-0036973,Travis Etienne,RB,R01
 2026,7,NO,00-0036973,Travis Etienne,RB,R01
 2026,9,NO,00-0036973,Travis Etienne,RB,R01
-2026,10,NO,00-0036973,Travis Etienne,RB,R48
 2026,5,NO,00-0036973,Travis Etienne,RB,R01
 2026,8,NE,00-0036979,Alijah Vera-Tucker,OL,R01
 2026,10,NE,00-0036979,Alijah Vera-Tucker,OL,R01
@@ -11850,7 +11849,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,2,PHI,00-0037002,Landon Dickerson,OL,R01
 2026,6,ARI,00-0037004,Hunter Long,TE,R01
 2026,8,ARI,00-0037004,Hunter Long,TE,R01
-2026,10,ARI,00-0037004,Hunter Long,TE,R48
 2026,5,ARI,00-0037004,Hunter Long,TE,R01
 2026,7,ARI,00-0037004,Hunter Long,TE,R01
 2026,9,ARI,00-0037004,Hunter Long,TE,R01
@@ -11916,6 +11914,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,5,SF,00-0037112,Jake Tonges,TE,R01
 2026,6,SF,00-0037112,Jake Tonges,TE,R01
 2026,4,SF,00-0037112,Jake Tonges,TE,R01
+2026,10,DAL,00-0037120,Tyler Goodson,RB,R01
 2026,3,ARI,00-0037141,Joey Blount,DB,R01
 2026,2,ARI,00-0037141,Joey Blount,DB,R01
 2026,7,ARI,00-0037141,Joey Blount,DB,R01
@@ -12125,7 +12124,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,HOU,00-0037633,Jacob Hummel,LB,R01
 2026,3,HOU,00-0037633,Jacob Hummel,LB,R01
 2026,9,HOU,00-0037633,Jacob Hummel,LB,R01
-2026,10,HOU,00-0037633,Jacob Hummel,LB,R48
 2026,2,HOU,00-0037661,Ja'Marcus Ingram,DB,R48
 2026,5,HOU,00-0037661,Ja'Marcus Ingram,DB,R48
 2026,1,HOU,00-0037661,Ja'Marcus Ingram,DB,R48
@@ -12226,7 +12224,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,TEN,00-0038043,Joshua Williams,DB,R48
 2026,2,TEN,00-0038043,Joshua Williams,DB,R48
 2026,8,GB,00-0038090,Skyy Moore,WR,R01
-2026,10,GB,00-0038090,Skyy Moore,WR,R48
 2026,6,GB,00-0038090,Skyy Moore,WR,R01
 2026,7,GB,00-0038090,Skyy Moore,WR,R01
 2026,9,GB,00-0038090,Skyy Moore,WR,R01
@@ -12343,6 +12340,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,IND,00-0038585,Cameron Mitchell,DB,R01
 2026,4,IND,00-0038585,Cameron Mitchell,DB,R01
 2026,6,IND,00-0038585,Cameron Mitchell,DB,R01
+2026,10,GB,00-0038589,Josh Whyle,TE,R01
 2026,3,LV,00-0038590,Justin Shorter,WR,R01
 2026,2,LV,00-0038590,Justin Shorter,WR,R01
 2026,1,LV,00-0038590,Justin Shorter,WR,R01
@@ -12387,7 +12385,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,1,BUF,00-0038679,Tyrell Shavers,WR,R04
 2026,8,BUF,00-0038679,Tyrell Shavers,WR,R04
 2026,4,BUF,00-0038679,Tyrell Shavers,WR,R04
-2026,10,GB,00-0038685,Chris Brooks,RB,R48
 2026,8,GB,00-0038685,Chris Brooks,RB,R01
 2026,7,GB,00-0038685,Chris Brooks,RB,R01
 2026,6,GB,00-0038685,Chris Brooks,RB,R01
@@ -12502,6 +12499,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,3,SEA,00-0039020,Anthony Bradford,OL,R01
 2026,5,SEA,00-0039020,Anthony Bradford,OL,R01
 2026,6,SEA,00-0039020,Anthony Bradford,OL,R01
+2026,10,TEN,00-0039034,Peter Skoronski,OL,R01
 2026,10,MIA,00-0039040,De'Von Achane,RB,R01
 2026,8,MIA,00-0039040,De'Von Achane,RB,R01
 2026,4,MIA,00-0039040,De'Von Achane,RB,R01
@@ -12614,7 +12612,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,7,CAR,00-0039342,Xavier Legette,WR,R01
 2026,4,CAR,00-0039342,Xavier Legette,WR,R01
 2026,8,CAR,00-0039342,Xavier Legette,WR,R01
-2026,10,CAR,00-0039342,Xavier Legette,WR,R48
 2026,6,CAR,00-0039342,Xavier Legette,WR,R01
 2026,9,CAR,00-0039342,Xavier Legette,WR,R01
 2026,4,CAR,00-0039344,Jonathon Brooks,RB,R01
@@ -13102,7 +13099,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,5,TEN,00-0040190,Jackson Slater,OL,R01
 2026,4,BUF,00-0040192,Jordan Hancock,DB,R01
 2026,9,BUF,00-0040192,Jordan Hancock,DB,R48
-2026,10,BUF,00-0040192,Jordan Hancock,DB,R48
 2026,6,BUF,00-0040192,Jordan Hancock,DB,R01
 2026,8,BUF,00-0040192,Jordan Hancock,DB,R01
 2026,3,BUF,00-0040192,Jordan Hancock,DB,R01
@@ -13353,7 +13349,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,8,PIT,00-0040678,Derrick Harmon,DL,R01
 2026,6,PIT,00-0040678,Derrick Harmon,DL,R01
 2026,7,PIT,00-0040678,Derrick Harmon,DL,R01
-2026,10,PIT,00-0040678,Derrick Harmon,DL,R48
 2026,5,PIT,00-0040678,Derrick Harmon,DL,R01
 2026,2,ATL,00-0040687,Cameron Williams,OL,R01
 2026,3,ATL,00-0040687,Cameron Williams,OL,R01
@@ -13405,6 +13400,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,3,WAS,00-0040731,Trey Amos,DB,R48
 2026,5,WAS,00-0040731,Trey Amos,DB,R48
 2026,1,WAS,00-0040731,Trey Amos,DB,R48
+2026,10,NE,00-0040734,TreVeyon Henderson,RB,R01
 2026,10,LA,00-0040737,Terrance Ferguson,TE,R48
 2026,4,LA,00-0040737,Terrance Ferguson,TE,R01
 2026,8,LA,00-0040737,Terrance Ferguson,TE,R01
@@ -13646,7 +13642,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,2,CIN,00-0041098,Brian Parker II,OL,R48
 2026,10,MIN,00-0041104,Demond Claiborne,RB,R01
 2026,9,MIN,00-0041104,Demond Claiborne,RB,A01
-2026,10,NYJ,00-0041120,VJ Payne,DB,R48
 2026,7,NYJ,00-0041120,VJ Payne,DB,R48
 2026,5,NYJ,00-0041120,VJ Payne,DB,R48
 2026,2,NYJ,00-0041120,VJ Payne,DB,R48
@@ -13783,6 +13778,7 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,LAC,00-0041387,Isaiah World,OL,R05
 2026,2,LAC,00-0041387,Isaiah World,OL,R05
 2026,8,LAC,00-0041387,Isaiah World,OL,R05
+2026,10,NO,00-0041390,Christen Miller,DL,R01
 2026,1,LA,00-0041394,Keagen Trost,OL,R48
 2026,3,LA,00-0041394,Keagen Trost,OL,R48
 2026,2,LA,00-0041394,Keagen Trost,OL,R48
@@ -13947,6 +13943,19 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,8,LA,00-0041587,Daniel Rickert,LB,R01
 2026,3,LA,00-0041587,Daniel Rickert,LB,R01
 2026,1,TB,00-0041592,Xavier Williams,DB,R01
+2026,10,NE,00-0029685,Greg Van Roten,OL,R48
+2026,10,DAL,00-0033093,Jonathan Bullard,DL,R48
+2026,10,IND,00-0034825,Arden Key,DL,R48
+2026,10,NE,00-0036187,Reggie Gilliam,RB,R48
+2026,10,NO,00-0036973,Travis Etienne,RB,R48
+2026,10,ARI,00-0037004,Hunter Long,TE,R48
+2026,10,HOU,00-0037633,Jacob Hummel,LB,R48
+2026,10,GB,00-0038090,Skyy Moore,WR,R48
+2026,10,GB,00-0038685,Chris Brooks,RB,R48
+2026,10,CAR,00-0039342,Xavier Legette,WR,R48
+2026,10,BUF,00-0040192,Jordan Hancock,DB,R48
+2026,10,PIT,00-0040678,Derrick Harmon,DL,R48
+2026,10,NYJ,00-0041120,VJ Payne,DB,R48
 2026,10,LV,00-0039244,Chris Collier,RB,R01
 2026,10,ATL,00-0040687,Cameron Williams,OL,R48
 2026,9,SF,00-0032775,Demarcus Robinson,WR,R48
