@@ -11204,7 +11204,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,2,LAC,00-0032103,Denzel Perryman,LB,R01
 2026,6,LAC,00-0032103,Denzel Perryman,LB,R01
 2026,5,LAC,00-0032103,Denzel Perryman,LB,R01
-2026,10,LAC,00-0032103,Denzel Perryman,LB,R48
 2026,4,LAC,00-0032103,Denzel Perryman,LB,R01
 2026,8,LAC,00-0032103,Denzel Perryman,LB,R01
 2026,7,HOU,00-0032265,Mario Edwards,DL,R01
@@ -11318,7 +11317,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,8,LAC,00-0033885,David Njoku,TE,R01
 2026,6,LAC,00-0033885,David Njoku,TE,R01
 2026,9,LAC,00-0033885,David Njoku,TE,R48
-2026,10,LAC,00-0033885,David Njoku,TE,R48
 2026,5,LAC,00-0033885,David Njoku,TE,R01
 2026,3,LAC,00-0033885,David Njoku,TE,R01
 2026,4,LAC,00-0033885,David Njoku,TE,R01
@@ -13943,6 +13941,8 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,8,LA,00-0041587,Daniel Rickert,LB,R01
 2026,3,LA,00-0041587,Daniel Rickert,LB,R01
 2026,1,TB,00-0041592,Xavier Williams,DB,R01
+2026,10,LAC,00-0032103,Denzel Perryman,LB,R48
+2026,10,LAC,00-0033885,David Njoku,TE,R48
 2026,10,NE,00-0029685,Greg Van Roten,OL,R48
 2026,10,DAL,00-0033093,Jonathan Bullard,DL,R48
 2026,10,IND,00-0034825,Arden Key,DL,R48
