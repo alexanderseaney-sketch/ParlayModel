@@ -10170,7 +10170,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041509,Arvell Reese,LB,NYG,tackles,5.847,9
 00-0041518,Bryce Boettcher,LB,IND,tackles,1.6858,8
 00-0041522,Jacob Rodriguez,LB,MIA,tackles,3.6205,9
-00-0041527,Kyle Louis,LB,MIA,tackles,1.3878,4
+00-0041527,Kyle Louis,SAF,MIA,tackles,1.3878,4
 00-0041528,Michael Taaffe,SAF,MIA,tackles,3.0761,9
 00-0041533,Chris Johnson,CB,MIA,tackles,2.3627,9
 00-0041534,Tim Keenan III,DT,LV,tackles,0.7191,3
@@ -11331,7 +11331,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041509,Arvell Reese,LB,NYG,assists,3.6933,9
 00-0041518,Bryce Boettcher,LB,IND,assists,4.2823,8
 00-0041522,Jacob Rodriguez,LB,MIA,assists,4.1355,9
-00-0041527,Kyle Louis,LB,MIA,assists,0.7202,4
+00-0041527,Kyle Louis,SAF,MIA,assists,0.7202,4
 00-0041528,Michael Taaffe,SAF,MIA,assists,2.7062,9
 00-0041533,Chris Johnson,CB,MIA,assists,2.1213,9
 00-0041534,Tim Keenan III,DT,LV,assists,1.7279,3
@@ -12492,7 +12492,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041509,Arvell Reese,LB,NYG,tackles_and_assists,9.5403,9
 00-0041518,Bryce Boettcher,LB,IND,tackles_and_assists,5.9681,8
 00-0041522,Jacob Rodriguez,LB,MIA,tackles_and_assists,7.756,9
-00-0041527,Kyle Louis,LB,MIA,tackles_and_assists,2.108,4
+00-0041527,Kyle Louis,SAF,MIA,tackles_and_assists,2.108,4
 00-0041528,Michael Taaffe,SAF,MIA,tackles_and_assists,5.7823,9
 00-0041533,Chris Johnson,CB,MIA,tackles_and_assists,4.4839,9
 00-0041534,Tim Keenan III,DT,LV,tackles_and_assists,2.447,3
@@ -13653,7 +13653,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041509,Arvell Reese,LB,NYG,sacks,0.6702,9
 00-0041518,Bryce Boettcher,LB,IND,sacks,0.0,8
 00-0041522,Jacob Rodriguez,LB,MIA,sacks,0.1659,9
-00-0041527,Kyle Louis,LB,MIA,sacks,0.0,4
+00-0041527,Kyle Louis,SAF,MIA,sacks,0.0,4
 00-0041528,Michael Taaffe,SAF,MIA,sacks,0.0,9
 00-0041533,Chris Johnson,CB,MIA,sacks,0.0,9
 00-0041534,Tim Keenan III,DT,LV,sacks,0.3304,3
@@ -14814,7 +14814,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041509,Arvell Reese,LB,NYG,defensive_ints,0.0866,9
 00-0041518,Bryce Boettcher,LB,IND,defensive_ints,0.0,8
 00-0041522,Jacob Rodriguez,LB,MIA,defensive_ints,0.0736,9
-00-0041527,Kyle Louis,LB,MIA,defensive_ints,0.0,4
+00-0041527,Kyle Louis,SAF,MIA,defensive_ints,0.0,4
 00-0041528,Michael Taaffe,SAF,MIA,defensive_ints,0.3683,9
 00-0041533,Chris Johnson,CB,MIA,defensive_ints,0.3611,9
 00-0041534,Tim Keenan III,DT,LV,defensive_ints,0.0,3
