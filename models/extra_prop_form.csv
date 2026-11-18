@@ -1889,7 +1889,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040729,Jack Bech,WR,LV,receiving_tgts,3.5292,12
 00-0040730,RJ Harvey,RB,DEN,receiving_tgts,4.3958,12
 00-0040734,TreVeyon Henderson,RB,NE,receiving_tgts,1.2702,12
-00-0040735,Luther Burden III,WR,CHI,receiving_tgts,7.3364,12
+00-0040735,Luther Burden III,WR,CHI,receiving_tgts,7.5188,12
 00-0040736,Mason Taylor,TE,NYJ,receiving_tgts,4.2253,12
 00-0040737,Terrance Ferguson,TE,LA,receiving_tgts,3.5029,12
 00-0040739,Elijah Arroyo,TE,SEA,receiving_tgts,1.4606,12
@@ -10130,7 +10130,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041305,Sabastian Harsh,DE,HOU,tackles,1.074,4
 00-0041316,Channing Canada,CB,NE,tackles,0.4595,2
 00-0041320,Kenneth Harris,CB,IND,tackles,0.8344,5
-00-0041354,Jacob Thomas,SAF,MIN,tackles,1.0904,5
+00-0041354,Jacob Thomas,SAF,MIN,tackles,0.8208,5
 00-0041358,Bryson Eason,DT,KC,tackles,0.0,2
 00-0041363,James Thompson Jr.,DT,SF,tackles,1.048,5
 00-0041370,Wydett Williams Jr.,SAF,ARI,tackles,1.0269,4
@@ -10163,7 +10163,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041479,Anthony Hill Jr.,LB,TEN,tackles,5.0525,8
 00-0041494,Zion Young,LB,BAL,tackles,0.7198,8
 00-0041495,Jake Golday,LB,MIN,tackles,1.1535,9
-00-0041497,Jadon Canady,CB,KC,tackles,0.8885,5
+00-0041497,Jadon Canady,CB,KC,tackles,1.1581,5
 00-0041501,R Mason Thomas,DE,KC,tackles,0.4212,8
 00-0041502,Josiah Trotter,LB,TB,tackles,4.2633,8
 00-0041508,Keldric Faulk,DE,TEN,tackles,0.2745,8
@@ -10464,7 +10464,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0035717,Nick Bosa,DE,SF,assists,1.3864,12
 00-0035718,Quinnen Williams,DT,DAL,assists,2.2837,12
 00-0035763,Malcolm Roach,DT,DEN,assists,1.1359,12
-00-0035795,James Pierre,CB,MIN,assists,0.6829,12
+00-0035795,James Pierre,CB,MIN,assists,0.5246,12
 00-0035841,Benito Jones,DT,MIA,assists,1.1286,12
 00-0035857,Chris Williams,DT,CLE,assists,0.9384,12
 00-0035890,Tershawn Wharton,DE,CAR,assists,1.7604,12
@@ -10933,7 +10933,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039309,Byron Murphy II,DT,SEA,assists,2.191,12
 00-0039312,Miles Battle,CB,NE,assists,0.0,2
 00-0039313,Swayze Bozeman,LB,CIN,assists,1.0869,10
-00-0039324,Christian Roland-Wallace,CB,KC,assists,1.8121,12
+00-0039324,Christian Roland-Wallace,CB,KC,assists,1.6259,12
 00-0039332,C.J. Ravenell,DE,TEN,assists,0.8142,6
 00-0039333,Brandon Codrington,CB,BUF,assists,0.0913,12
 00-0039340,Laiatu Latu,DE,IND,assists,0.778,12
@@ -11188,7 +11188,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040580,Josaiah Stewart,LB,LA,assists,1.9583,12
 00-0040585,Ty Hamilton,DT,LA,assists,1.3472,12
 00-0040613,Shaun Dolac,LB,LA,assists,1.9615,12
-00-0040624,Elijah Williams,DE,MIN,assists,1.4121,6
+00-0040624,Elijah Williams,DE,MIN,assists,1.6751,6
 00-0040625,Nick Jackson,LB,TB,assists,0.5405,2
 00-0040634,Jordan Turner,LB,DEN,assists,0.6525,11
 00-0040636,Keyon Martin,CB,BAL,assists,0.338,12
@@ -11291,7 +11291,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041305,Sabastian Harsh,DE,HOU,assists,1.0,4
 00-0041316,Channing Canada,CB,NE,assists,0.5405,2
 00-0041320,Kenneth Harris,CB,IND,assists,0.7896,5
-00-0041354,Jacob Thomas,SAF,MIN,assists,0.7304,5
+00-0041354,Jacob Thomas,SAF,MIN,assists,1.2696,5
 00-0041358,Bryson Eason,DT,KC,assists,1.0,2
 00-0041363,James Thompson Jr.,DT,SF,assists,1.2156,5
 00-0041370,Wydett Williams Jr.,SAF,ARI,assists,0.7602,4
@@ -11324,7 +11324,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041479,Anthony Hill Jr.,LB,TEN,assists,5.3391,8
 00-0041494,Zion Young,LB,BAL,assists,0.8141,8
 00-0041495,Jake Golday,LB,MIN,assists,0.6465,9
-00-0041497,Jadon Canady,CB,KC,assists,0.7049,5
+00-0041497,Jadon Canady,CB,KC,assists,0.4352,5
 00-0041501,R Mason Thomas,DE,KC,assists,0.3757,8
 00-0041502,Josiah Trotter,LB,TB,assists,4.6539,8
 00-0041508,Keldric Faulk,DE,TEN,assists,0.7905,8
@@ -11625,7 +11625,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0035717,Nick Bosa,DE,SF,tackles_and_assists,2.864,12
 00-0035718,Quinnen Williams,DT,DAL,tackles_and_assists,5.4117,12
 00-0035763,Malcolm Roach,DT,DEN,tackles_and_assists,2.6684,12
-00-0035795,James Pierre,CB,MIN,tackles_and_assists,3.6476,12
+00-0035795,James Pierre,CB,MIN,tackles_and_assists,3.4894,12
 00-0035841,Benito Jones,DT,MIA,tackles_and_assists,1.5424,12
 00-0035857,Chris Williams,DT,CLE,tackles_and_assists,1.4328,12
 00-0035890,Tershawn Wharton,DE,CAR,tackles_and_assists,2.5156,12
@@ -12094,7 +12094,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039309,Byron Murphy II,DT,SEA,tackles_and_assists,3.5373,12
 00-0039312,Miles Battle,CB,NE,tackles_and_assists,2.5405,2
 00-0039313,Swayze Bozeman,LB,CIN,tackles_and_assists,1.455,10
-00-0039324,Christian Roland-Wallace,CB,KC,tackles_and_assists,4.0268,12
+00-0039324,Christian Roland-Wallace,CB,KC,tackles_and_assists,3.8406,12
 00-0039332,C.J. Ravenell,DE,TEN,tackles_and_assists,0.921,6
 00-0039333,Brandon Codrington,CB,BUF,tackles_and_assists,0.4427,12
 00-0039340,Laiatu Latu,DE,IND,tackles_and_assists,1.9955,12
@@ -12349,7 +12349,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040580,Josaiah Stewart,LB,LA,tackles_and_assists,2.4368,12
 00-0040585,Ty Hamilton,DT,LA,tackles_and_assists,1.6364,12
 00-0040613,Shaun Dolac,LB,LA,tackles_and_assists,3.2235,12
-00-0040624,Elijah Williams,DE,MIN,tackles_and_assists,3.7683,6
+00-0040624,Elijah Williams,DE,MIN,tackles_and_assists,4.0313,6
 00-0040625,Nick Jackson,LB,TB,tackles_and_assists,1.0,2
 00-0040634,Jordan Turner,LB,DEN,tackles_and_assists,1.2339,11
 00-0040636,Keyon Martin,CB,BAL,tackles_and_assists,2.1272,12
@@ -12452,7 +12452,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0041305,Sabastian Harsh,DE,HOU,tackles_and_assists,2.074,4
 00-0041316,Channing Canada,CB,NE,tackles_and_assists,1.0,2
 00-0041320,Kenneth Harris,CB,IND,tackles_and_assists,1.624,5
-00-0041354,Jacob Thomas,SAF,MIN,tackles_and_assists,1.8208,5
+00-0041354,Jacob Thomas,SAF,MIN,tackles_and_assists,2.0904,5
 00-0041358,Bryson Eason,DT,KC,tackles_and_assists,1.0,2
 00-0041363,James Thompson Jr.,DT,SF,tackles_and_assists,2.2636,5
 00-0041370,Wydett Williams Jr.,SAF,ARI,tackles_and_assists,1.7872,4
