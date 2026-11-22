@@ -189,7 +189,14 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
     alone; `moved_your_way`, the ones only proven because the line was raised
     (models/line_moves.moved_your_way); and `workload_flux`, the ones only proven because
     the player's last game was disrupted (models/role_flux.py). The last was found on
-    2026 wks 4-9 themselves, so read it on the weeks after those."""
+    2026 wks 4-9 themselves, so read it on the weeks after those.
+
+    Added 2026-11-22 (models/price_rules.py): `priced_out`, picks the rule had before
+    that are dropped for a multiplier under 0.80x; `flat_lean`, picks added as Unders at
+    1.00x that Underdog's price leans to; `before_prices`, the rule without either. Each
+    carries `champions_value`, the mean of hit x 2 x multiplier x 0.82^(1/3) over picks
+    with a known price (above 1.00 makes money in a 3-pick Champions entry). Prices exist
+    from 2026 wk 4; both price paths were found on wks 4-10, so read them on wks 11+."""
     import pick_rules as R
     d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()].copy()
     d = d[~d["stat_name"].str.startswith("period_") & (d["stat_name"] != "receiving_long")]
@@ -198,8 +205,20 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
     d["hit"] = (d["side"] == "over") == (d["went_over"] == 1)
     for c in ("moved_your_way", "workload_flux"):
         d[c] = d[c].fillna(False).astype(bool) if c in d.columns else False
+    import price_rules as PX
+    for c in ("over_mult", "under_mult", "fair_over"):
+        if c not in d.columns:
+            d[c] = np.nan
+    over = d["side"] == "over"
+    d["mult"] = np.where(over, d["over_mult"], d["under_mult"])
+    d["fair"] = np.where(over, d["fair_over"], 1 - d["fair_over"])
+    d["flat_lean"] = [PX.flat_price_lean(sd, m, f) for sd, m, f in zip(d["side"], d["mult"], d["fair"])]
+    # Champions value per pick in a 3-pick entry (hit x 2 x multiplier x 0.82^(1/3));
+    # over 1.00 makes money. Only where the price is known.
+    d["value"] = d["hit"] * 2 * d["mult"] * PX.K3
     wk = d["season"] * 100 + d["week"]
-    rules = ("new_rule", "old_rule", "model_only", "moved_your_way", "workload_flux")
+    rules = ("new_rule", "old_rule", "model_only", "moved_your_way", "workload_flux", "priced_out",
+             "flat_lean", "before_prices")
     out = {"weeks": [], **{k: {"n": 0, "hits": 0} for k in rules}}
     for w in sorted(wk.unique())[1:]:
         rec = track_record(g[(g["season"] * 100 + g["week"]) < w])["by_stat"]
@@ -208,21 +227,33 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
                          for s, sd, p in zip(x["stat_name"], x["side"], x["side_prob"])], bool)
         moved = np.array([R.is_proven_pick(rec.get(s), sd, p, m)
                           for s, sd, p, m in zip(x["stat_name"], x["side"], x["side_prob"], x["moved_your_way"])], bool)
-        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f)
-                        for s, sd, p, m, f in zip(x["stat_name"], x["side"], x["side_prob"],
-                                                  x["moved_your_way"], x["workload_flux"])], bool)
+        before = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f)
+                           for s, sd, p, m, f in zip(x["stat_name"], x["side"], x["side_prob"],
+                                                     x["moved_your_way"], x["workload_flux"])], bool)
+        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f, mu, fl)
+                        for s, sd, p, m, f, mu, fl in zip(x["stat_name"], x["side"], x["side_prob"],
+                                                          x["moved_your_way"], x["workload_flux"],
+                                                          x["mult"], x["flat_lean"])], bool)
         old = np.array([rec.get(s, {}).get(f"{sd}_verdict") == "trusted"
                         for s, sd in zip(x["stat_name"], x["side"])], bool)
         row = {"week": f"{w // 100}-wk{w % 100}"}
-        for k, m in (("new_rule", new), ("old_rule", old), ("model_only", base),
-                     ("moved_your_way", moved & ~base), ("workload_flux", new & ~moved)):
+        for k, m in (("new_rule", new), ("old_rule", old), ("model_only", base & new),
+                     ("moved_your_way", moved & ~base & new), ("workload_flux", before & ~moved & new),
+                     ("priced_out", before & ~new), ("flat_lean", new & ~before), ("before_prices", before)):
             n, h = int(m.sum()), int(x.loc[m, "hit"].sum())
-            row[k] = {"n": n, "accuracy": h / n if n else None}
+            v = x.loc[m, "value"].dropna()
+            row[k] = {"n": n, "accuracy": h / n if n else None,
+                      "champions_value": float(v.mean()) if len(v) else None}
             out[k]["n"] += n
             out[k]["hits"] += h
+            out[k]["value_sum"] = out[k].get("value_sum", 0.0) + float(v.sum())
+            out[k]["priced"] = out[k].get("priced", 0) + len(v)
         out["weeks"].append(row)
     for k in rules:
         out[k]["accuracy"] = out[k]["hits"] / out[k]["n"] if out[k]["n"] else None
+        vs, pr = out[k].pop("value_sum", 0.0), out[k].pop("priced", 0)
+        out[k]["champions_value"] = vs / pr if pr else None
+        out[k]["priced_n"] = pr
     return out
 
 
@@ -308,7 +339,25 @@ def gate_line_moves(g: pd.DataFrame) -> pd.DataFrame:
             x["stat_name"], x["stat_value"], m["open_line"], under)
         g.loc[x.index, "workload_flux"] = role_flux.flag(
             x["stat_name"], x["_k"], role_flux.workload_flux(snaps, normalize_name, int(season), int(week)))
-    return g
+    return add_closing_prices(g)
+
+
+def add_closing_prices(g: pd.DataFrame) -> pd.DataFrame:
+    """over_mult / under_mult / fair_over: Underdog's last price for the closing line
+    before the player's kickoff (data/raw/underdog_price_history.csv, from 2026 wk 4 on;
+    NaN before that). price_rules uses them for the Champions rules (2026-11-22)."""
+    import price_rules
+    path = os.path.join(B.RAW, "underdog_price_history.csv")
+    if not os.path.exists(path):
+        return g.assign(over_mult=np.nan, under_mult=np.nan, fair_over=np.nan)
+    ko = B._kickoffs(B.SCHEDULES).rename(columns={"team": "_team"})
+    ko["kick"] = ko["kickoff"].dt.tz_localize("US/Eastern", ambiguous="NaT", nonexistent="NaT").dt.tz_convert("UTC")
+    x = g.drop(columns=[c for c in ("over_mult", "under_mult", "fair_over") if c in g.columns])
+    x = x.merge(ko[["season", "week", "_team", "kick"]].drop_duplicates(["season", "week", "_team"]),
+                on=["season", "week", "_team"], how="left")
+    x = price_rules.closing_prices(pd.read_csv(path), x)
+    x.index = g.index
+    return x.drop(columns=["kick"])
 
 
 def recheck():
@@ -321,7 +370,9 @@ def recheck():
             f"{k} {v['accuracy'] * 100:.0f}% ({v['n']})" for k, v in row.items() if k != "week" and v["n"]))
     for k, v in chk.items():
         if k != "weeks" and v["n"]:
-            print(f"  walk-forward {k}: {v['accuracy'] * 100:.1f}% on {v['n']} picks")
+            val = f", Champions value {v['champions_value']:.3f} on {v['priced_n']} priced" \
+                if v.get("champions_value") is not None else ""
+            print(f"  walk-forward {k}: {v['accuracy'] * 100:.1f}% on {v['n']} picks{val}")
     return chk
 
 

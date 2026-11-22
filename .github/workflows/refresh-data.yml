@@ -89,6 +89,10 @@ jobs:
         continue-on-error: true
         run: python data/archive_underdog_lines.py
 
+      - name: Archive Underdog price changes (slim, committed -- Champions pick rules)
+        continue-on-error: true
+        run: python data/archive_underdog_prices.py
+
       - name: Pull weather forecasts
         continue-on-error: true
         run: python data/pull_weather_forecast.py
