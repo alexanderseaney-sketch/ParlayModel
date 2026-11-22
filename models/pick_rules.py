@@ -32,7 +32,17 @@ tags and practice status, teammates out and who replaces them, QB changes, line 
 defender injuries, rest, weather, news volume, Overs after a line cut, indoor games, a
 player's own record against his lines, depth-chart changes, and negative-binomial
 pricing for the trained count models.
+
+Added 2026-11-22, Champions prices (models/price_rules.py, walk-forward wks 5-10 judged
+by what Champions pays): a pick priced under 0.80x is never proven (66% hit, needs 70%+),
+and an Under paying 1.00x that Underdog's own price leans to (devigged 51%+) is proven
+whenever the model is on the Under. Walk-forward wks 4-10: 1455 picks at 61.9% ->
+1547 at 61.7%, Champions value per pick (hit x 2 x multiplier x 0.82^(1/3)) 1.053 ->
+1.082, ahead in 5 of 7 weeks; drops 119 picks at 65.5% (value 0.91), adds 211 at 63.0%
+(value 1.18).
 """
+from price_rules import flat_price_lean, priced_out  # noqa: E402
+
 CONFIDENT_SIDE_PROB = 0.60   # model's own chance for the side it picks
 BALANCED = (0.30, 0.70)      # stat's real-line over rate: skip near-certain TD/sack Unders etc.
 SIDE_MIN_N = 50
@@ -46,10 +56,13 @@ def side_of(choice) -> str:
 
 
 def is_proven_pick(rec_row: dict | None, side: str, model_side_prob, moved_your_way: bool = False,
-                   workload_flux: bool = False) -> bool:
+                   workload_flux: bool = False, payout_multiplier=None, flat_lean: bool = False) -> bool:
     """rec_row: the stat's entry in the track record's by_stat (None if never graded).
     moved_your_way: line_moves.moved_your_way for this pick (an Under on a raised line).
-    workload_flux: role_flux.flag for this pick (a catch prop, player's last game disrupted)."""
+    workload_flux: role_flux.flag for this pick (a catch prop, player's last game disrupted).
+    payout_multiplier: this side's Underdog multiplier; under 0.80x it is never proven
+    (price_rules.priced_out). flat_lean: price_rules.flat_price_lean for this pick (an
+    Under at 1.00x that Underdog's own price leans to); proven when the model is on it."""
     if not rec_row or model_side_prob is None:
         return False
     try:
@@ -58,6 +71,10 @@ def is_proven_pick(rec_row: dict | None, side: str, model_side_prob, moved_your_
         return False
     if rec_row.get(f"{side}_verdict", rec_row.get("verdict")) == "avoid":
         return False
+    if priced_out(payout_multiplier):
+        return False
+    if flat_lean and side == "under" and p > 0.5:
+        return True
     if moved_your_way and side == "under" and p >= MOVED_YOUR_WAY_SIDE_PROB:
         return True
     if workload_flux and p >= WORKLOAD_FLUX_SIDE_PROB:
@@ -94,6 +111,9 @@ def annotate(c, by_stat: dict, chance_col: str = "blend_prob"):
                            line was raised 10%+ since it opened or a catch pick on a
                            player whose last game was disrupted: columns moved_your_way
                            and workload_flux, when the frame has them)
+                           Also proven: an Under at 1.00x that Underdog's price leans to
+                           (flat_lean, from payout_multiplier + market_prob). Never proven:
+                           a pick priced under 0.80x (priced_out).
       verdict "avoid"    = the side (or stat) loses on real lines (PR #15: assists Unders,
                            receptions Overs, ...)
       skip_unless_sure   = quarter / half / longest-catch line under NEAR_CERTAIN.
@@ -114,8 +134,13 @@ def annotate(c, by_stat: dict, chance_col: str = "blend_prob"):
     raw = [side_verdict(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
     moved = c["moved_your_way"] if "moved_your_way" in c.columns else [False] * len(c)
     flux = c["workload_flux"] if "workload_flux" in c.columns else [False] * len(c)
-    proven = [is_proven_pick(by_stat.get(s), side_of(ch), p, bool(m), bool(f))
-              for s, ch, p, m, f in zip(c["stat_name"], c["choice"], c["model_prob"], moved, flux)]
+    mult = c["payout_multiplier"] if "payout_multiplier" in c.columns else [None] * len(c)
+    fair = c["market_prob"] if "market_prob" in c.columns else [None] * len(c)
+    c["priced_out"] = [priced_out(m) for m in mult]
+    c["flat_lean"] = [flat_price_lean(ch, m, f) for ch, m, f in zip(c["choice"], mult, fair)]
+    proven = [is_proven_pick(by_stat.get(s), side_of(ch), p, bool(m), bool(f), mu, bool(fl))
+              for s, ch, p, m, f, mu, fl in zip(c["stat_name"], c["choice"], c["model_prob"], moved, flux,
+                                               mult, c["flat_lean"])]
     c["verdict"] = np.where(proven, "trusted", np.where(np.array(raw) == "avoid", "avoid", "unproven"))
     c["record"] = [record(s, ch) for s, ch in zip(c["stat_name"], c["choice"])]
     c["skip_unless_sure"] = c["stat_name"].map(near_certain_only) & (c[chance_col].astype(float) < NEAR_CERTAIN)
