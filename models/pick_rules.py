@@ -40,6 +40,13 @@ whenever the model is on the Under. Walk-forward wks 4-10: 1455 picks at 61.9% -
 1547 at 61.7%, Champions value per pick (hit x 2 x multiplier x 0.82^(1/3)) 1.053 ->
 1.082, ahead in 5 of 7 weeks; drops 119 picks at 65.5% (value 0.91), adds 211 at 63.0%
 (value 1.18).
+
+Added 2026-11-23 (Sunday 11/22 post-mortem): a tackle / tackles+assists / assists Under
+the model puts at 70%+ is never proven. The form model's tail is overconfident there:
+walk-forward wks 5-11 those picks hit 45% (n=40, Champions value 0.79), 43% on wks 5-9
+(n=21) where the pattern was first visible and 47% on wks 10-11 (n=19) after it. Dropping
+them moves the rule from 1710 picks at 61.3% (value 1.072) to 1670 at 61.7% (1.079).
+Tackle Unders under 70% stay proven (62%).
 """
 from price_rules import flat_price_lean, priced_out  # noqa: E402
 
@@ -49,6 +56,8 @@ SIDE_MIN_N = 50
 SIDE_MIN_ACC = 6 ** (-1 / 3)  # 55.0%, a standard 3-pick entry's break-even per pick
 MOVED_YOUR_WAY_SIDE_PROB = 0.55  # bar for an Under whose line was raised 10%+ since open
 WORKLOAD_FLUX_SIDE_PROB = 0.55   # bar for a catch pick on a player off a snap dip / missed game
+TACKLE_STATS = ("tackles", "tackles_and_assists", "assists")
+TACKLE_UNDER_MAX_PROB = 0.70     # tackle Unders the model puts at 70%+ hit 45% (2026-11-23)
 
 
 def side_of(choice) -> str:
@@ -56,13 +65,15 @@ def side_of(choice) -> str:
 
 
 def is_proven_pick(rec_row: dict | None, side: str, model_side_prob, moved_your_way: bool = False,
-                   workload_flux: bool = False, payout_multiplier=None, flat_lean: bool = False) -> bool:
+                   workload_flux: bool = False, payout_multiplier=None, flat_lean: bool = False,
+                   stat_name: str | None = None) -> bool:
     """rec_row: the stat's entry in the track record's by_stat (None if never graded).
     moved_your_way: line_moves.moved_your_way for this pick (an Under on a raised line).
     workload_flux: role_flux.flag for this pick (a catch prop, player's last game disrupted).
     payout_multiplier: this side's Underdog multiplier; under 0.80x it is never proven
     (price_rules.priced_out). flat_lean: price_rules.flat_price_lean for this pick (an
-    Under at 1.00x that Underdog's own price leans to); proven when the model is on it."""
+    Under at 1.00x that Underdog's own price leans to); proven when the model is on it.
+    stat_name: when given, a tackle-type Under at TACKLE_UNDER_MAX_PROB+ is never proven."""
     if not rec_row or model_side_prob is None:
         return False
     try:
@@ -72,6 +83,8 @@ def is_proven_pick(rec_row: dict | None, side: str, model_side_prob, moved_your_
     if rec_row.get(f"{side}_verdict", rec_row.get("verdict")) == "avoid":
         return False
     if priced_out(payout_multiplier):
+        return False
+    if side == "under" and stat_name in TACKLE_STATS and p >= TACKLE_UNDER_MAX_PROB:
         return False
     if flat_lean and side == "under" and p > 0.5:
         return True
@@ -138,7 +151,7 @@ def annotate(c, by_stat: dict, chance_col: str = "blend_prob"):
     fair = c["market_prob"] if "market_prob" in c.columns else [None] * len(c)
     c["priced_out"] = [priced_out(m) for m in mult]
     c["flat_lean"] = [flat_price_lean(ch, m, f) for ch, m, f in zip(c["choice"], mult, fair)]
-    proven = [is_proven_pick(by_stat.get(s), side_of(ch), p, bool(m), bool(f), mu, bool(fl))
+    proven = [is_proven_pick(by_stat.get(s), side_of(ch), p, bool(m), bool(f), mu, bool(fl), stat_name=s)
               for s, ch, p, m, f, mu, fl in zip(c["stat_name"], c["choice"], c["model_prob"], moved, flux,
                                                mult, c["flat_lean"])]
     c["verdict"] = np.where(proven, "trusted", np.where(np.array(raw) == "avoid", "avoid", "unproven"))
