@@ -196,7 +196,9 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
     1.00x that Underdog's price leans to; `before_prices`, the rule without either. Each
     carries `champions_value`, the mean of hit x 2 x multiplier x 0.82^(1/3) over picks
     with a known price (above 1.00 makes money in a 3-pick Champions entry). Prices exist
-    from 2026 wk 4; both price paths were found on wks 4-10, so read them on wks 11+."""
+    from 2026 wk 4; both price paths were found on wks 4-10, so read them on wks 11+.
+    2026-11-23: `new_rule` also drops tackle-type Unders at model 70%+ (pick_rules
+    TACKLE_UNDER_MAX_PROB); `tackle_cap` is the picks that drops."""
     import pick_rules as R
     d = g[g["gated"] & (g["choice"] == "over") & g["model_prob_over"].notna()].copy()
     d = d[~d["stat_name"].str.startswith("period_") & (d["stat_name"] != "receiving_long")]
@@ -218,7 +220,7 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
     d["value"] = d["hit"] * 2 * d["mult"] * PX.K3
     wk = d["season"] * 100 + d["week"]
     rules = ("new_rule", "old_rule", "model_only", "moved_your_way", "workload_flux", "priced_out",
-             "flat_lean", "before_prices")
+             "flat_lean", "before_prices", "tackle_cap")
     out = {"weeks": [], **{k: {"n": 0, "hits": 0} for k in rules}}
     for w in sorted(wk.unique())[1:]:
         rec = track_record(g[(g["season"] * 100 + g["week"]) < w])["by_stat"]
@@ -230,16 +232,21 @@ def pick_rule_check(g: pd.DataFrame) -> dict:
         before = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f)
                            for s, sd, p, m, f in zip(x["stat_name"], x["side"], x["side_prob"],
                                                      x["moved_your_way"], x["workload_flux"])], bool)
-        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f, mu, fl)
+        new = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f, mu, fl, stat_name=s)
                         for s, sd, p, m, f, mu, fl in zip(x["stat_name"], x["side"], x["side_prob"],
                                                           x["moved_your_way"], x["workload_flux"],
                                                           x["mult"], x["flat_lean"])], bool)
+        uncapped = np.array([R.is_proven_pick(rec.get(s), sd, p, m, f, mu, fl)
+                             for s, sd, p, m, f, mu, fl in zip(x["stat_name"], x["side"], x["side_prob"],
+                                                               x["moved_your_way"], x["workload_flux"],
+                                                               x["mult"], x["flat_lean"])], bool)
         old = np.array([rec.get(s, {}).get(f"{sd}_verdict") == "trusted"
                         for s, sd in zip(x["stat_name"], x["side"])], bool)
         row = {"week": f"{w // 100}-wk{w % 100}"}
         for k, m in (("new_rule", new), ("old_rule", old), ("model_only", base & new),
                      ("moved_your_way", moved & ~base & new), ("workload_flux", before & ~moved & new),
-                     ("priced_out", before & ~new), ("flat_lean", new & ~before), ("before_prices", before)):
+                     ("priced_out", before & ~uncapped), ("flat_lean", uncapped & ~before), ("before_prices", before),
+                     ("tackle_cap", uncapped & ~new)):
             n, h = int(m.sum()), int(x.loc[m, "hit"].sum())
             v = x.loc[m, "value"].dropna()
             row[k] = {"n": n, "accuracy": h / n if n else None,
