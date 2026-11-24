@@ -12931,7 +12931,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,9,CIN,00-0039313,Swayze Bozeman,LB,R01
 2026,12,CIN,00-0039313,Swayze Bozeman,LB,R48
 2026,7,CIN,00-0039313,Swayze Bozeman,LB,R01
-2026,11,CIN,00-0039313,Swayze Bozeman,LB,R48
 2026,8,CIN,00-0039313,Swayze Bozeman,LB,R01
 2026,7,PHI,00-0039325,Carson Steele,RB,R01
 2026,8,CAR,00-0039342,Xavier Legette,WR,R01
@@ -13616,7 +13615,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,6,WAS,00-0040242,Jacory Croskey-Merritt,RB,A01
 2026,12,WAS,00-0040242,Jacory Croskey-Merritt,RB,R48
 2026,8,WAS,00-0040242,Jacory Croskey-Merritt,RB,R01
-2026,11,WAS,00-0040242,Jacory Croskey-Merritt,RB,R48
 2026,10,WAS,00-0040242,Jacory Croskey-Merritt,RB,R01
 2026,11,NYG,00-0040243,Korie Black,DB,R48
 2026,4,NYG,00-0040243,Korie Black,DB,R48
@@ -14156,7 +14154,6 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,CIN,00-0041098,Brian Parker II,OL,R48
 2026,5,CIN,00-0041098,Brian Parker II,OL,R48
 2026,12,CIN,00-0041098,Brian Parker II,OL,R48
-2026,11,CIN,00-0041098,Brian Parker II,OL,R48
 2026,1,CIN,00-0041098,Brian Parker II,OL,R48
 2026,3,CIN,00-0041098,Brian Parker II,OL,R48
 2026,12,MIN,00-0041104,Demond Claiborne,RB,R01
@@ -14519,6 +14516,9 @@ season,week,team,player_id,player_name,position,status_description_abbr
 2026,4,LA,00-0041587,Daniel Rickert,LB,R01
 2026,3,LA,00-0041587,Daniel Rickert,LB,R01
 2026,1,TB,00-0041592,Xavier Williams,DB,R01
+2026,11,CIN,00-0039313,Swayze Bozeman,LB,R48
+2026,11,WAS,00-0040242,Jacory Croskey-Merritt,RB,R48
+2026,11,CIN,00-0041098,Brian Parker II,OL,R48
 2026,11,CAR,00-0035277,Mike Jackson,DB,R48
 2026,11,LAC,00-0035688,Trey Pipkins,OL,R48
 2026,11,MIA,00-0037549,Darrell Baker Jr.,DB,R04
