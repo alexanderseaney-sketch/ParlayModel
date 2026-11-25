@@ -9301,7 +9301,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034987,E.J. Speed,LB,HOU,tackles,1.7898,12
 00-0034993,Marcus Epps,SAF,PHI,tackles,3.8634,12
 00-0034999,Ty Summers,LB,DET,tackles,1.0077,10
-00-0035000,Quinton Bell,LB,MIA,tackles,0.6364,12
+00-0035000,Quinton Bell,DE,MIA,tackles,0.6364,12
 00-0035020,Demetrius Flannigan-Fowles,LB,NYG,tackles,2.0062,12
 00-0035026,Kevin Givens,DT,IND,tackles,0.5857,11
 00-0035133,Keisean Nixon,DB,GB,tackles,3.3588,12
@@ -9612,7 +9612,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037320,Deane Leonard,CB,LAC,tackles,1.4074,12
 00-0037321,Chase Lucas,CB,SF,tackles,0.5087,10
 00-0037323,Rodney Thomas,SAF,SEA,tackles,1.3655,12
-00-0037332,D'Anthony Bell,SAF,SEA,tackles,0.6769,12
+00-0037332,D'Anthony Bell,DB,SEA,tackles,0.6769,12
 00-0037364,Arron Mosby,LB,GB,tackles,0.3068,12
 00-0037384,Ja'Quan McMillian,CB,DEN,tackles,3.0507,12
 00-0037395,Dallis Flowers,CB,CHI,tackles,1.726,5
@@ -9660,7 +9660,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037819,Leo Chenal,LB,WAS,tackles,2.3925,12
 00-0037822,Brian Asamoah II,LB,ATL,tackles,0.5273,8
 00-0037823,Christian Harris,LB,ATL,tackles,0.5083,12
-00-0037826,Drake Jackson,DE,WAS,tackles,0.2809,3
+00-0037826,Drake Jackson,LB,WAS,tackles,0.2809,3
 00-0037830,Samuel Womack,CB,NYJ,tackles,2.0447,12
 00-0037832,Kalia Davis,DT,SF,tackles,0.6668,12
 00-0037839,Cobie Durant,CB,DAL,tackles,1.7406,12
@@ -9687,7 +9687,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038133,Boye Mafe,DE,CIN,tackles,2.0664,12
 00-0038135,Jaquan Brisker,SAF,PIT,tackles,2.7246,12
 00-0038136,Coby Bryant,CB,SEA,tackles,1.9881,12
-00-0038142,David Ojabo,LB,BAL,tackles,0.6771,12
+00-0038142,David Ojabo,DE,BAL,tackles,0.6771,12
 00-0038348,Josh Butler,DB,DAL,tackles,4.0434,5
 00-0038366,Tanner Ingle,SAF,LA,tackles,0.2705,5
 00-0038381,Kyu Blu Kelly,CB,LV,tackles,1.9889,12
@@ -9711,7 +9711,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038513,Cam Jones,LB,NYJ,tackles,0.8299,12
 00-0038514,Truman Jones,DE,TEN,tackles,0.8347,12
 00-0038521,Reese Taylor,DB,MIA,tackles,0.6229,4
-00-0038535,DJ Johnson,DE,CAR,tackles,1.1004,12
+00-0038535,DJ Johnson,LB,CAR,tackles,1.1004,12
 00-0038541,Tyree Wilson,DE,NO,tackles,1.4026,12
 00-0038545,Mazi Smith,DT,DAL,tackles,0.679,12
 00-0038546,Myles Murphy,DE,CIN,tackles,1.4045,12
@@ -9750,7 +9750,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038628,DeMarcco Hellams,SAF,ATL,tackles,2.0032,12
 00-0038635,Andre Jones Jr.,LB,BUF,tackles,0.7333,4
 00-0038642,D.J. Ivey,CB,CIN,tackles,1.3823,12
-00-0038646,Alex Austin,CB,NE,tackles,1.4861,11
+00-0038646,Alex Austin,DB,NE,tackles,1.4861,11
 00-0038648,Jalen Graham,LB,SF,tackles,0.9182,10
 00-0038653,Cory Durden,DT,NE,tackles,1.3376,12
 00-0038660,Trevor Nowaske,LB,DET,tackles,1.42,12
@@ -9832,10 +9832,10 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039234,T.J. Tampa,CB,BAL,tackles,1.1897,12
 00-0039235,Sanoussi Kane,SAF,TEN,tackles,0.9764,9
 00-0039239,Kalen King,CB,ARI,tackles,1.7256,8
-00-0039241,Beau Brade,SAF,NYG,tackles,0.5405,4
+00-0039241,Beau Brade,DB,NYG,tackles,0.5405,4
 00-0039267,Andre' Sam,SAF,PHI,tackles,0.5405,2
 00-0039284,Braiden McGregor,DE,NYJ,tackles,0.7677,12
-00-0039285,Jarius Monroe,SAF,NYJ,tackles,0.8136,5
+00-0039285,Jarius Monroe,DB,NYJ,tackles,0.8136,5
 00-0039289,Leonard Taylor III,DT,NE,tackles,0.6394,12
 00-0039291,Eric Watts,DE,NYJ,tackles,1.2295,12
 00-0039292,Shemar Bartholomew,CB,GB,tackles,3.0811,2
@@ -9844,7 +9844,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039313,Swayze Bozeman,LB,CIN,tackles,0.2882,11
 00-0039324,Christian Roland-Wallace,CB,KC,tackles,2.21,12
 00-0039332,C.J. Ravenell,DE,TEN,tackles,0.1069,6
-00-0039333,Brandon Codrington,CB,BUF,tackles,0.3514,12
+00-0039333,Brandon Codrington,DB,BUF,tackles,0.3514,12
 00-0039340,Laiatu Latu,DE,IND,tackles,1.2176,12
 00-0039343,Kamari Lassiter,CB,HOU,tackles,3.229,12
 00-0039345,Renardo Green,CB,SF,tackles,3.8877,12
@@ -9908,7 +9908,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039714,Dwight McGlothern,CB,MIN,tackles,0.0,3
 00-0039715,Gabriel Murphy,LB,MIN,tackles,0.4595,2
 00-0039718,Bo Richter,LB,MIN,tackles,0.7956,12
-00-0039720,Taki Taimani,DL,MIN,tackles,0.3304,3
+00-0039720,Taki Taimani,DT,MIN,tackles,0.3304,3
 00-0039725,Jayden Price,CB,NO,tackles,0.2267,4
 00-0039733,Ruke Orhorhoro,DT,JAX,tackles,0.9793,12
 00-0039734,Braden Fiske,DE,LA,tackles,1.6851,12
@@ -10073,7 +10073,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040369,Howard Cross III,DT,CIN,tackles,0.6113,3
 00-0040371,Eric Gregory,DT,NE,tackles,0.1656,5
 00-0040384,Elijah Simmons,DL,TB,tackles,0.5316,9
-00-0040396,Dean Clark,SAF,NYJ,tackles,1.4265,7
+00-0040396,Dean Clark,DB,NYJ,tackles,1.4265,7
 00-0040397,Jordan Clark,CB,NYJ,tackles,2.4383,3
 00-0040404,Payton Page,DT,NYJ,tackles,1.4067,3
 00-0040408,Ja'Markis Weston,LB,CAR,tackles,0.0,3
@@ -10468,7 +10468,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034987,E.J. Speed,LB,HOU,assists,2.0306,12
 00-0034993,Marcus Epps,SAF,PHI,assists,0.8011,12
 00-0034999,Ty Summers,LB,DET,assists,2.1854,10
-00-0035000,Quinton Bell,LB,MIA,assists,1.525,12
+00-0035000,Quinton Bell,DE,MIA,assists,1.525,12
 00-0035020,Demetrius Flannigan-Fowles,LB,NYG,assists,1.723,12
 00-0035026,Kevin Givens,DT,IND,assists,0.7693,11
 00-0035133,Keisean Nixon,DB,GB,assists,1.4001,12
@@ -10779,7 +10779,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037320,Deane Leonard,CB,LAC,assists,0.8862,12
 00-0037321,Chase Lucas,CB,SF,assists,0.3766,10
 00-0037323,Rodney Thomas,SAF,SEA,assists,1.0307,12
-00-0037332,D'Anthony Bell,SAF,SEA,assists,1.0769,12
+00-0037332,D'Anthony Bell,DB,SEA,assists,1.0769,12
 00-0037364,Arron Mosby,LB,GB,assists,0.7226,12
 00-0037384,Ja'Quan McMillian,CB,DEN,assists,1.818,12
 00-0037395,Dallis Flowers,CB,CHI,assists,0.0,5
@@ -10827,7 +10827,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037819,Leo Chenal,LB,WAS,assists,2.7923,12
 00-0037822,Brian Asamoah II,LB,ATL,assists,0.4286,8
 00-0037823,Christian Harris,LB,ATL,assists,0.6709,12
-00-0037826,Drake Jackson,DE,WAS,assists,0.7191,3
+00-0037826,Drake Jackson,LB,WAS,assists,0.7191,3
 00-0037830,Samuel Womack,CB,NYJ,assists,1.1576,12
 00-0037832,Kalia Davis,DT,SF,assists,1.4155,12
 00-0037839,Cobie Durant,CB,DAL,assists,1.2642,12
@@ -10854,7 +10854,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038133,Boye Mafe,DE,CIN,assists,1.1729,12
 00-0038135,Jaquan Brisker,SAF,PIT,assists,3.9053,12
 00-0038136,Coby Bryant,CB,SEA,assists,1.5455,12
-00-0038142,David Ojabo,LB,BAL,assists,0.5721,12
+00-0038142,David Ojabo,DE,BAL,assists,0.5721,12
 00-0038348,Josh Butler,DB,DAL,assists,1.2989,5
 00-0038366,Tanner Ingle,SAF,LA,assists,0.4429,5
 00-0038381,Kyu Blu Kelly,CB,LV,assists,0.5565,12
@@ -10878,7 +10878,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038513,Cam Jones,LB,NYJ,assists,0.942,12
 00-0038514,Truman Jones,DE,TEN,assists,1.0826,12
 00-0038521,Reese Taylor,DB,MIA,assists,0.3771,4
-00-0038535,DJ Johnson,DE,CAR,assists,1.2579,12
+00-0038535,DJ Johnson,LB,CAR,assists,1.2579,12
 00-0038541,Tyree Wilson,DE,NO,assists,1.4401,12
 00-0038545,Mazi Smith,DT,DAL,assists,1.1628,12
 00-0038546,Myles Murphy,DE,CIN,assists,1.8991,12
@@ -10917,7 +10917,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038628,DeMarcco Hellams,SAF,ATL,assists,2.0585,12
 00-0038635,Andre Jones Jr.,LB,BUF,assists,0.9469,4
 00-0038642,D.J. Ivey,CB,CIN,assists,0.809,12
-00-0038646,Alex Austin,CB,NE,assists,0.3978,11
+00-0038646,Alex Austin,DB,NE,assists,0.3978,11
 00-0038648,Jalen Graham,LB,SF,assists,0.6586,10
 00-0038653,Cory Durden,DT,NE,assists,1.3679,12
 00-0038660,Trevor Nowaske,LB,DET,assists,1.4823,12
@@ -10999,10 +10999,10 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039234,T.J. Tampa,CB,BAL,assists,0.8479,12
 00-0039235,Sanoussi Kane,SAF,TEN,assists,1.1988,9
 00-0039239,Kalen King,CB,ARI,assists,0.9204,8
-00-0039241,Beau Brade,SAF,NYG,assists,0.6862,4
+00-0039241,Beau Brade,DB,NYG,assists,0.6862,4
 00-0039267,Andre' Sam,SAF,PHI,assists,0.4595,2
 00-0039284,Braiden McGregor,DE,NYJ,assists,1.2431,12
-00-0039285,Jarius Monroe,SAF,NYJ,assists,0.7167,5
+00-0039285,Jarius Monroe,DB,NYJ,assists,0.7167,5
 00-0039289,Leonard Taylor III,DT,NE,assists,0.8082,12
 00-0039291,Eric Watts,DE,NYJ,assists,0.8006,12
 00-0039292,Shemar Bartholomew,CB,GB,assists,0.4595,2
@@ -11011,7 +11011,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039313,Swayze Bozeman,LB,CIN,assists,1.7194,11
 00-0039324,Christian Roland-Wallace,CB,KC,assists,1.8864,12
 00-0039332,C.J. Ravenell,DE,TEN,assists,0.8142,6
-00-0039333,Brandon Codrington,CB,BUF,assists,0.0913,12
+00-0039333,Brandon Codrington,DB,BUF,assists,0.0913,12
 00-0039340,Laiatu Latu,DE,IND,assists,0.778,12
 00-0039343,Kamari Lassiter,CB,HOU,assists,1.3273,12
 00-0039345,Renardo Green,CB,SF,assists,0.9788,12
@@ -11075,7 +11075,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039714,Dwight McGlothern,CB,MIN,assists,0.0,3
 00-0039715,Gabriel Murphy,LB,MIN,assists,0.0,2
 00-0039718,Bo Richter,LB,MIN,assists,0.5705,12
-00-0039720,Taki Taimani,DL,MIN,assists,0.9504,3
+00-0039720,Taki Taimani,DT,MIN,assists,0.9504,3
 00-0039725,Jayden Price,CB,NO,assists,0.5806,4
 00-0039733,Ruke Orhorhoro,DT,JAX,assists,1.0427,12
 00-0039734,Braden Fiske,DE,LA,assists,1.031,12
@@ -11240,7 +11240,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040369,Howard Cross III,DT,CIN,assists,0.6608,3
 00-0040371,Eric Gregory,DT,NE,assists,1.4352,5
 00-0040384,Elijah Simmons,DL,TB,assists,0.691,9
-00-0040396,Dean Clark,SAF,NYJ,assists,0.5899,7
+00-0040396,Dean Clark,DB,NYJ,assists,0.5899,7
 00-0040397,Jordan Clark,CB,NYJ,assists,0.6608,3
 00-0040404,Payton Page,DT,NYJ,assists,1.2915,3
 00-0040408,Ja'Markis Weston,LB,CAR,assists,1.5145,3
@@ -11635,7 +11635,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034987,E.J. Speed,LB,HOU,tackles_and_assists,3.8204,12
 00-0034993,Marcus Epps,SAF,PHI,tackles_and_assists,4.6645,12
 00-0034999,Ty Summers,LB,DET,tackles_and_assists,3.1931,10
-00-0035000,Quinton Bell,LB,MIA,tackles_and_assists,2.1614,12
+00-0035000,Quinton Bell,DE,MIA,tackles_and_assists,2.1614,12
 00-0035020,Demetrius Flannigan-Fowles,LB,NYG,tackles_and_assists,3.7292,12
 00-0035026,Kevin Givens,DT,IND,tackles_and_assists,1.355,11
 00-0035133,Keisean Nixon,DB,GB,tackles_and_assists,4.7589,12
@@ -11946,7 +11946,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037320,Deane Leonard,CB,LAC,tackles_and_assists,2.2935,12
 00-0037321,Chase Lucas,CB,SF,tackles_and_assists,0.8853,10
 00-0037323,Rodney Thomas,SAF,SEA,tackles_and_assists,2.3963,12
-00-0037332,D'Anthony Bell,SAF,SEA,tackles_and_assists,1.7538,12
+00-0037332,D'Anthony Bell,DB,SEA,tackles_and_assists,1.7538,12
 00-0037364,Arron Mosby,LB,GB,tackles_and_assists,1.0294,12
 00-0037384,Ja'Quan McMillian,CB,DEN,tackles_and_assists,4.8687,12
 00-0037395,Dallis Flowers,CB,CHI,tackles_and_assists,1.726,5
@@ -11994,7 +11994,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037819,Leo Chenal,LB,WAS,tackles_and_assists,5.1849,12
 00-0037822,Brian Asamoah II,LB,ATL,tackles_and_assists,0.9559,8
 00-0037823,Christian Harris,LB,ATL,tackles_and_assists,1.1792,12
-00-0037826,Drake Jackson,DE,WAS,tackles_and_assists,1.0,3
+00-0037826,Drake Jackson,LB,WAS,tackles_and_assists,1.0,3
 00-0037830,Samuel Womack,CB,NYJ,tackles_and_assists,3.2023,12
 00-0037832,Kalia Davis,DT,SF,tackles_and_assists,2.0823,12
 00-0037839,Cobie Durant,CB,DAL,tackles_and_assists,3.0048,12
@@ -12021,7 +12021,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038133,Boye Mafe,DE,CIN,tackles_and_assists,3.2394,12
 00-0038135,Jaquan Brisker,SAF,PIT,tackles_and_assists,6.6299,12
 00-0038136,Coby Bryant,CB,SEA,tackles_and_assists,3.5336,12
-00-0038142,David Ojabo,LB,BAL,tackles_and_assists,1.2492,12
+00-0038142,David Ojabo,DE,BAL,tackles_and_assists,1.2492,12
 00-0038348,Josh Butler,DB,DAL,tackles_and_assists,5.3423,5
 00-0038366,Tanner Ingle,SAF,LA,tackles_and_assists,0.7133,5
 00-0038381,Kyu Blu Kelly,CB,LV,tackles_and_assists,2.5454,12
@@ -12045,7 +12045,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038513,Cam Jones,LB,NYJ,tackles_and_assists,1.7718,12
 00-0038514,Truman Jones,DE,TEN,tackles_and_assists,1.9173,12
 00-0038521,Reese Taylor,DB,MIA,tackles_and_assists,1.0,4
-00-0038535,DJ Johnson,DE,CAR,tackles_and_assists,2.3583,12
+00-0038535,DJ Johnson,LB,CAR,tackles_and_assists,2.3583,12
 00-0038541,Tyree Wilson,DE,NO,tackles_and_assists,2.8427,12
 00-0038545,Mazi Smith,DT,DAL,tackles_and_assists,1.8418,12
 00-0038546,Myles Murphy,DE,CIN,tackles_and_assists,3.3036,12
@@ -12084,7 +12084,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038628,DeMarcco Hellams,SAF,ATL,tackles_and_assists,4.0616,12
 00-0038635,Andre Jones Jr.,LB,BUF,tackles_and_assists,1.6802,4
 00-0038642,D.J. Ivey,CB,CIN,tackles_and_assists,2.1913,12
-00-0038646,Alex Austin,CB,NE,tackles_and_assists,1.8838,11
+00-0038646,Alex Austin,DB,NE,tackles_and_assists,1.8838,11
 00-0038648,Jalen Graham,LB,SF,tackles_and_assists,1.5768,10
 00-0038653,Cory Durden,DT,NE,tackles_and_assists,2.7056,12
 00-0038660,Trevor Nowaske,LB,DET,tackles_and_assists,2.9023,12
@@ -12166,10 +12166,10 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039234,T.J. Tampa,CB,BAL,tackles_and_assists,2.0375,12
 00-0039235,Sanoussi Kane,SAF,TEN,tackles_and_assists,2.1752,9
 00-0039239,Kalen King,CB,ARI,tackles_and_assists,2.646,8
-00-0039241,Beau Brade,SAF,NYG,tackles_and_assists,1.2267,4
+00-0039241,Beau Brade,DB,NYG,tackles_and_assists,1.2267,4
 00-0039267,Andre' Sam,SAF,PHI,tackles_and_assists,1.0,2
 00-0039284,Braiden McGregor,DE,NYJ,tackles_and_assists,2.0108,12
-00-0039285,Jarius Monroe,SAF,NYJ,tackles_and_assists,1.5304,5
+00-0039285,Jarius Monroe,DB,NYJ,tackles_and_assists,1.5304,5
 00-0039289,Leonard Taylor III,DT,NE,tackles_and_assists,1.4476,12
 00-0039291,Eric Watts,DE,NYJ,tackles_and_assists,2.0301,12
 00-0039292,Shemar Bartholomew,CB,GB,tackles_and_assists,3.5405,2
@@ -12178,7 +12178,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039313,Swayze Bozeman,LB,CIN,tackles_and_assists,2.0076,11
 00-0039324,Christian Roland-Wallace,CB,KC,tackles_and_assists,4.0964,12
 00-0039332,C.J. Ravenell,DE,TEN,tackles_and_assists,0.921,6
-00-0039333,Brandon Codrington,CB,BUF,tackles_and_assists,0.4427,12
+00-0039333,Brandon Codrington,DB,BUF,tackles_and_assists,0.4427,12
 00-0039340,Laiatu Latu,DE,IND,tackles_and_assists,1.9955,12
 00-0039343,Kamari Lassiter,CB,HOU,tackles_and_assists,4.5563,12
 00-0039345,Renardo Green,CB,SF,tackles_and_assists,4.8666,12
@@ -12242,7 +12242,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039714,Dwight McGlothern,CB,MIN,tackles_and_assists,0.0,3
 00-0039715,Gabriel Murphy,LB,MIN,tackles_and_assists,0.4595,2
 00-0039718,Bo Richter,LB,MIN,tackles_and_assists,1.3661,12
-00-0039720,Taki Taimani,DL,MIN,tackles_and_assists,1.2809,3
+00-0039720,Taki Taimani,DT,MIN,tackles_and_assists,1.2809,3
 00-0039725,Jayden Price,CB,NO,tackles_and_assists,0.8073,4
 00-0039733,Ruke Orhorhoro,DT,JAX,tackles_and_assists,2.022,12
 00-0039734,Braden Fiske,DE,LA,tackles_and_assists,2.7161,12
@@ -12407,7 +12407,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040369,Howard Cross III,DT,CIN,tackles_and_assists,1.2721,3
 00-0040371,Eric Gregory,DT,NE,tackles_and_assists,1.6008,5
 00-0040384,Elijah Simmons,DL,TB,tackles_and_assists,1.2226,9
-00-0040396,Dean Clark,SAF,NYJ,tackles_and_assists,2.0164,7
+00-0040396,Dean Clark,DB,NYJ,tackles_and_assists,2.0164,7
 00-0040397,Jordan Clark,CB,NYJ,tackles_and_assists,3.0991,3
 00-0040404,Payton Page,DT,NYJ,tackles_and_assists,2.6982,3
 00-0040408,Ja'Markis Weston,LB,CAR,tackles_and_assists,1.5145,3
@@ -12802,7 +12802,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034987,E.J. Speed,LB,HOU,sacks,0.0,12
 00-0034993,Marcus Epps,SAF,PHI,sacks,0.0,12
 00-0034999,Ty Summers,LB,DET,sacks,0.0,10
-00-0035000,Quinton Bell,LB,MIA,sacks,0.0293,12
+00-0035000,Quinton Bell,DE,MIA,sacks,0.0293,12
 00-0035020,Demetrius Flannigan-Fowles,LB,NYG,sacks,0.1486,12
 00-0035026,Kevin Givens,DT,IND,sacks,0.1294,11
 00-0035133,Keisean Nixon,DB,GB,sacks,0.0208,12
@@ -13113,7 +13113,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037320,Deane Leonard,CB,LAC,sacks,0.0,12
 00-0037321,Chase Lucas,CB,SF,sacks,0.0,10
 00-0037323,Rodney Thomas,SAF,SEA,sacks,0.0,12
-00-0037332,D'Anthony Bell,SAF,SEA,sacks,0.0456,12
+00-0037332,D'Anthony Bell,DB,SEA,sacks,0.0456,12
 00-0037364,Arron Mosby,LB,GB,sacks,0.0,12
 00-0037384,Ja'Quan McMillian,CB,DEN,sacks,0.3313,12
 00-0037395,Dallis Flowers,CB,CHI,sacks,0.0,5
@@ -13161,7 +13161,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037819,Leo Chenal,LB,WAS,sacks,0.078,12
 00-0037822,Brian Asamoah II,LB,ATL,sacks,0.0,8
 00-0037823,Christian Harris,LB,ATL,sacks,0.0,12
-00-0037826,Drake Jackson,DE,WAS,sacks,0.0,3
+00-0037826,Drake Jackson,LB,WAS,sacks,0.0,3
 00-0037830,Samuel Womack,CB,NYJ,sacks,0.0,12
 00-0037832,Kalia Davis,DT,SF,sacks,0.033,12
 00-0037839,Cobie Durant,CB,DAL,sacks,0.0,12
@@ -13188,7 +13188,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038133,Boye Mafe,DE,CIN,sacks,1.1304,12
 00-0038135,Jaquan Brisker,SAF,PIT,sacks,0.0212,12
 00-0038136,Coby Bryant,CB,SEA,sacks,0.0,12
-00-0038142,David Ojabo,LB,BAL,sacks,0.0238,12
+00-0038142,David Ojabo,DE,BAL,sacks,0.0238,12
 00-0038348,Josh Butler,DB,DAL,sacks,0.1948,5
 00-0038366,Tanner Ingle,SAF,LA,sacks,0.0,5
 00-0038381,Kyu Blu Kelly,CB,LV,sacks,0.0,12
@@ -13212,7 +13212,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038513,Cam Jones,LB,NYJ,sacks,0.0,12
 00-0038514,Truman Jones,DE,TEN,sacks,0.033,12
 00-0038521,Reese Taylor,DB,MIA,sacks,0.0,4
-00-0038535,DJ Johnson,DE,CAR,sacks,0.0,12
+00-0038535,DJ Johnson,LB,CAR,sacks,0.0,12
 00-0038541,Tyree Wilson,DE,NO,sacks,0.158,12
 00-0038545,Mazi Smith,DT,DAL,sacks,0.0775,12
 00-0038546,Myles Murphy,DE,CIN,sacks,0.2825,12
@@ -13251,7 +13251,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038628,DeMarcco Hellams,SAF,ATL,sacks,0.0,12
 00-0038635,Andre Jones Jr.,LB,BUF,sacks,0.0,4
 00-0038642,D.J. Ivey,CB,CIN,sacks,0.0,12
-00-0038646,Alex Austin,CB,NE,sacks,0.0,11
+00-0038646,Alex Austin,DB,NE,sacks,0.0,11
 00-0038648,Jalen Graham,LB,SF,sacks,0.0,10
 00-0038653,Cory Durden,DT,NE,sacks,0.1978,12
 00-0038660,Trevor Nowaske,LB,DET,sacks,0.1794,12
@@ -13333,10 +13333,10 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039234,T.J. Tampa,CB,BAL,sacks,0.0,12
 00-0039235,Sanoussi Kane,SAF,TEN,sacks,0.0,9
 00-0039239,Kalen King,CB,ARI,sacks,0.0,8
-00-0039241,Beau Brade,SAF,NYG,sacks,0.0,4
+00-0039241,Beau Brade,DB,NYG,sacks,0.0,4
 00-0039267,Andre' Sam,SAF,PHI,sacks,0.0,2
 00-0039284,Braiden McGregor,DE,NYJ,sacks,0.0367,12
-00-0039285,Jarius Monroe,SAF,NYJ,sacks,0.0,5
+00-0039285,Jarius Monroe,DB,NYJ,sacks,0.0,5
 00-0039289,Leonard Taylor III,DT,NE,sacks,0.2077,12
 00-0039291,Eric Watts,DE,NYJ,sacks,0.0,12
 00-0039292,Shemar Bartholomew,CB,GB,sacks,0.0,2
@@ -13345,7 +13345,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039313,Swayze Bozeman,LB,CIN,sacks,0.0,11
 00-0039324,Christian Roland-Wallace,CB,KC,sacks,0.0,12
 00-0039332,C.J. Ravenell,DE,TEN,sacks,0.0,6
-00-0039333,Brandon Codrington,CB,BUF,sacks,0.0,12
+00-0039333,Brandon Codrington,DB,BUF,sacks,0.0,12
 00-0039340,Laiatu Latu,DE,IND,sacks,0.3548,12
 00-0039343,Kamari Lassiter,CB,HOU,sacks,0.1102,12
 00-0039345,Renardo Green,CB,SF,sacks,0.0,12
@@ -13409,7 +13409,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039714,Dwight McGlothern,CB,MIN,sacks,0.0,3
 00-0039715,Gabriel Murphy,LB,MIN,sacks,0.0,2
 00-0039718,Bo Richter,LB,MIN,sacks,0.0,12
-00-0039720,Taki Taimani,DL,MIN,sacks,0.0,3
+00-0039720,Taki Taimani,DT,MIN,sacks,0.0,3
 00-0039725,Jayden Price,CB,NO,sacks,0.0,4
 00-0039733,Ruke Orhorhoro,DT,JAX,sacks,0.1158,12
 00-0039734,Braden Fiske,DE,LA,sacks,0.3871,12
@@ -13574,7 +13574,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040369,Howard Cross III,DT,CIN,sacks,0.0,3
 00-0040371,Eric Gregory,DT,NE,sacks,0.0,5
 00-0040384,Elijah Simmons,DL,TB,sacks,0.0,9
-00-0040396,Dean Clark,SAF,NYJ,sacks,0.0,7
+00-0040396,Dean Clark,DB,NYJ,sacks,0.0,7
 00-0040397,Jordan Clark,CB,NYJ,sacks,0.0,3
 00-0040404,Payton Page,DT,NYJ,sacks,0.0,3
 00-0040408,Ja'Markis Weston,LB,CAR,sacks,0.0,3
@@ -13969,7 +13969,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0034987,E.J. Speed,LB,HOU,defensive_ints,0.0,12
 00-0034993,Marcus Epps,SAF,PHI,defensive_ints,0.0,12
 00-0034999,Ty Summers,LB,DET,defensive_ints,0.0,10
-00-0035000,Quinton Bell,LB,MIA,defensive_ints,0.0,12
+00-0035000,Quinton Bell,DE,MIA,defensive_ints,0.0,12
 00-0035020,Demetrius Flannigan-Fowles,LB,NYG,defensive_ints,0.0,12
 00-0035026,Kevin Givens,DT,IND,defensive_ints,0.0,11
 00-0035133,Keisean Nixon,DB,GB,defensive_ints,0.0416,12
@@ -14280,7 +14280,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037320,Deane Leonard,CB,LAC,defensive_ints,0.0283,12
 00-0037321,Chase Lucas,CB,SF,defensive_ints,0.0,10
 00-0037323,Rodney Thomas,SAF,SEA,defensive_ints,0.0,12
-00-0037332,D'Anthony Bell,SAF,SEA,defensive_ints,0.0,12
+00-0037332,D'Anthony Bell,DB,SEA,defensive_ints,0.0,12
 00-0037364,Arron Mosby,LB,GB,defensive_ints,0.0,12
 00-0037384,Ja'Quan McMillian,CB,DEN,defensive_ints,0.3176,12
 00-0037395,Dallis Flowers,CB,CHI,defensive_ints,0.0,5
@@ -14328,7 +14328,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0037819,Leo Chenal,LB,WAS,defensive_ints,0.0,12
 00-0037822,Brian Asamoah II,LB,ATL,defensive_ints,0.0,8
 00-0037823,Christian Harris,LB,ATL,defensive_ints,0.0,12
-00-0037826,Drake Jackson,DE,WAS,defensive_ints,0.0,3
+00-0037826,Drake Jackson,LB,WAS,defensive_ints,0.0,3
 00-0037830,Samuel Womack,CB,NYJ,defensive_ints,0.1435,12
 00-0037832,Kalia Davis,DT,SF,defensive_ints,0.0,12
 00-0037839,Cobie Durant,CB,DAL,defensive_ints,0.0889,12
@@ -14355,7 +14355,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038133,Boye Mafe,DE,CIN,defensive_ints,0.0,12
 00-0038135,Jaquan Brisker,SAF,PIT,defensive_ints,0.0416,12
 00-0038136,Coby Bryant,CB,SEA,defensive_ints,0.1572,12
-00-0038142,David Ojabo,LB,BAL,defensive_ints,0.0,12
+00-0038142,David Ojabo,DE,BAL,defensive_ints,0.0,12
 00-0038348,Josh Butler,DB,DAL,defensive_ints,0.0,5
 00-0038366,Tanner Ingle,SAF,LA,defensive_ints,0.0,5
 00-0038381,Kyu Blu Kelly,CB,LV,defensive_ints,0.3312,12
@@ -14379,7 +14379,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038513,Cam Jones,LB,NYJ,defensive_ints,0.0,12
 00-0038514,Truman Jones,DE,TEN,defensive_ints,0.0,12
 00-0038521,Reese Taylor,DB,MIA,defensive_ints,0.0,4
-00-0038535,DJ Johnson,DE,CAR,defensive_ints,0.0,12
+00-0038535,DJ Johnson,LB,CAR,defensive_ints,0.0,12
 00-0038541,Tyree Wilson,DE,NO,defensive_ints,0.0,12
 00-0038545,Mazi Smith,DT,DAL,defensive_ints,0.0,12
 00-0038546,Myles Murphy,DE,CIN,defensive_ints,0.0,12
@@ -14418,7 +14418,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0038628,DeMarcco Hellams,SAF,ATL,defensive_ints,0.0,12
 00-0038635,Andre Jones Jr.,LB,BUF,defensive_ints,0.0,4
 00-0038642,D.J. Ivey,CB,CIN,defensive_ints,0.0,12
-00-0038646,Alex Austin,CB,NE,defensive_ints,0.0,11
+00-0038646,Alex Austin,DB,NE,defensive_ints,0.0,11
 00-0038648,Jalen Graham,LB,SF,defensive_ints,0.0,10
 00-0038653,Cory Durden,DT,NE,defensive_ints,0.0,12
 00-0038660,Trevor Nowaske,LB,DET,defensive_ints,0.0,12
@@ -14500,10 +14500,10 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039234,T.J. Tampa,CB,BAL,defensive_ints,0.2239,12
 00-0039235,Sanoussi Kane,SAF,TEN,defensive_ints,0.0,9
 00-0039239,Kalen King,CB,ARI,defensive_ints,0.0,8
-00-0039241,Beau Brade,SAF,NYG,defensive_ints,0.0,4
+00-0039241,Beau Brade,DB,NYG,defensive_ints,0.0,4
 00-0039267,Andre' Sam,SAF,PHI,defensive_ints,0.0,2
 00-0039284,Braiden McGregor,DE,NYJ,defensive_ints,0.0,12
-00-0039285,Jarius Monroe,SAF,NYJ,defensive_ints,0.0,5
+00-0039285,Jarius Monroe,DB,NYJ,defensive_ints,0.0,5
 00-0039289,Leonard Taylor III,DT,NE,defensive_ints,0.0,12
 00-0039291,Eric Watts,DE,NYJ,defensive_ints,0.0,12
 00-0039292,Shemar Bartholomew,CB,GB,defensive_ints,0.0,2
@@ -14512,7 +14512,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039313,Swayze Bozeman,LB,CIN,defensive_ints,0.0,11
 00-0039324,Christian Roland-Wallace,CB,KC,defensive_ints,0.0,12
 00-0039332,C.J. Ravenell,DE,TEN,defensive_ints,0.0,6
-00-0039333,Brandon Codrington,CB,BUF,defensive_ints,0.0,12
+00-0039333,Brandon Codrington,DB,BUF,defensive_ints,0.0,12
 00-0039340,Laiatu Latu,DE,IND,defensive_ints,0.0,12
 00-0039343,Kamari Lassiter,CB,HOU,defensive_ints,0.1794,12
 00-0039345,Renardo Green,CB,SF,defensive_ints,0.3305,12
@@ -14576,7 +14576,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0039714,Dwight McGlothern,CB,MIN,defensive_ints,0.0,3
 00-0039715,Gabriel Murphy,LB,MIN,defensive_ints,0.0,2
 00-0039718,Bo Richter,LB,MIN,defensive_ints,0.0,12
-00-0039720,Taki Taimani,DL,MIN,defensive_ints,0.0,3
+00-0039720,Taki Taimani,DT,MIN,defensive_ints,0.0,3
 00-0039725,Jayden Price,CB,NO,defensive_ints,0.0,4
 00-0039733,Ruke Orhorhoro,DT,JAX,defensive_ints,0.0,12
 00-0039734,Braden Fiske,DE,LA,defensive_ints,0.0,12
@@ -14741,7 +14741,7 @@ player_id,player_display_name,position,team,stat_name,mu,n_prior
 00-0040369,Howard Cross III,DT,CIN,defensive_ints,0.0,3
 00-0040371,Eric Gregory,DT,NE,defensive_ints,0.0,5
 00-0040384,Elijah Simmons,DL,TB,defensive_ints,0.0,9
-00-0040396,Dean Clark,SAF,NYJ,defensive_ints,0.0,7
+00-0040396,Dean Clark,DB,NYJ,defensive_ints,0.0,7
 00-0040397,Jordan Clark,CB,NYJ,defensive_ints,0.0,3
 00-0040404,Payton Page,DT,NYJ,defensive_ints,0.0,3
 00-0040408,Ja'Markis Weston,LB,CAR,defensive_ints,0.0,3
